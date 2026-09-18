@@ -12,8 +12,10 @@ that cannot be analysed is recorded in ``skipped`` and never counted as passing
 
 from __future__ import annotations
 
-from typing import Mapping
+from pathlib import Path
+from typing import Callable, Mapping
 
+from .core import diff as diffmod
 from .core import monotonicity, testintegrity
 from .core.assertions import extract
 from .core.linters import registry, runner
@@ -21,6 +23,8 @@ from .core.linters.adapter import FAST
 from .core.policy import Policy
 from .core.relation import Relation
 from .core.verdict import Confidence, Finding, Status, Verdict
+
+Reader = Callable[[str], "str | None"]
 
 ASSERTION_MONOTONICITY = "assertion_monotonicity"
 
@@ -67,6 +71,89 @@ def verify_change(
     if not checked and not skipped:
         checked.append(path)
     return Verdict.of(_deduplicate(findings), checked=checked, skipped=skipped)
+
+
+def verify_diff(
+    diff_text: str,
+    root: str | Path = ".",
+    policy: Policy | str | dict | None = None,
+    *,
+    read: Reader | None = None,
+) -> Verdict:
+    """Verify a whole change set given a unified diff.
+
+    The after-state is read from ``root`` (or from ``read``) and the before-state
+    is reconstructed by reverse-applying the diff, which is exact. A file whose
+    diff does not line up is recorded as skipped rather than analysed against a
+    reconstruction that may be wrong.
+
+    Subjects are pooled across every changed file first, so moving a test from
+    one file to another is not reported as lost verification.
+    """
+    resolved = Policy.load(policy)
+    base = Path(root)
+    fetch = read or (lambda rel: _read_file(base / rel))
+
+    states, verdict = _collect(diffmod.parse(diff_text), fetch, resolved)
+    covered = _pool(states, resolved)
+
+    for path, before, after in states:
+        verdict = verdict.merge(
+            verify_change(before, after, path, resolved, also_covered=covered)
+        )
+    return verdict
+
+
+def _collect(changes, fetch: Reader, policy: Policy):
+    """Resolve each change to (path, before, after), collecting what could not be."""
+    states: list[tuple[str, str | None, str | None]] = []
+    skipped: list[str] = []
+
+    for change in changes:
+        path = change.path
+        if change.binary:
+            skipped.append(f"{path}: binary file")
+            continue
+        if not change.hunks:
+            skipped.append(f"{path}: no hunks in diff")
+            continue
+
+        after = "" if change.deleted else fetch(path)
+        if after is None:
+            skipped.append(f"{path}: cannot read the after-state to reconstruct the diff")
+            continue
+        try:
+            before = "" if change.added else diffmod.reverse_apply(after, change.hunks)
+        except diffmod.PatchError as exc:
+            skipped.append(f"{path}: {exc}")
+            continue
+
+        states.append((path, before, None if change.deleted else after))
+
+    return states, Verdict.of([], skipped=skipped)
+
+
+def _pool(states, policy: Policy) -> dict[str, Relation]:
+    """Strongest relation per subject across the after-state of every changed file."""
+    pooled: dict[str, Relation] = {}
+    for path, _before, after in states:
+        if after is None or not policy.protects(path) or not path.endswith(EXACT_SUFFIXES):
+            continue
+        extraction = extract(after, filename=path)
+        if not extraction.ok:
+            continue
+        for subject, relation in monotonicity.subject_map(extraction).items():
+            current = pooled.get(subject)
+            if current is None or relation.rank > current.rank:
+                pooled[subject] = relation
+    return pooled
+
+
+def _read_file(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
 
 
 def _test_contract(before, after, path, policy, also_covered) -> Verdict:

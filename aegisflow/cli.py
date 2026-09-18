@@ -46,8 +46,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"aegisflow {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    check = sub.add_parser("check", help="verify one file's before/after transition")
-    check.add_argument("--path", required=True, help="repository-relative path being changed")
+    check = sub.add_parser("check", help="verify a change: a file transition or a diff")
+    check.add_argument("--path", help="repository-relative path being changed")
+    check.add_argument("--diff", help="unified diff covering a change set ('-' for stdin)")
+    check.add_argument("--root", default=".", help="directory the diff's paths are relative to")
     check.add_argument("--before", help="file holding the previous content ('-' for stdin)")
     check.add_argument("--after", help="file holding the proposed content ('-' for stdin)")
     check.add_argument("--policy", help="path to .aegisflow.json (default: discover upward)")
@@ -80,6 +82,11 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _check(args) -> int:
+    if args.diff:
+        return _check_diff(args)
+    if not args.path:
+        print("aegisflow: --path is required unless --diff is given", file=sys.stderr)
+        return EXIT_ERROR
     try:
         before = _read_source(args.before)
         after = _read_source(args.after)
@@ -98,6 +105,24 @@ def _check(args) -> int:
         return EXIT_ERROR
 
     verdict = verify_change(before, after, args.path, policy)
+    if args.json:
+        print(verdict.to_json(indent=2))
+    else:
+        _print_human(verdict, policy)
+    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
+
+
+def _check_diff(args) -> int:
+    from .verify import verify_diff
+
+    try:
+        text = _read_source(args.diff) or ""
+        policy = Policy.load(args.policy)
+    except (OSError, ValueError) as exc:
+        print(f"aegisflow: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    verdict = verify_diff(text, root=args.root, policy=policy)
     if args.json:
         print(verdict.to_json(indent=2))
     else:

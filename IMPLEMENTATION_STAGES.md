@@ -107,12 +107,28 @@ strengthening edit, a non-test file, and a `Bash` call all exit 0. 170 tests pas
 
 ---
 
-## Stage 6 — Diff path
+## Stage 6 — Diff path ✅
 
 `core/diff.py` — unified-diff parsing; `verify_diff()` over a change set.
 
 **Gate:** a real PR diff that weakens a test exits non-zero and names file and line; a
-clean diff exits zero. Enables pre-commit and CI.
+clean diff exits zero. Enables pre-commit and CI. ✅
+
+```sh
+git diff --cached | aegisflow check --diff -        # pre-commit
+git diff origin/main... | aegisflow check --diff - --json   # CI
+```
+
+A unified diff carries only hunks, not whole files — so the after-state is read from
+disk and the before-state is rebuilt by **reverse-applying the hunks**, which is exact
+and needs no git. Verified byte-for-byte against `git show HEAD:<path>` on real
+`git diff` output for modified, added and deleted files. A diff that does not line up
+with the file raises `PatchError` and the file is recorded as skipped, because a
+silently wrong reconstruction would produce a confident wrong verdict.
+
+Subjects are pooled across every changed file before verification, so moving a test
+from one file to another is not reported as lost — confirmed against the same change
+judged per-file, which does report it.
 
 ---
 
