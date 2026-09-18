@@ -18,7 +18,7 @@ from typing import Callable, Iterable, Mapping
 from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
-from .core import monotonicity, refactor, structure
+from .core import boundaries, monotonicity, refactor, structure
 from .core.assertions import extract
 from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
 from .core.linters import report as lintreport
@@ -83,6 +83,10 @@ def verify_change(
         shape, shape_skipped = structure.check(before, after, path, resolved.structure)
         findings.extend(shape)
         skipped.extend(shape_skipped)
+
+        layers, layers_skipped = boundaries.check(before, after, path, resolved.boundaries)
+        findings.extend(layers)
+        skipped.extend(layers_skipped)
         if not names_skipped:
             checked.append(path)
 

@@ -492,6 +492,53 @@ noise.
 
 ---
 
+## Stage 12 — Architectural boundaries ✅
+
+Found by auditing rather than by planning: `policy.boundaries.zones` had existed since
+Stage 0, this repository's own `.aegisflow.json` declared two zones, and **nothing
+evaluated them**. A policy section that looks enforced and is not is precisely the defect
+this project was created to prevent — it is the same shape as the `audit` command that
+printed "Clean" without reading a file, which was deleted on day one.
+
+That it survived eleven stages is worth recording: rules are easy to declare and easy to
+leave unwired, and only running them against a real repository surfaces it.
+
+### 12.1. Honest positioning
+
+`import-linter`, `dependency-cruiser` and ArchUnit do this well and are more mature.
+AegisFlow does not claim to better them. It is here because the policy already declares
+zones, and because a rule an agent is **told about in the same verdict** is worth more than
+one it discovers later from a separate tool failing.
+
+### 12.2. Relative imports must resolve, or the rule is decorative
+
+`from ..langgraph import node` compared literally matches no pattern, so a zone rule would
+silently protect nothing. Imports are resolved against the file's own package —
+`aegisflow/core/x.py` + `from ..langgraph import node` → `aegisflow.langgraph` — with
+`__init__.py` resolving to the package it defines rather than its parent.
+
+Patterns accept both spellings found in the wild: module paths (`app.adapters.*`,
+`requests`) and file globs (`src/db/**`). A bare package name forbids everything beneath
+it, and `a.b.*` also forbids importing `a.b` itself — matching only submodules would leave
+the package import as a hole in a rule that looks closed.
+
+Precision is checked in both directions: `requests` does not match `requests_mock`, and
+`aegisflow.core.diff` does not match `aegisflow.core.difftool`.
+
+### 12.3. Differential, like every other rule
+
+A violation already present before the change is not attributed to it, so the rule can be
+switched on in an existing repository without blaming inherited coupling.
+
+### 12.4. This repository now enforces its own architecture
+
+The two zones in `.aegisflow.json` are live: `aegisflow/core/**` may not import an adapter,
+`langgraph`, or the network; `aegisflow/langgraph/**` may not reach into core internals and
+must depend only on the verdict API. **Zero violations across the real source tree**, with
+a test that fails if that changes — and tests that fail if the wiring is ever removed again.
+
+---
+
 ## Not scheduled
 
 TypeScript analysis (lexical, cannot block — enforced by `Finding.__post_init__`), MCP
