@@ -75,6 +75,7 @@ class TestCase:
     line: int
     assertions: tuple[Assertion, ...] = ()
     skip_markers: tuple[str, ...] = ()
+    params: tuple[str, ...] = ()
     is_empty: bool = False
     body_hash: str = ""
 
@@ -145,6 +146,7 @@ def _build_case(fn: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str) -> Test
         line=fn.lineno,
         assertions=tuple(assertions),
         skip_markers=tuple(_skip_markers(fn)),
+        params=tuple(_params(fn)),
         is_empty=not body,
         body_hash=_body_hash(fn),
     )
@@ -172,6 +174,29 @@ def _skip_markers(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
         if any(marker in text.lower() for marker in _SKIP_MARKERS):
             found.append(text)
     return found
+
+
+def _params(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    """Parameter names introduced by ``@pytest.mark.parametrize``.
+
+    Needed so a parametrised rewrite is recognised as equivalent rather than as
+    the disappearance of every literal subject it replaced (see subject.py).
+    """
+    names: list[str] = []
+    for decorator in fn.decorator_list:
+        if not isinstance(decorator, ast.Call) or not decorator.args:
+            continue
+        if "parametrize" not in ast.unparse(decorator.func):
+            continue
+        spec = decorator.args[0]
+        if isinstance(spec, ast.Constant) and isinstance(spec.value, str):
+            names.extend(part.strip() for part in spec.value.split(",") if part.strip())
+        elif isinstance(spec, (ast.List, ast.Tuple)):
+            names.extend(
+                item.value for item in spec.elts
+                if isinstance(item, ast.Constant) and isinstance(item.value, str)
+            )
+    return names
 
 
 def _body_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
