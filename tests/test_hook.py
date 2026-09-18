@@ -8,7 +8,10 @@ from pathlib import Path
 from aegisflow.core.verdict import Status
 from aegisflow.hook import blocks, build_change, evaluate, read_payload, render
 
-ORIGINAL = 'def test_total():\n    assert inv.total == 42\n    assert inv.currency == "USD"\n'
+ORIGINAL = (
+    "from decimal import Decimal\n\n"
+    'def test_total(inv):\n    assert inv.total == 42\n    assert inv.currency == "USD"\n'
+)
 
 
 class HookCase(unittest.TestCase):

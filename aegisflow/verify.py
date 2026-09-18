@@ -13,33 +13,27 @@ that cannot be analysed is recorded in ``skipped`` and never counted as passing
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Iterable, Mapping
 
+from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
-from .core import monotonicity, testintegrity
+from .core import monotonicity, refactor, structure
 from .core.assertions import extract
-from .core.linters import registry, runner
-from .core.linters.adapter import FAST
+from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
+from .core.linters import report as lintreport
 from .core.policy import Policy
 from .core.relation import Relation
 from .core.verdict import Confidence, Finding, Status, Verdict
 
 Reader = Callable[[str], "str | None"]
 
-ASSERTION_MONOTONICITY = "assertion_monotonicity"
 GENERATED_FILE_EDITED = "generated_file_edited"
 
-#: Only Python is analysed exactly today. Other languages are reported as
-#: skipped rather than silently passed; see IMPLEMENTATION_STAGES.md.
-EXACT_SUFFIXES = (".py",)
-
-_OFFENCE_POLICY = {
-    testintegrity.VACUOUS_ASSERTION: "forbid_vacuous_assertions",
-    testintegrity.EMPTY_TEST: "forbid_vacuous_assertions",
-    testintegrity.SKIP_MARKER: "forbid_new_skip_markers",
-    testintegrity.DISABLED_ASSERTION: "forbid_swallowed_exceptions",
-}
+__all__ = [
+    "verify_change", "verify_diff",
+    "ASSERTION_MONOTONICITY", "GENERATED_FILE_EDITED", "EXACT_SUFFIXES",
+]
 
 
 def verify_change(
@@ -49,6 +43,7 @@ def verify_change(
     policy: Policy | str | dict | None = None,
     *,
     also_covered: Mapping[str, Relation] | None = None,
+    also_defined: Iterable[str] = (),
     hand_edit: bool = False,
 ) -> Verdict:
     """Verify one file's transition from ``before`` to ``after``.
@@ -71,18 +66,36 @@ def verify_change(
     checked: list[str] = []
     skipped: list[str] = []
 
-    lint_findings, lint_skipped = _lint(after, path, resolved)
+    lint_findings, lint_skipped = lintreport.collect(after, path, resolved)
     findings.extend(lint_findings)
     skipped.extend(lint_skipped)
 
-    contract = _test_contract(before, after, path, resolved, also_covered)
+    if path.endswith(EXACT_SUFFIXES):
+        names, names_skipped = refactor.check(
+            before, after, path,
+            on_dangling=resolved.refactor.dangling_reference,
+            on_export_removed=resolved.refactor.export_removed,
+            also_defined=also_defined or (),
+        )
+        findings.extend(names)
+        skipped.extend(names_skipped)
+
+        shape, shape_skipped = structure.check(before, after, path, resolved.structure)
+        findings.extend(shape)
+        skipped.extend(shape_skipped)
+        if not names_skipped:
+            checked.append(path)
+
+    contract = contractrules.check(before, after, path, resolved, also_covered)
     findings.extend(contract.findings)
-    checked.extend(contract.checked)
+    checked.extend(c for c in contract.checked if c not in checked)
     skipped.extend(contract.skipped)
 
     if not checked and not skipped:
         checked.append(path)
-    return Verdict.of(_deduplicate(findings), checked=checked, skipped=skipped)
+    return Verdict.of(
+        contractrules.deduplicate(findings), checked=checked, skipped=skipped
+    )
 
 
 def verify_diff(
@@ -108,12 +121,49 @@ def verify_diff(
 
     states, verdict = _collect(diffmod.parse(diff_text), fetch, resolved)
     covered = _pool(states, resolved)
+    defined = _pool_definitions(states)
 
     for path, before, after in states:
         verdict = verdict.merge(
-            verify_change(before, after, path, resolved, also_covered=covered)
+            verify_change(
+                before, after, path, resolved,
+                also_covered=covered, also_defined=defined,
+            )
         )
-    return verdict
+    return verdict.merge(_change_size(states, resolved))
+
+
+def _change_size(states, policy: Policy) -> Verdict:
+    """Cap the size of the whole change, not only of each file.
+
+    A change can stay under every per-file limit and still be unreviewable in
+    aggregate — forty files of a hundred lines each is the shape an agent
+    produces and a human approves without reading.
+    """
+    limit = policy.structure.max_change_lines
+    if not limit or policy.structure.severity is None:
+        return Verdict.of([])
+
+    added = sum(
+        len((after or "").splitlines()) - len((before or "").splitlines())
+        for _path, before, after in states
+    )
+    if added <= limit:
+        return Verdict.of([])
+
+    return Verdict.of([Finding(
+        rule=structure.CHANGE_TOO_LARGE,
+        status=policy.structure.severity,
+        file=f"{len(states)} files",
+        line=0,
+        detail=f"This change adds {added} lines across {len(states)} files, "
+               f"over the limit of {limit}.",
+        prescription=(
+            "Split it into changes that can each be reviewed and reverted "
+            "independently. A change this size is approved rather than read."
+        ),
+        confidence=Confidence.EXACT,
+    )])
 
 
 def _collect(changes, fetch: Reader, policy: Policy):
@@ -161,6 +211,23 @@ def _pool(states, policy: Policy) -> dict[str, Relation]:
     return pooled
 
 
+def _pool_definitions(states) -> frozenset[str]:
+    """Every module-level name defined anywhere in the change set.
+
+    Moving a function between modules must not read as deleting it.
+    """
+    from .core.symbols import scan
+
+    names: set[str] = set()
+    for path, _before, after in states:
+        if after is None or not path.endswith(EXACT_SUFFIXES):
+            continue
+        symbols = scan(after, filename=path)
+        if symbols.ok:
+            names.update(symbols.definitions)
+    return frozenset(names)
+
+
 def _read_file(path: Path) -> str | None:
     try:
         return path.read_text(encoding="utf-8")
@@ -205,134 +272,3 @@ def _generated(before, after, path, policy, hand_edit) -> Verdict | None:
             skipped=[f"{path}: generated code, not verified as authored source"],
         )
     return Verdict.of([], skipped=[f"{path}: generated code ({origin.reason})"])
-
-
-def _test_contract(before, after, path, policy, also_covered) -> Verdict:
-    """The assertion-integrity rules, which apply only to protected test files."""
-    if not policy.protects(path):
-        return Verdict.of([], checked=[path])
-
-    if not path.endswith(EXACT_SUFFIXES):
-        return Verdict.of([], skipped=[f"{path}: no exact analyser for this language yet"])
-
-    before_state = extract(before or "", filename=path)
-    after_state = extract(after or "", filename=path)
-
-    for state, label in ((before_state, "before"), (after_state, "after")):
-        if not state.ok:
-            return Verdict.of([], skipped=[f"{path}: {label} state unparseable — {state.error}"])
-
-    findings: list[Finding] = []
-    findings.extend(_monotonicity(before_state, after_state, path, policy, also_covered))
-    findings.extend(_integrity(before_state, after_state, path, policy))
-    return Verdict.of(findings, checked=[path])
-
-
-def _lint(after: str | None, path: str, policy: Policy) -> tuple[list[Finding], list[str]]:
-    """Run the project's own linters, if the project asked for them.
-
-    Findings are ``Confidence.EXTERNAL``: reproducible for a given tool version,
-    but the version is an environment read, so they advise and never block.
-    """
-    config = policy.linters
-    if not config.enabled or not config.tools or after is None or config.severity is None:
-        return [], []
-
-    findings: list[Finding] = []
-    skipped: list[str] = []
-    for adapter in registry.for_path(path, config.tools):
-        if adapter.cost != FAST and not config.include_slow:
-            skipped.append(f"{path}: {adapter.name} skipped (slow; set linters.include_slow)")
-            continue
-        result = runner.run(adapter, path, after, timeout=config.timeout_seconds)
-        if not result.ran:
-            skipped.append(f"{path}: {adapter.name} — {result.skipped}")
-            continue
-        for item in result.findings:
-            findings.append(
-                Finding(
-                    rule=_lint_rule(item),
-                    status=config.severity,
-                    file=path,
-                    line=item.line,
-                    detail=item.message,
-                    prescription=_lint_prescription(adapter, item),
-                    confidence=Confidence.EXTERNAL,
-                )
-            )
-    return findings, skipped
-
-
-def _lint_rule(item) -> str:
-    """``lint.ruff.F401``, without repeating a tool name the code already carries."""
-    code = item.code if not item.code.startswith(item.tool) else item.code[len(item.tool):]
-    code = code.strip(".") or item.tool
-    return f"lint.{item.tool}.{code}"
-
-
-def _lint_prescription(adapter, item) -> str:
-    if adapter.fix_hint:
-        suffix = " This is auto-fixable." if item.fixable else ""
-        return f"Run `{adapter.fix_hint}`.{suffix}"
-    return f"Resolve the {adapter.name} diagnostic before writing."
-
-
-def _monotonicity(before, after, path, policy, also_covered) -> list[Finding]:
-    status = policy.test_contract.assertion_monotonicity
-    if status is None:
-        return []
-    return [
-        Finding(
-            rule=ASSERTION_MONOTONICITY,
-            status=status,
-            file=path,
-            line=weakening.line,
-            detail=weakening.detail,
-            prescription=weakening.prescription,
-            before=weakening.source or None,
-            symbol=weakening.test or None,
-            confidence=Confidence.EXACT,
-        )
-        for weakening in monotonicity.compare(before, after, also_covered=also_covered)
-    ]
-
-
-def _integrity(before, after, path, policy) -> list[Finding]:
-    findings: list[Finding] = []
-    for offence in testintegrity.compare(before, after):
-        attribute = _OFFENCE_POLICY.get(offence.rule)
-        status = getattr(policy.test_contract, attribute, None) if attribute else None
-        if status is None:
-            continue
-        findings.append(
-            Finding(
-                rule=offence.rule,
-                status=status,
-                file=path,
-                line=offence.line,
-                detail=offence.detail,
-                prescription=offence.prescription,
-                before=offence.source or None,
-                symbol=offence.test or None,
-                confidence=Confidence.EXACT,
-            )
-        )
-    return findings
-
-
-def _deduplicate(findings: list[Finding]) -> list[Finding]:
-    """Drop subject-level findings for a test already reported as emptied.
-
-    Emptying a test body removes every assertion in it; reporting the empty body
-    *and* each lost subject says the same thing several times, and a prescription
-    an agent has to deduplicate is a worse prescription.
-    """
-    emptied = {
-        f.symbol for f in findings if f.rule == testintegrity.EMPTY_TEST and f.symbol
-    }
-    if not emptied:
-        return findings
-    return [
-        f for f in findings
-        if not (f.rule == ASSERTION_MONOTONICITY and f.symbol in emptied)
-    ]

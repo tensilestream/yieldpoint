@@ -40,6 +40,71 @@ class TestContract:
 
 
 @dataclass(frozen=True)
+class CustomRule:
+    """A project-defined rule, declared in configuration rather than in code.
+
+    Declarative on purpose: `.aegisflow.json` is repo-committed, so a rule that
+    could name code to run would mean cloning a repository executes it. New rule
+    *kinds* come from installed packages, which is an explicit act; new rule
+    *instances* come from config, which is not.
+    """
+
+    name: str
+    severity: Status | None = Status.REPAIR
+    path: str = ""
+    forbid_call: str = ""
+    forbid_import: str = ""
+    require_name_pattern: str = ""
+    message: str = ""
+
+
+@dataclass(frozen=True)
+class Structure:
+    """Maintainability limits.
+
+    Differential by default: a violation is reported only when this change
+    introduced or worsened it, so the rules can be switched on in an existing
+    repository without blaming inherited debt. ``greenfield`` makes them
+    absolute, which is what a project starting clean wants.
+    """
+
+    severity: Status | None = Status.REPAIR
+    greenfield: bool = False
+    max_file_lines: int = 300
+    max_lines: int = 50
+    max_parameters: int = 5
+    max_nesting: int = 4
+    max_complexity: int = 10
+    max_added_lines: int = 400
+    max_change_lines: int = 1200
+    forbid_utility_modules: bool = True
+    duplicate_implementation: Status | None = Status.REPAIR
+    custom: tuple[CustomRule, ...] = ()
+
+
+@dataclass(frozen=True)
+class Refactor:
+    """Rules for changes that restructure code rather than change behaviour.
+
+    Applies to every Python file, not only protected tests — a refactor that
+    leaves a call site pointing at a renamed definition still parses, and fails
+    only when that path runs.
+    """
+
+    dangling_reference: Status | None = Status.REPAIR
+    export_removed: Status | None = Status.REPAIR
+
+
+@dataclass(frozen=True)
+class Subjects:
+    """How subject expressions are matched across a change."""
+
+    accessor_equivalence: bool = True
+    """Treat ``x.total`` and ``x.getTotal()`` as one subject. Applied only after
+    exact matching fails, so it can suppress a false finding, never create one."""
+
+
+@dataclass(frozen=True)
 class Zone:
     """One architectural boundary: what ``path`` may not import."""
 
@@ -116,6 +181,9 @@ class Policy:
     project_name: str = "unnamed"
     languages: tuple[str, ...] = ("python",)
     test_contract: TestContract = field(default_factory=TestContract)
+    subjects: Subjects = field(default_factory=Subjects)
+    refactor: Refactor = field(default_factory=Refactor)
+    structure: Structure = field(default_factory=Structure)
     boundaries: Boundaries = field(default_factory=Boundaries)
     loop_breaker: LoopBreaker = field(default_factory=LoopBreaker)
     linters: Linters = field(default_factory=Linters)

@@ -16,6 +16,10 @@ from dataclasses import dataclass
 
 from .assertions import Extraction, TestCase
 
+#: Tokens that mark a call as assertion-like even when its exact spelling is
+#: unknown. A body full of these is a style we do not read, not an empty test.
+_ASSERTION_TOKENS = ("assert", "expect", "should", "verify", "check", "must", "ensure")
+
 VACUOUS_ASSERTION = "vacuous_assertion"
 DISABLED_ASSERTION = "disabled_assertion"
 SKIP_MARKER = "skip_marker"
@@ -53,6 +57,11 @@ def compare(before: Extraction, after: Extraction) -> tuple[Offence, ...]:
     return tuple(o for o in inspect(after) if o.key not in existing)
 
 
+def _looks_like_assertions(calls: tuple[str, ...]) -> bool:
+    lowered = " ".join(calls).lower()
+    return any(token in lowered for token in _ASSERTION_TOKENS)
+
+
 def _for_test(test: TestCase) -> list[Offence]:
     found: list[Offence] = []
 
@@ -84,9 +93,12 @@ def _for_test(test: TestCase) -> list[Offence]:
                 key=f"{EMPTY_TEST}:{test.qualname}",
             )
         )
-    elif not test.assertions:
+    elif not test.assertions and not _looks_like_assertions(test.unclassified_calls):
         # Only when there is nothing to point at. A test whose assertions are all
         # vacuous or all disabled is reported by those rules, which are specific.
+        # And never when the body is full of calls that read like assertions in a
+        # style this build does not recognise — accusing a whole project of
+        # writing empty tests is how a tool gets muted.
         found.append(
             Offence(
                 rule=EMPTY_TEST,

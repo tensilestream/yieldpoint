@@ -21,6 +21,33 @@
     "forbid_new_skip_markers": "repair",
     "forbid_swallowed_exceptions": "repair"
   },
+  "structure": {
+    "_comment": "Maintainability limits. Differential by default: a violation is reported only when this change introduced or worsened it, so existing debt is not blamed on the current edit. Set greenfield:true on a new project to make the limits absolute.",
+    "greenfield": false,
+    "severity": "repair",
+    "max_file_lines": 300,
+    "max_lines": 50,
+    "max_parameters": 5,
+    "max_nesting": 4,
+    "max_complexity": 10,
+    "max_added_lines": 400,
+    "max_change_lines": 1200,
+    "forbid_utility_modules": true,
+    "duplicate_implementation": "repair",
+    "custom": [
+      {
+        "name": "no_network_in_core",
+        "path": "aegisflow/core/**",
+        "forbid_import": "requests",
+        "message": "The verification core must never reach the network. See RULES.md section 4."
+      }
+    ]
+  },
+  "refactor": {
+    "_comment": "Structural integrity of a refactor: a renamed definition must not leave call sites behind.",
+    "dangling_reference": "repair",
+    "export_removed": "repair"
+  },
   "boundaries": {
     "on_violation": "repair",
     "zones": [

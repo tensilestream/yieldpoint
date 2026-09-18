@@ -16,10 +16,14 @@ from typing import Any
 from .policy import (
     DEFAULT_PROTECTED_PATTERNS,
     Boundaries,
+    CustomRule,
     GeneratedCode,
     Linters,
     LoopBreaker,
     Policy,
+    Refactor,
+    Structure,
+    Subjects,
     TestContract,
     Voice,
     Zone,
@@ -37,6 +41,9 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     linters = _section(raw, "linters", warnings)
     voice = _section(raw, "voice", warnings)
     generated = _section(raw, "generated", warnings)
+    subjects = _section(raw, "subjects", warnings)
+    refactor = _section(raw, "refactor", warnings)
+    structure = _section(raw, "structure", warnings)
 
     patterns = _str_tuple(contract.get("protected_patterns"), warnings, "protected_patterns")
 
@@ -58,6 +65,18 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
             forbid_swallowed_exceptions=_status(
                 contract.get("forbid_swallowed_exceptions"), Status.REPAIR, warnings,
                 "forbid_swallowed_exceptions"),
+        ),
+        structure=_structure(structure, warnings),
+        refactor=Refactor(
+            dangling_reference=_status(
+                refactor.get("dangling_reference"), Status.REPAIR, warnings,
+                "refactor.dangling_reference"),
+            export_removed=_status(
+                refactor.get("export_removed"), Status.REPAIR, warnings,
+                "refactor.export_removed"),
+        ),
+        subjects=Subjects(
+            accessor_equivalence=bool(subjects.get("accessor_equivalence", True)),
         ),
         boundaries=Boundaries(
             on_violation=_status(
@@ -165,6 +184,51 @@ def _linters(raw: dict[str, Any], warnings: list[str]) -> Linters:
         include_slow=bool(raw.get("include_slow", False)),
         tools=tuple(known),
     )
+
+
+def _structure(raw: dict[str, Any], warnings: list[str]) -> Structure:
+    defaults = Structure()
+    numbers = {
+        field: _int(raw.get(field), getattr(defaults, field), warnings, f"structure.{field}")
+        for field in (
+            "max_file_lines", "max_lines", "max_parameters", "max_nesting",
+            "max_complexity", "max_added_lines", "max_change_lines",
+        )
+    }
+    return Structure(
+        severity=_status(raw.get("severity"), Status.REPAIR, warnings, "structure.severity"),
+        greenfield=bool(raw.get("greenfield", False)),
+        forbid_utility_modules=bool(raw.get("forbid_utility_modules", True)),
+        duplicate_implementation=_status(
+            raw.get("duplicate_implementation"), Status.REPAIR, warnings,
+            "structure.duplicate_implementation"),
+        custom=_custom_rules(raw.get("custom"), warnings),
+        **numbers,
+    )
+
+
+def _custom_rules(value: Any, warnings: list[str]) -> tuple[CustomRule, ...]:
+    if not isinstance(value, list):
+        if value is not None:
+            warnings.append("structure.custom: expected a list; ignoring.")
+        return ()
+    rules: list[CustomRule] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or not item.get("name"):
+            warnings.append(f"structure.custom[{index}]: missing 'name'; ignoring.")
+            continue
+        rules.append(CustomRule(
+            name=str(item["name"]),
+            severity=_status(
+                item.get("severity"), Status.REPAIR, warnings,
+                f"structure.custom[{index}].severity"),
+            path=str(item.get("path", "")),
+            forbid_call=str(item.get("forbid_call", "")),
+            forbid_import=str(item.get("forbid_import", "")),
+            require_name_pattern=str(item.get("require_name_pattern", "")),
+            message=str(item.get("message", "")),
+        ))
+    return tuple(rules)
 
 
 def _zones(value: Any, warnings: list[str]) -> tuple[Zone, ...]:

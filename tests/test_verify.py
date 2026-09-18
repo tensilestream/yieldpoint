@@ -7,6 +7,11 @@ from aegisflow.core.verdict import Status
 from aegisflow.verify import ASSERTION_MONOTONICITY, verify_change
 
 BEFORE = """
+from decimal import Decimal
+
+from app import build
+
+
 def test_invoice_total():
     inv = build(qty=2, price=21)
     assert inv.total == Decimal("42.00")
@@ -14,6 +19,11 @@ def test_invoice_total():
 """
 
 WEAKENED = """
+from decimal import Decimal
+
+from app import build
+
+
 def test_invoice_total():
     inv = build(qty=2, price=21)
     assert inv.total is not None
@@ -106,7 +116,7 @@ class TestCrossFile(unittest.TestCase):
     def test_subject_covered_elsewhere_is_not_a_loss(self):
         from aegisflow.core.relation import Relation
 
-        after = "def test_invoice_total():\n    assert inv.currency == 'USD'\n"
+        after = "def test_invoice_total(inv):\n    assert inv.currency == 'USD'\n"
         verdict = verify_change(
             BEFORE, after, PATH, Policy(), also_covered={"inv.total": Relation.EQ}
         )

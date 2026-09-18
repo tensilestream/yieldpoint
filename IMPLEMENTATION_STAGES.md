@@ -268,11 +268,69 @@ The second needed a distinction worth keeping: **regenerating is normal, hand-ed
 not.** `verify_change(..., hand_edit=True)` is passed by the hook, which sees an edit being
 composed; the diff path leaves it off, so committed regenerated output stays silent.
 
-### 9.4. Not yet built
+### 9.4. Built: accessor equivalence ✅
 
-- **Accessor equivalence** — normalise `x.total` / `x.getTotal()` / `x.isTotal()` to one
-  subject. Removes the field↔accessor false positive with no parser and no build
-  dependency. Highest value per line remaining in this stage.
+`aegisflow/core/accessor.py` normalises a property and its accessor to one subject:
+`invoice.total`, `invoice.getTotal()`, `invoice.get_total()` and `invoice.total()` all
+reduce to `invoice.total`, and chains reduce throughout
+(`order.getInvoice().getTotal()` → `order.invoice.total`). Covers the JVM, .NET properties,
+Python `@property` and Ruby `attr_accessor` conventions with **no parser and no build**.
+
+Two safety properties, both tested:
+
+- **Only zero-argument calls are accessors.** `inv.get(key)` is a lookup and
+  `inv.getTotal(currency)` is a computation; neither is normalised.
+- **It is applied only after exact matching fails**, so it can *suppress* a false finding
+  and never invent a true one. A weakening hidden behind an accessor rename
+  (`inv.total == 42` → `inv.getTotal() is not None`) still fires, and a genuinely different
+  subject (`inv.subtotal`) still fires.
+
+It composes with parametrisation: `calc(1).total` and a parametrised
+`calc(n).getTotal()` reduce to the same key. Enabled by default; `subjects.accessor_equivalence`
+turns it off.
+
+### 9.5. Built: assertion style is the project's choice ✅
+
+A project writing `assert_that(x).is_equal_to(y)` must get the same verdicts as one writing
+`assert x == y`. Before this, fluent assertions were **invisible**: weakening one passed
+silently, and every test in such a project would eventually have been accused of asserting
+nothing. Both are the failure modes this project exists to prevent, arriving through the
+front door.
+
+`recognise.py` now reads, in addition to bare `assert` and `unittest`:
+
+| Style | Example |
+|---|---|
+| assertpy / AssertJ | `assert_that(inv.total).is_equal_to(42)`, `assertThat(x).isEqualTo(42)` |
+| Jest | `expect(x).toBe(3)`, `expect(x).toBeDefined()` |
+| Chai | `expect(x).to.equal(3)`, `expect(x).to.be.above(5)` |
+| Hamcrest matchers | `assert_that(inv.tax, equal_to(0))` |
+
+Three things make this general rather than a list of special cases:
+
+- **Names are folded.** `is_equal_to`, `isEqualTo` and `IsEqualTo` all reduce to
+  `isequalto`, so one table serves snake_case and camelCase ecosystems alike.
+- **The subject comes from the chain root, the relation from its terminal.** Reading only
+  the outer call name would find neither.
+- **Chai splits the relation across links**, so the terminal is tried alone and then with
+  each preceding link folded onto it — covering connector words (`to`, `be`, `deep`)
+  without enumerating them.
+
+Negation weakens rather than inverts: `expect(x).not_.to_be(y)` bounds the value instead of
+pinning it, so it ranks `COMPARISON`, not `EQ`. An unrecognised terminal becomes `OPAQUE` —
+known to be an assertion, of unknown strength — rather than disappearing.
+
+**Migrating between styles is not a weakening**, in either direction, because both reduce
+to the same subject and relation. Switching style is also not a way to smuggle a downgrade
+past: `assert x == 42` → `assert_that(x).is_not_none()` still fires.
+
+**And a style we do not read degrades rather than accuses.** Statement-level calls no
+recogniser understood are recorded on the `TestCase`; if they read like assertions, the
+`empty_test` rule stays silent. A genuinely empty test — `setup_database()` and nothing
+else — is still caught.
+
+### 9.6. Not yet built
+
 - **Reading generated sources** for resolution-based rules (mechanism 1), from
   `target/generated-sources/**` and `build/generated/**`. One integration covers every
   annotation processor, because they all write there. Ask the build, not the framework.
@@ -284,7 +342,7 @@ composed; the diff path leaves it off, so committed regenerated output stays sil
   breaks the core's zero-runtime-dependency property. That is a deliberate decision to make
   when a language is scheduled, not to drift into.
 
-### 9.5. AegisFlow exposes the MCP; it does not consume others
+### 9.7. AegisFlow exposes the MCP; it does not consume others
 
 The MCP surface is worth building, inverted from the obvious direction. Its value is not
 "verify this edit" — it is **resolution**:
@@ -296,6 +354,141 @@ That is information an agent **cannot obtain by reading the file**, which is pre
 gap worth filling. One oracle answering from source plus the build's real output, rather
 than an integration per framework. When the answer is unknown it says so: an oracle that
 admits ignorance is usable, one that guesses is worse than none.
+
+---
+
+## Stage 10 — Refactor integrity ✅
+
+Found by reviewing a bug made *while building this*: splitting a module carried two
+functions into the wrong file and left renamed call sites behind. The suite caught it —
+but only because that code had tests, and only after running them. **The tool itself was
+blind to it**, because `verify_change` returned `pass` for every non-test file, and
+refactors live in source.
+
+That is a second failure class, distinct from test tampering:
+
+| | Test tampering | Broken refactor |
+|---|---|---|
+| What breaks | verification gets weaker | code stops resolving |
+| Still parses? | yes | yes |
+| Caught by tests? | no — the tests are the thing being weakened | only if that path is covered, and only after running them |
+| Caught by coverage? | no | no |
+
+### 10.1. Two rules, both differential
+
+`core/symbols.py` collects what a module binds, loads and exports. `core/refactor.py`
+turns that into findings, **for every Python file, not only protected tests**:
+
+- **`dangling_reference`** — a name used after the change that nothing in the module
+  defines, imports, or binds. This is the rename-without-updating-call-sites bug, and it
+  caught both halves of the original when reconstructed.
+- **`export_removed`** — a name dropped from `__all__` and defined nowhere in the change
+  set. Pooled across files, so moving a definition between modules is not a removal.
+
+Both ignore problems that already existed: adopting this on a repository with pre-existing
+dynamic tricks must not produce a wall of findings nobody caused.
+
+### 10.2. Bindings are over-approximated on purpose
+
+Every name bound *anywhere* in a module counts, including inside other functions. A local
+in one function therefore masks a genuine problem in another. That direction is chosen
+deliberately: it yields false negatives rather than false positives, and a refactor checker
+that cries wolf is one nobody runs. `import *` disables the check entirely and says so —
+anything could be in scope, and a confident answer is not available.
+
+Validated against the whole real codebase: **zero dangling names across every file**, with
+a test that fails if that ever stops being true.
+
+### 10.3. It works on legacy-to-functional conversions
+
+Converting a class to functions is exactly the shape of change this covers. A complete
+conversion — including a rewrite to `reduce`-style composition — is silent; one that leaves
+`InvoiceCalculator(1.2).total(...)` behind after deleting the class is caught and names the
+symbol. Tests for both are in `tests/test_refactor.py`.
+
+### 10.4. It caught the same mistake again, during its own development
+
+Splitting `verify.py` in this stage left a stale `_OFFENCE_POLICY` block and dropped an
+import. Run against that change, the rule reported `testintegrity` and `monotonicity` as
+dangling with line numbers, and afterwards found a missing `Confidence` import the same
+way — each time before the suite was run.
+
+---
+
+## Stage 11 — Maintainability and change size ✅
+
+> *"We don't want an agent producing 5000 lines of code humans can't manage."*
+
+Two different problems, and only the first is about code quality:
+
+- **Reviewability** — a change so large nobody reads it line by line. Bounded by
+  `change_too_large`, per file and across the whole change set.
+- **Maintainability** — what the resulting code looks like. Bounded by limits on file
+  length, function length, parameters, nesting, complexity, duplication and catch-all
+  module names.
+
+### 11.1. Not "SOLID enforcement"
+
+File length, function size, parameter count, nesting, cyclomatic complexity, duplication
+and utility-dump module names are all decidable from source. **Liskov substitution and
+dependency inversion are not.** A tool claiming to check them would be inflating vocabulary
+over substance, which RULES.md section 5 forbids — so these are named as what they are:
+checkable proxies for maintainability.
+
+### 11.2. Differential by default, absolute on greenfield
+
+A module that was already 500 lines is not this change's fault; growing it further is. So a
+violation is reported only when the change **introduced or worsened** it, and improving a
+file that is still over its limit stays silent. That lets the rules be switched on in an
+existing repository without a wall of findings nobody caused, while ratcheting in the right
+direction.
+
+`"greenfield": true` makes every limit absolute — the right default for a project starting
+clean, which is where these standards are actually achievable.
+
+### 11.3. Duplication is compared by shape, not text
+
+`metrics.shape_of` fingerprints a function's AST with identifiers erased, so a copy-paste
+that renamed its variables is still found. Functions under five statements are excluded:
+two three-line accessors being identical is a coincidence, not duplication.
+
+### 11.4. New rules come from config, new rule *kinds* from installed packages
+
+Teams extend the rule set declaratively in `.aegisflow.json`:
+
+```json
+"custom": [
+  {"name": "no_network_in_core", "path": "aegisflow/core/**",
+   "forbid_import": "requests",
+   "message": "The core must never reach the network. See RULES.md section 4."}
+]
+```
+
+`forbid_call`, `forbid_import` and `require_name_pattern`, each scopable by path glob and
+carrying its own severity. **Declarative on purpose:** `.aegisflow.json` is repo-committed,
+so a rule that could name code to run would mean cloning a repository executes it. New rule
+*instances* come from configuration; new rule *kinds* come from installed packages, which
+is an explicit act.
+
+This repository now enforces its own architecture rule this way — `aegisflow/core/**` may
+not import `requests`, and the adapters are out of scope.
+
+### 11.5. Dogfooding, reported honestly
+
+Run in greenfield mode over AegisFlow's own source, the rules produce **21 findings**:
+
+| Rule | Count |
+|---|---|
+| `complexity_too_high` | 11 |
+| `function_too_long` | 5 |
+| `too_many_parameters` | 5 |
+| `file_too_long`, `utility_module`, `duplicate_implementation` | 0 |
+
+The rules RULES.md actually mandates — 300-line files, no utility dumps, no duplication —
+are clean, and there is a test that fails if that stops being true. The violations are in
+stricter limits chosen as defaults here (50-line functions, complexity 10, 5 parameters),
+which the project has not adopted. `_scan_stmt` at 21 branches is a genuine finding, not
+noise.
 
 ---
 

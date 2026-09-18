@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
+from .accessor import normalize
 from .assertions import Extraction, TestCase
 from .relation import Relation
 from .subject import generalize
@@ -84,12 +85,24 @@ def subject_map(extraction: Extraction) -> dict[str, Relation]:
     return strongest
 
 
-def generalized_map(extraction: Extraction) -> dict[str, Relation]:
-    """Subject map keyed by generalised form, to survive parametrisation."""
+def fallback_key(subject: str, params=(), *, accessors: bool = True) -> str:
+    """The key used when exact matching fails.
+
+    Composes the two normalisations that describe the same verification written
+    differently: parametrisation (``calc(1)`` and ``calc(n)``) and accessors
+    (``inv.total`` and ``inv.getTotal()``).
+    """
+    return generalize(normalize(subject) if accessors else subject, params)
+
+
+def generalized_map(
+    extraction: Extraction, *, accessors: bool = True
+) -> dict[str, Relation]:
+    """Subject map keyed by fallback form, to survive rewrites that preserve meaning."""
     strongest: dict[str, Relation] = {}
     for test in extraction.tests:
         for subject, relation in test.subjects.items():
-            key = generalize(subject, test.params)
+            key = fallback_key(subject, test.params, accessors=accessors)
             current = strongest.get(key)
             if current is None or relation.rank > current.rank:
                 strongest[key] = relation
@@ -101,18 +114,20 @@ def compare(
     after: Extraction,
     *,
     also_covered: Mapping[str, Relation] | None = None,
+    accessors: bool = True,
 ) -> tuple[Weakening, ...]:
     """Return every subject that lost strength between ``before`` and ``after``.
 
     ``also_covered`` lets a caller supply subjects verified elsewhere in the same
     change set, so relocating a test to another file is not reported as loss.
+    ``accessors`` treats a property and its getter as one subject.
     """
     if not before.ok or not after.ok:
         return ()
 
     before_subjects = subject_map(before)
     after_subjects = subject_map(after)
-    after_general = generalized_map(after)
+    after_general = generalized_map(after, accessors=accessors)
     extra = dict(also_covered or {})
     pairs = pair_tests(before, after)
 
@@ -121,7 +136,9 @@ def compare(
         if not before_relation.verifies_anything:
             continue
 
-        after_relation, present = _lookup(subject, before, after_subjects, after_general, extra)
+        after_relation, present = _lookup(
+            subject, before, after_subjects, after_general, extra, accessors
+        )
 
         if not present:
             kind = REMOVED
@@ -176,8 +193,8 @@ def pair_tests(before: Extraction, after: Extraction) -> dict[str, str]:
 def _similarity(before: TestCase, after: TestCase) -> float:
     if before.body_hash and before.body_hash == after.body_hash:
         return 1.0
-    left = {generalize(s, before.params) for s in before.subjects}
-    right = {generalize(s, after.params) for s in after.subjects}
+    left = {fallback_key(s, before.params) for s in before.subjects}
+    right = {fallback_key(s, after.params) for s in after.subjects}
     if not left or not right:
         return 0.0
     return len(left & right) / len(left | right)
@@ -189,15 +206,20 @@ def _lookup(
     exact: Mapping[str, Relation],
     general: Mapping[str, Relation],
     extra: Mapping[str, Relation],
+    accessors: bool = True,
 ) -> tuple[Relation, bool]:
-    """Resolve a subject in the after state: exact, then generalised, then elsewhere."""
+    """Resolve a subject in the after state: exact, then elsewhere, then normalised.
+
+    Exact first keeps precision; the normalised fallback only ever suppresses a
+    finding that exact matching would have raised, never invents one.
+    """
     if subject in exact:
         return exact[subject], True
     if subject in extra:
         return extra[subject], True
 
     owner, _ = _owner(before, subject)
-    key = generalize(subject, owner.params if owner else ())
+    key = fallback_key(subject, owner.params if owner else (), accessors=accessors)
     if key in general:
         return general[key], True
     return Relation.NONE, False

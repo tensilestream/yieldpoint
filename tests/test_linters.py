@@ -194,9 +194,9 @@ class TestVerifyIntegration(unittest.TestCase):
 
     def test_rule_name_does_not_repeat_the_tool(self):
         item = LintFinding(tool="ruff-format", code="ruff-format.format", message="m")
-        from aegisflow.verify import _lint_rule
+        from aegisflow.core.linters.report import rule_for
 
-        self.assertEqual(_lint_rule(item), "lint.ruff-format.format")
+        self.assertEqual(rule_for(item), "lint.ruff-format.format")
 
 
 if __name__ == "__main__":
