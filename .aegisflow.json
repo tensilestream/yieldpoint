@@ -1,0 +1,54 @@
+{
+  "version": "1.0",
+  "project": {
+    "name": "AegisFlow",
+    "languages": ["python"]
+  },
+  "test_contract": {
+    "protected_patterns": [
+      "**/tests/**",
+      "**/test/**",
+      "**/*_test.py",
+      "**/test_*.py",
+      "**/*.test.*",
+      "**/*.spec.*",
+      "**/fixtures/**"
+    ],
+    "assertion_monotonicity": "repair",
+    "forbid_vacuous_assertions": "repair",
+    "forbid_new_skip_markers": "repair",
+    "forbid_swallowed_exceptions": "repair"
+  },
+  "boundaries": {
+    "on_violation": "repair",
+    "zones": [
+      {
+        "name": "verification_core",
+        "path": "aegisflow/core/**",
+        "forbidden_imports": [
+          "aegisflow.langgraph.*",
+          "aegisflow.adapters.*",
+          "langgraph",
+          "langchain",
+          "requests",
+          "httpx"
+        ],
+        "reason": "The core must stay dependency-free and must never reach the network or an adapter. See RULES.md section 4."
+      },
+      {
+        "name": "adapters",
+        "path": "aegisflow/langgraph/**",
+        "forbidden_imports": [
+          "aegisflow.core.diff",
+          "aegisflow.core.assertions"
+        ],
+        "reason": "Adapters depend only on the verdict API, never on core internals. See RULES.md section 2, Interface Segregation."
+      }
+    ]
+  },
+  "loop_breaker": {
+    "window": 6,
+    "max_repeats_without_progress": 3,
+    "on_trip": "escalate"
+  }
+}
