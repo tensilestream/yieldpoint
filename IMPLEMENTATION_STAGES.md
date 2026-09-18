@@ -652,6 +652,60 @@ file*; a file no rule applies to is neither checked nor skipped.
 
 ---
 
+## Stage 15 — MCP server and open-source front door ✅
+
+```sh
+aegisflow install-mcp --list
+aegisflow install-mcp --client cursor
+aegisflow install-mcp --client zed --show     # print, do not write
+```
+
+The MCP server was listed as "not scheduled" through fourteen stages. It is the surface
+that reaches editors AegisFlow has no other door into — Cursor, Windsurf, VS Code, Zed —
+and it needs no dependency, because MCP's stdio transport *is* newline-delimited JSON-RPC.
+
+### 15.1. MCP explains; it does not enforce
+
+Stated in the module docstring, the README and the CLI output, because it is the thing
+most likely to be misunderstood. An MCP tool is one the agent **chooses** to call, so an
+agent intent on weakening a test will not ask. Its value is the other half of the problem:
+a blocked agent otherwise burns tokens guessing *why*, and these tools answer
+deterministically for free. Enforcement remains the hook, pre-commit, CI, and the graph
+edge.
+
+### 15.2. Two properties the tests assert
+
+- **stdout carries protocol and nothing else.** A stray print corrupts the stream and the
+  client disconnects, so every response line is parsed back as JSON in a test.
+- **No single bad message ends the session.** Malformed JSON, a non-object request, an
+  unknown method and a failing tool each produce an error response and the loop continues —
+  asserted by feeding a broken line between two good ones and requiring three responses.
+
+Protocol version is negotiated by echoing the client's requested revision when it looks
+valid, falling back to `2024-11-05` otherwise. **Worth verifying against the current
+specification before release** — this was implemented from the protocol's shape rather than
+against a live client.
+
+### 15.3. Client configuration is data, and it will drift
+
+`mcp/clients.py` holds every path and shape: `mcpServers` for most, `servers` with
+`type: stdio` for VS Code, `context_servers` with a nested command for Zed. Vendors move
+these between releases, so `--show` prints the snippet for anyone who would rather wire it
+by hand, and the docs say plainly that the writer may go out of date while
+`aegisflow mcp` will not.
+
+Existing configuration is backed up before it is touched — including when it is unparseable,
+which is exactly when a user most wants the original back.
+
+### 15.4. The front door
+
+The README was a design document, not a project page. It now opens with badges, a contents
+list, install instructions including `pipx` and `uv`, a three-step quick start, per-editor
+MCP setup, and contributing and licence sections. `CODE_OF_CONDUCT.md` completes the
+standard set.
+
+---
+
 ## Not scheduled
 
 TypeScript analysis (lexical, cannot block — enforced by `Finding.__post_init__`), MCP

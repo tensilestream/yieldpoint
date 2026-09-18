@@ -46,6 +46,10 @@ First release. Verdict `schema_version` 1.
   and a `.pre-commit-config.yaml` that runs AegisFlow on staged changes.
 - `aegisflow hook` / `install-hook` — Claude Code `PreToolUse` gate.
 - `aegisflow linters` — 24 curated external tools, opt-in, advisory only.
+- `aegisflow mcp` — Model Context Protocol server over stdio, no dependencies. Tools:
+  `aegis_verify_change`, `aegis_verify_diff`, `aegis_scan`, `aegis_policy`.
+- `aegisflow install-mcp` — registers the server with Claude Code, Claude Desktop, Cursor,
+  Windsurf, VS Code or Zed, or prints the snippet with `--show`.
 - `aegisflow.langgraph` — verification node, verdict router, semantic loop breaker.
 - `aegisflow.speech` — spoken verdicts and confirmation tokens for voice-driven agents.
 

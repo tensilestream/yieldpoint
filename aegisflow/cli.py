@@ -18,14 +18,13 @@ from .commands import (
     EXIT_ERROR,
     EXIT_FINDINGS,
     EXIT_OK,
-    HOOK_MATCHER,
     check,
     check_diff,
     hook_command,
-    install_hook,
     linters_command,
     scan_command,
 )
+from .install import HOOK_MATCHER, install_hook, install_mcp, mcp_command
 
 #: The shell contract is part of this module's API, so it is declared explicitly
 #: — an export the `export_removed` rule can then protect.
@@ -84,6 +83,16 @@ def _parser() -> argparse.ArgumentParser:
     linters_cmd = sub.add_parser("linters", help="list the linters this build can run")
     linters_cmd.add_argument("--policy", help="path to .aegisflow.json")
     linters_cmd.set_defaults(handler=linters_command)
+
+    mcp_cmd = sub.add_parser("mcp", help="run the MCP server on stdio")
+    mcp_cmd.add_argument("--policy", help="path to .aegisflow.json")
+    mcp_cmd.set_defaults(handler=mcp_command)
+
+    mcp_install = sub.add_parser("install-mcp", help="register the MCP server with an editor")
+    mcp_install.add_argument("--client", help="claude-code, cursor, vscode, ...")
+    mcp_install.add_argument("--list", action="store_true", help="list supported clients")
+    mcp_install.add_argument("--show", action="store_true", help="print the snippet, do not write")
+    mcp_install.set_defaults(handler=install_mcp)
 
     install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
     install_cmd.add_argument("--settings", help="settings file (default: .claude/settings.json)")

@@ -192,47 +192,6 @@ def linters_command(args) -> int:
     return EXIT_OK
 
 
-def install_hook(args) -> int:
-    path = Path(args.settings) if args.settings else Path(".claude/settings.json")
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    settings: dict = {}
-    if path.is_file():
-        try:
-            settings = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            print(f"aegisflow: cannot read {path}: {exc}", file=sys.stderr)
-            return EXIT_ERROR
-        backup = path.with_suffix(path.suffix + ".aegisflow-backup")
-        backup.write_text(json.dumps(settings, indent=2), encoding="utf-8")
-        print(f"backed up existing settings to {backup}")
-
-    command = "aegisflow hook" + (" --advisory" if args.advisory else "")
-    entry = {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": command}]}
-
-    hooks = settings.setdefault("hooks", {})
-    pre = hooks.setdefault("PreToolUse", [])
-    pre[:] = [e for e in pre if not _is_aegisflow(e)] + [entry]
-
-    path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    mode = "advisory" if args.advisory else "blocking"
-    print(f"registered '{command}' on {HOOK_MATCHER} in {path} ({mode} mode)")
-    print("Restart Claude Code, or start a new session, for it to take effect.")
-    return EXIT_OK
-
-
-# ------------------------------------------------------------------- helpers
-
-
-def _is_aegisflow(entry: object) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    return any(
-        isinstance(h, dict) and "aegisflow" in str(h.get("command", ""))
-        for h in entry.get("hooks", [])
-    )
-
-
 def _read_source(value: str | None) -> str | None:
     if value is None:
         return None
