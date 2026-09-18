@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # No install step: the core has no runtime dependencies, and running the
+      # suite against a bare interpreter is what proves it.
+      - run: python -m unittest discover -s tests -t . -q
+
+  self-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+
+      # Correctness rules must be clean. Maintainability findings are reported
+      # but do not fail the build; see IMPLEMENTATION_STAGES.md Stage 11.
+      - name: Audit our own source
+        run: |
+          aegisflow scan aegisflow --policy .aegisflow.json \
+            --rule dangling_reference --rule boundary_violation \
+            --rule export_removed --rule duplicate_implementation \
+            --rule file_too_long --rule utility_module
+      - name: Report maintainability findings
+        continue-on-error: true
+        run: aegisflow scan aegisflow --policy .aegisflow.json
+
+      # Verify this pull request the way a user would verify theirs.
+      - name: Verify the diff
+        if: github.event_name == 'pull_request'
+        run: |
+          git diff "origin/${{ github.base_ref }}...HEAD" \
+            | aegisflow check --diff - --json
+
+  release-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: ./scripts/release-check.sh

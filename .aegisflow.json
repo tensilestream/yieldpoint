@@ -48,6 +48,11 @@
     "dangling_reference": "repair",
     "export_removed": "repair"
   },
+  "ci": {
+    "_comment": "Integrity of the checks themselves. Analysis is lexical because CI definitions are YAML and the core takes no dependencies, so these findings warn and can never block.",
+    "check_removed": "repair",
+    "check_disabled": "repair"
+  },
   "boundaries": {
     "on_violation": "repair",
     "zones": [

@@ -1,0 +1,39 @@
+name: False positive
+description: AegisFlow flagged something that is actually fine
+labels: ["false-positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        False positives are the most important bug class in this project. A rule
+        that cries wolf gets muted, and a muted rule verifies nothing.
+  - type: input
+    id: rule
+    attributes:
+      label: Rule
+      placeholder: assertion_monotonicity
+    validations: { required: true }
+  - type: textarea
+    id: before
+    attributes:
+      label: Code before the change
+      render: python
+    validations: { required: true }
+  - type: textarea
+    id: after
+    attributes:
+      label: Code after the change
+      render: python
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes:
+      label: Why this change is legitimate
+      description: What were you doing, and why does it not weaken verification?
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "aegisflow --version"
+    validations: { required: true }

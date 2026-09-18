@@ -1,0 +1,26 @@
+name: Missed detection
+description: An agent weakened verification and AegisFlow did not notice
+labels: ["missed-detection"]
+body:
+  - type: textarea
+    id: before
+    attributes:
+      label: Code before
+      render: python
+    validations: { required: true }
+  - type: textarea
+    id: after
+    attributes:
+      label: Code after
+      render: python
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have been reported, and why
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Version
+    validations: { required: true }

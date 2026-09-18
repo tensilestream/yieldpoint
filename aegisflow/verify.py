@@ -18,7 +18,7 @@ from typing import Callable, Iterable, Mapping
 from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
-from .core import boundaries, monotonicity, refactor, structure
+from .core import boundaries, glob, monotonicity, refactor, structure, workflows
 from .core.assertions import extract
 from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
 from .core.linters import report as lintreport
@@ -90,13 +90,18 @@ def verify_change(
         if not names_skipped:
             checked.append(path)
 
+    if glob.matches_any(resolved.ci.paths, path):
+        ci_findings, ci_skipped = workflows.check(before, after, path, resolved.ci)
+        findings.extend(ci_findings)
+        skipped.extend(ci_skipped)
+        if not ci_skipped:
+            checked.append(path)
+
     contract = contractrules.check(before, after, path, resolved, also_covered)
     findings.extend(contract.findings)
     checked.extend(c for c in contract.checked if c not in checked)
     skipped.extend(contract.skipped)
 
-    if not checked and not skipped:
-        checked.append(path)
     return Verdict.of(
         contractrules.deduplicate(findings), checked=checked, skipped=skipped
     )

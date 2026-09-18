@@ -539,6 +539,119 @@ a test that fails if that changes — and tests that fail if the wiring is ever 
 
 ---
 
+## Stage 13 — Repository audit ✅
+
+```sh
+aegisflow scan                       # audit the working tree
+aegisflow scan --rule dangling_reference --json
+```
+
+Another gap found by asking what someone does first: every existing surface verifies a
+*change*, and there was no way to ask what state a repository is in before any agent has
+touched it. The deleted JS CLI had an `audit` command; removing it on day one was right —
+it checked nothing — but nothing replaced it.
+
+### 13.1. Absolute, not differential — and the distinction is load-bearing
+
+Most rules are differential so that adopting AegisFlow does not blame inherited debt on the
+next edit. A scan has no "before", so every rule runs absolutely and reports everything it
+finds. Structure limits are forced into `greenfield` mode for the same reason.
+
+The output says so explicitly: **a scan reports the state of the repository, not the effect
+of a change.** Confusing the two would make a clean repository look broken, or a broken one
+look clean.
+
+Assertion monotonicity cannot participate at all — it compares two states and a scan has
+one. That is stated rather than silently skipped.
+
+Results are ordered deterministically: `walk` sorts rather than taking filesystem order, so
+two scans of the same tree produce byte-identical output.
+
+### 13.2. Dogfooded
+
+Against AegisFlow's own 37 files: **zero** findings for `dangling_reference`,
+`boundary_violation`, `export_removed`, `duplicate_implementation`, `file_too_long` and
+`utility_module`, with a test that fails if any of those appear. The 23 remaining findings
+are all in the stricter maintainability limits chosen as defaults in Stage 11
+(complexity 10, 50-line functions, 5 parameters) — real signals the project has not yet
+adopted, not noise.
+
+### 13.3. The split that proved the Stage 10 rules
+
+`cli.py` crossed 250 lines and was split into the argument surface and the command
+implementations. Running AegisFlow's own `dangling_reference` check on the result **before
+the test suite** reported four missing imports in `cli.py` and a stray `main` reference in
+`commands.py` — the same class of mistake as Stage 10, caught in seconds instead of by 106
+failing tests.
+
+Two further failures in that split are worth recording because the rules did **not** catch
+them:
+
+- **`EXIT_FINDINGS` stopped being re-exported.** Not a dangling reference — nothing in the
+  file used it — so only the test suite found it. Fixed by giving `cli.py` an explicit
+  `__all__`, which puts the shell contract under the `export_removed` rule; confirmed that
+  removing it again is now caught.
+- **A local parser variable named `check` shadowed the imported `check` handler**, so
+  `handler=check` bound an `ArgumentParser`. Both names exist, so name-resolution analysis
+  cannot see it. A shadowing rule would be a reasonable addition.
+
+---
+
+## Stage 14 — Integrity of the checks themselves ✅
+
+> *"The agent made the tests pass by weakening the tests"* has a sibling one layer up:
+> **the agent made CI pass by weakening CI.**
+
+Found by asking what an agent can still do once assertions are protected. The answer is
+everything in `.github/` — and AegisFlow verified none of it. Worse, it reported workflow
+files as `checked`, claiming a verification it had never performed.
+
+### 14.1. Two rules
+
+- **`ci_check_removed`** — a job or step present before and gone after.
+- **`ci_check_disabled`** — a step that can no longer fail: `continue-on-error: true`,
+  `if: false`, or a command ending `|| true` / `; true`. Job-level suppression disables
+  every step inside it.
+
+Identity is the command with suppression stripped, so a step that gains `|| true` is
+recognised as **the same step, disabled** — not as one step removed and a different one
+added. Getting that wrong would report the most common neutering as two unrelated events.
+
+### 14.2. Lexical, therefore incapable of blocking
+
+CI definitions are YAML and the core takes no runtime dependencies, so this is a
+line-based analysis rather than a parse. Findings carry `Confidence.LEXICAL`, which
+`Finding.__post_init__` **refuses to let block** — configuring `check_disabled: "block"`
+raises rather than silently gating work on a guess. There is a test asserting exactly that.
+
+### 14.3. A bug the tests caught
+
+The first implementation ended a step block at the next sibling `- ` only, so a step
+swallowed the following job and read *that* job's `continue-on-error` as its own. Blocks
+now also end on dedent. It was caught by a test asserting one finding and receiving two —
+which is why rules are tested for the count they produce, not merely that they fire.
+
+### 14.4. Scaffolding, and why these templates
+
+`.github/` now carries a pull-request checklist derived from `RULES.md` (differential
+findings, uncertainty cannot block, no claim without a benchmark, `SCHEMA_VERSION` on
+verdict changes), CODEOWNERS covering the three files that decide what a verdict says,
+Dependabot, a security policy, and `.pre-commit-config.yaml` running `aegisflow check
+--diff -` on staged changes.
+
+The two lead issue templates are **false positive** and **missed detection** rather than a
+generic bug form, because those are the two failure modes that decide whether this project
+is worth running — and the false-positive template asks for the before, the after, and why
+the change was legitimate, which is exactly the corpus the rules are tuned against.
+
+### 14.5. Also fixed: `checked` meant nothing
+
+`verify_change` appended a path to `checked` whenever no rule had run, so an unanalysed
+file looked like one that passed. `checked` now means *at least one rule evaluated this
+file*; a file no rule applies to is neither checked nor skipped.
+
+---
+
 ## Not scheduled
 
 TypeScript analysis (lexical, cannot block — enforced by `Finding.__post_init__`), MCP

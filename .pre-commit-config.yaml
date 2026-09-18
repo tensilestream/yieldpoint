@@ -1,0 +1,19 @@
+# Install:  pip install pre-commit && pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: aegisflow
+        name: AegisFlow (verify staged changes)
+        entry: aegisflow check --diff -
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        # `aegisflow check --diff -` reads the staged diff on stdin.
+        verbose: true
+
+      - id: tests
+        name: unit tests
+        entry: python -m unittest discover -s tests -t . -q
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

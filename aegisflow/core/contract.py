@@ -30,7 +30,9 @@ _OFFENCE_POLICY = {
 def check(before, after, path, policy, also_covered) -> Verdict:
     """The assertion-integrity rules, which apply only to protected test files."""
     if not policy.protects(path):
-        return Verdict.of([], checked=[path])
+        # No test-contract rule applies. Saying "checked" here would let a file
+        # nothing examined look like one that passed (RULES.md section 5).
+        return Verdict.of([])
 
     if not path.endswith(EXACT_SUFFIXES):
         return Verdict.of([], skipped=[f"{path}: no exact analyser for this language yet"])

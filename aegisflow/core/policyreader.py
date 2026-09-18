@@ -14,14 +14,17 @@ from __future__ import annotations
 from typing import Any
 
 from .policy import (
+    DEFAULT_IGNORE,
     DEFAULT_PROTECTED_PATTERNS,
     Boundaries,
+    ContinuousIntegration,
     CustomRule,
     GeneratedCode,
     Linters,
     LoopBreaker,
     Policy,
     Refactor,
+    Scan,
     Structure,
     Subjects,
     TestContract,
@@ -44,6 +47,8 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     subjects = _section(raw, "subjects", warnings)
     refactor = _section(raw, "refactor", warnings)
     structure = _section(raw, "structure", warnings)
+    ci = _section(raw, "ci", warnings)
+    scanning = _section(raw, "scan", warnings)
 
     patterns = _str_tuple(contract.get("protected_patterns"), warnings, "protected_patterns")
 
@@ -66,7 +71,20 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
                 contract.get("forbid_swallowed_exceptions"), Status.REPAIR, warnings,
                 "forbid_swallowed_exceptions"),
         ),
+        ci=ContinuousIntegration(
+            check_removed=_status(
+                ci.get("check_removed"), Status.REPAIR, warnings, "ci.check_removed"),
+            check_disabled=_status(
+                ci.get("check_disabled"), Status.REPAIR, warnings, "ci.check_disabled"),
+            paths=_str_tuple(ci.get("paths"), warnings, "ci.paths")
+            or ContinuousIntegration().paths,
+        ),
         structure=_structure(structure, warnings),
+        scan=Scan(
+            ignore=_str_tuple(scanning.get("ignore"), warnings, "scan.ignore") or DEFAULT_IGNORE,
+            max_file_bytes=_int(
+                scanning.get("max_file_bytes"), 1_000_000, warnings, "scan.max_file_bytes"),
+        ),
         refactor=Refactor(
             dangling_reference=_status(
                 refactor.get("dangling_reference"), Status.REPAIR, warnings,

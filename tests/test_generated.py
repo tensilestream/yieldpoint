@@ -120,10 +120,15 @@ class TestVerifyBehaviour(unittest.TestCase):
         self.assertEqual([f.rule for f in verdict.findings], ["assertion_monotonicity"])
 
     def test_detection_can_be_disabled(self):
+        """With detection off the file is not short-circuited as generated.
+
+        It is still neither `checked` nor `skipped`: no rule applies to Go, and a
+        file nothing examined must not look like one that passed.
+        """
         policy = Policy.from_dict({"generated": {"detect": False}})
         verdict = verify_change(self.BEFORE, self.AFTER, self.PATH, policy, hand_edit=True)
         self.assertEqual(verdict.findings, ())
-        self.assertEqual(verdict.checked, (self.PATH,))
+        self.assertEqual(verdict.skipped, ())
 
     def test_severity_is_configurable(self):
         policy = Policy.from_dict({"generated": {"on_hand_edit": "escalate"}})

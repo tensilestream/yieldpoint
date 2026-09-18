@@ -1,0 +1,16 @@
+# Review is required for anything that changes what a verdict says.
+
+*                               @tensilestream
+
+# The verdict contract is the cross-language API: a change here breaks bindings
+# in other languages that this repository cannot see.
+/aegisflow/core/verdict.py      @tensilestream
+
+# Rule severity defaults decide whether an upgrade starts failing someone's
+# pipeline overnight.
+/aegisflow/core/policy.py       @tensilestream
+/.aegisflow.json                @tensilestream
+
+# The checks that run the checks.
+/.github/workflows/             @tensilestream
+/scripts/                       @tensilestream

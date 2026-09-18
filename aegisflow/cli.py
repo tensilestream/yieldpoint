@@ -11,19 +11,25 @@ Exit codes: ``0`` clean, ``1`` findings, ``2`` usage or input error.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from pathlib import Path
 
 from . import __version__
-from .core.policy import Policy
-from .core.verdict import Status, Verdict
-from .hook import blocks, decision_json, evaluate, read_payload, render
-from .verify import verify_change
+from .commands import (
+    EXIT_ERROR,
+    EXIT_FINDINGS,
+    EXIT_OK,
+    HOOK_MATCHER,
+    check,
+    check_diff,
+    hook_command,
+    install_hook,
+    linters_command,
+    scan_command,
+)
 
-EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
-
-HOOK_MATCHER = "Edit|MultiEdit|Write"
+#: The shell contract is part of this module's API, so it is declared explicitly
+#: — an export the `export_removed` rule can then protect.
+__all__ = ["main", "EXIT_OK", "EXIT_FINDINGS", "EXIT_ERROR"]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -46,233 +52,48 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"aegisflow {__version__}")
     sub = parser.add_subparsers(dest="command")
 
-    check = sub.add_parser("check", help="verify a change: a file transition or a diff")
-    check.add_argument("--path", help="repository-relative path being changed")
-    check.add_argument("--diff", help="unified diff covering a change set ('-' for stdin)")
-    check.add_argument("--root", default=".", help="directory the diff's paths are relative to")
-    check.add_argument("--before", help="file holding the previous content ('-' for stdin)")
-    check.add_argument("--after", help="file holding the proposed content ('-' for stdin)")
-    check.add_argument("--policy", help="path to .aegisflow.json (default: discover upward)")
-    check.add_argument("--json", action="store_true", help="emit the verdict as JSON")
-    check.add_argument("--speak", action="store_true",
+    check_cmd = sub.add_parser("check", help="verify a change: a file transition or a diff")
+    check_cmd.add_argument("--path", help="repository-relative path being changed")
+    check_cmd.add_argument("--diff", help="unified diff covering a change set ('-' for stdin)")
+    check_cmd.add_argument("--root", default=".", help="directory the diff's paths are relative to")
+    check_cmd.add_argument("--before", help="file holding the previous content ('-' for stdin)")
+    check_cmd.add_argument("--after", help="file holding the proposed content ('-' for stdin)")
+    check_cmd.add_argument("--policy", help="path to .aegisflow.json (default: discover upward)")
+    check_cmd.add_argument("--json", action="store_true", help="emit the verdict as JSON")
+    check_cmd.add_argument("--speak", action="store_true",
                        help="render for a listener, with voice-mode severity")
-    check.set_defaults(handler=_check)
+    check_cmd.set_defaults(handler=check)
 
-    hook = sub.add_parser("hook", help="run as a Claude Code PreToolUse hook (reads stdin)")
-    hook.add_argument("--policy", help="path to .aegisflow.json")
-    hook.add_argument(
+    hook_cmd = sub.add_parser("hook", help="run as a Claude Code PreToolUse hook (reads stdin)")
+    hook_cmd.add_argument("--policy", help="path to .aegisflow.json")
+    hook_cmd.add_argument(
         "--json-decision", action="store_true",
         help="emit a structured permission decision instead of exiting non-zero")
-    hook.add_argument(
+    hook_cmd.add_argument(
         "--advisory", action="store_true",
         help="report findings but never deny an edit")
-    hook.set_defaults(handler=_hook)
+    hook_cmd.set_defaults(handler=hook_command)
 
-    linters = sub.add_parser("linters", help="list the linters this build can run")
-    linters.add_argument("--policy", help="path to .aegisflow.json")
-    linters.set_defaults(handler=_linters)
+    scan_cmd = sub.add_parser("scan", help="audit a repository as it stands")
+    scan_cmd.add_argument("path", nargs="?", default=".", help="directory or file to audit")
+    scan_cmd.add_argument("--policy", help="path to .aegisflow.json")
+    scan_cmd.add_argument("--json", action="store_true", help="emit the verdict as JSON")
+    scan_cmd.add_argument("--rule", action="append", help="only report this rule (repeatable)")
+    scan_cmd.set_defaults(handler=scan_command)
 
-    install = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
-    install.add_argument("--settings", help="settings file (default: .claude/settings.json)")
-    install.add_argument("--advisory", action="store_true", help="install in advisory mode")
-    install.set_defaults(handler=_install_hook)
+    linters_cmd = sub.add_parser("linters", help="list the linters this build can run")
+    linters_cmd.add_argument("--policy", help="path to .aegisflow.json")
+    linters_cmd.set_defaults(handler=linters_command)
+
+    install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
+    install_cmd.add_argument("--settings", help="settings file (default: .claude/settings.json)")
+    install_cmd.add_argument("--advisory", action="store_true", help="install in advisory mode")
+    install_cmd.set_defaults(handler=install_hook)
 
     return parser
 
 
 # ------------------------------------------------------------------ commands
-
-
-def _check(args) -> int:
-    if args.diff:
-        return _check_diff(args)
-    if not args.path:
-        print("aegisflow: --path is required unless --diff is given", file=sys.stderr)
-        return EXIT_ERROR
-    try:
-        before = _read_source(args.before)
-        after = _read_source(args.after)
-    except OSError as exc:
-        print(f"aegisflow: {exc}", file=sys.stderr)
-        return EXIT_ERROR
-
-    if before is None and after is None:
-        print("aegisflow: supply --before and/or --after", file=sys.stderr)
-        return EXIT_ERROR
-
-    try:
-        policy = Policy.load(args.policy)
-    except (OSError, ValueError) as exc:
-        print(f"aegisflow: {exc}", file=sys.stderr)
-        return EXIT_ERROR
-
-    if args.speak:
-        policy = policy.for_voice()
-    verdict = verify_change(before, after, args.path, policy)
-    if args.speak:
-        return _print_spoken(verdict, policy, deletions=() if after is not None else (args.path,))
-    if args.json:
-        print(verdict.to_json(indent=2))
-    else:
-        _print_human(verdict, policy)
-    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
-
-
-def _check_diff(args) -> int:
-    from .verify import verify_diff
-
-    try:
-        text = _read_source(args.diff) or ""
-        policy = Policy.load(args.policy)
-    except (OSError, ValueError) as exc:
-        print(f"aegisflow: {exc}", file=sys.stderr)
-        return EXIT_ERROR
-
-    if args.speak:
-        policy = policy.for_voice()
-    verdict = verify_diff(text, root=args.root, policy=policy)
-    if args.speak:
-        return _print_spoken(verdict, policy)
-    if args.json:
-        print(verdict.to_json(indent=2))
-    else:
-        _print_human(verdict, policy)
-    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
-
-
-def _hook(args) -> int:
-    payload = read_payload(sys.stdin.read())
-    verdict, change = evaluate(payload, args.policy)
-
-    if args.json_decision:
-        print(decision_json(verdict, change))
-        return EXIT_OK
-
-    if verdict.status is Status.PASS or args.advisory:
-        if verdict.findings:
-            print(render(verdict, change), file=sys.stderr)
-        return EXIT_OK
-
-    if blocks(verdict):
-        # Exit code 2 is the blocking signal; stderr is fed back to the agent.
-        print(render(verdict, change), file=sys.stderr)
-        return EXIT_ERROR
-    return EXIT_OK
-
-
-def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> int:
-    from .speech import speak
-
-    utterance = speak(
-        verdict,
-        deletions=deletions,
-        max_details=policy.voice.max_spoken_findings,
-        confirm_threshold=policy.voice.confirm_on_removals,
-    )
-    print(utterance.summary)
-    for detail in utterance.details:
-        print(f"  {detail}")
-    if utterance.confirmation:
-        print(f"\n  {utterance.confirmation.question}")
-    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
-
-
-def _linters(args) -> int:
-    """Show the catalogue, which tools are enabled, and which are installed."""
-    import shutil
-
-    from .core.linters import registry
-    from .core.linters.adapter import FAST
-
-    try:
-        policy = Policy.load(args.policy)
-    except (OSError, ValueError):
-        policy = Policy()
-
-    enabled = set(policy.linters.tools)
-    state = "enabled" if policy.linters.enabled else "disabled"
-    print(f"linters: {state}  ({len(enabled)} tool(s) selected)\n")
-    print(f"  {'tool':22} {'cost':6} {'installed':10} {'on':4} description")
-    for name in registry.names():
-        adapter = registry.get(name)
-        print(
-            f"  {name:22} {'fast' if adapter.cost == FAST else 'slow':6} "
-            f"{'yes' if shutil.which(adapter.argv[0]) else 'no':10} "
-            f"{'*' if name in enabled else '':4} {adapter.description}"
-        )
-    print('\nEnable with: "linters": {"enabled": true, "tools": ["ruff"]} in .aegisflow.json')
-    print("Linter findings are advisory — they can never block an edit.")
-    return EXIT_OK
-
-
-def _install_hook(args) -> int:
-    path = Path(args.settings) if args.settings else Path(".claude/settings.json")
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    settings: dict = {}
-    if path.is_file():
-        try:
-            settings = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            print(f"aegisflow: cannot read {path}: {exc}", file=sys.stderr)
-            return EXIT_ERROR
-        backup = path.with_suffix(path.suffix + ".aegisflow-backup")
-        backup.write_text(json.dumps(settings, indent=2), encoding="utf-8")
-        print(f"backed up existing settings to {backup}")
-
-    command = "aegisflow hook" + (" --advisory" if args.advisory else "")
-    entry = {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": command}]}
-
-    hooks = settings.setdefault("hooks", {})
-    pre = hooks.setdefault("PreToolUse", [])
-    pre[:] = [e for e in pre if not _is_aegisflow(e)] + [entry]
-
-    path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    mode = "advisory" if args.advisory else "blocking"
-    print(f"registered '{command}' on {HOOK_MATCHER} in {path} ({mode} mode)")
-    print("Restart Claude Code, or start a new session, for it to take effect.")
-    return EXIT_OK
-
-
-# ------------------------------------------------------------------- helpers
-
-
-def _is_aegisflow(entry: object) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    return any(
-        isinstance(h, dict) and "aegisflow" in str(h.get("command", ""))
-        for h in entry.get("hooks", [])
-    )
-
-
-def _read_source(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if value == "-":
-        return sys.stdin.read()
-    return Path(value).read_text(encoding="utf-8")
-
-
-def _print_human(verdict: Verdict, policy: Policy) -> None:
-    for warning in policy.warnings:
-        print(f"policy warning: {warning}", file=sys.stderr)
-    for note in verdict.skipped:
-        print(f"skipped: {note}", file=sys.stderr)
-
-    if verdict.status is Status.PASS:
-        if verdict.checked:
-            print(f"ok  {', '.join(verdict.checked)}")
-        elif not verdict.skipped:
-            print("ok  nothing to check")
-        return
-
-    print(f"{verdict.status.value.upper()}  {len(verdict.findings)} finding(s)\n")
-    for finding in verdict.findings:
-        symbol = f" in {finding.symbol}" if finding.symbol else ""
-        print(f"  {finding.file}:{finding.line}{symbol}  [{finding.rule}]")
-        print(f"    {finding.detail}")
-        print(f"    fix: {finding.prescription}\n")
 
 
 if __name__ == "__main__":

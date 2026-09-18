@@ -39,6 +39,22 @@ class TestContract:
     forbid_swallowed_exceptions: Status | None = Status.REPAIR
 
 
+DEFAULT_IGNORE = (
+    "**/node_modules/**", "**/.git/**", "**/dist/**", "**/build/**",
+    "**/.venv/**", "**/venv/**", "**/__pycache__/**", "**/.tox/**",
+    "**/target/**", "**/.mypy_cache/**", "**/.ruff_cache/**",
+    "**/site-packages/**", "**/.eggs/**", "**/*.egg-info/**",
+)
+
+
+@dataclass(frozen=True)
+class Scan:
+    """What a whole-repository audit looks at."""
+
+    ignore: tuple[str, ...] = DEFAULT_IGNORE
+    max_file_bytes: int = 1_000_000
+
+
 @dataclass(frozen=True)
 class CustomRule:
     """A project-defined rule, declared in configuration rather than in code.
@@ -80,6 +96,25 @@ class Structure:
     forbid_utility_modules: bool = True
     duplicate_implementation: Status | None = Status.REPAIR
     custom: tuple[CustomRule, ...] = ()
+
+
+@dataclass(frozen=True)
+class ContinuousIntegration:
+    """Integrity of the checks themselves.
+
+    An agent blocked from weakening an assertion can still weaken the build that
+    runs it. Analysis is lexical — CI definitions are YAML and the core takes no
+    dependencies — so these findings warn and cannot block.
+    """
+
+    check_removed: Status | None = Status.REPAIR
+    check_disabled: Status | None = Status.REPAIR
+    paths: tuple[str, ...] = (
+        "**/.github/workflows/*.yml", "**/.github/workflows/*.yaml",
+        ".github/workflows/*.yml", ".github/workflows/*.yaml",
+        "**/.pre-commit-config.yaml", ".pre-commit-config.yaml",
+        "**/.gitlab-ci.yml", ".gitlab-ci.yml",
+    )
 
 
 @dataclass(frozen=True)
@@ -183,7 +218,9 @@ class Policy:
     test_contract: TestContract = field(default_factory=TestContract)
     subjects: Subjects = field(default_factory=Subjects)
     refactor: Refactor = field(default_factory=Refactor)
+    ci: ContinuousIntegration = field(default_factory=ContinuousIntegration)
     structure: Structure = field(default_factory=Structure)
+    scan: Scan = field(default_factory=Scan)
     boundaries: Boundaries = field(default_factory=Boundaries)
     loop_breaker: LoopBreaker = field(default_factory=LoopBreaker)
     linters: Linters = field(default_factory=Linters)
