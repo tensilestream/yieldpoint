@@ -96,7 +96,9 @@ def evaluate(payload: dict[str, Any], policy: Policy | str | None = None) -> tup
         return Verdict.of([]), change
     try:
         resolved = Policy.load(policy if policy is not None else _policy_for(change.path))
-        verdict = verify_change(change.before, change.after, _relative(change.path), resolved)
+        verdict = verify_change(
+            change.before, change.after, _relative(change.path), resolved, hand_edit=True
+        )
     except Exception as exc:  # a verifier crash must never block an edit
         return Verdict.of([], skipped=[f"{change.path}: verifier error — {exc}"]), change
     return verdict, change

@@ -54,6 +54,8 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--after", help="file holding the proposed content ('-' for stdin)")
     check.add_argument("--policy", help="path to .aegisflow.json (default: discover upward)")
     check.add_argument("--json", action="store_true", help="emit the verdict as JSON")
+    check.add_argument("--speak", action="store_true",
+                       help="render for a listener, with voice-mode severity")
     check.set_defaults(handler=_check)
 
     hook = sub.add_parser("hook", help="run as a Claude Code PreToolUse hook (reads stdin)")
@@ -104,7 +106,11 @@ def _check(args) -> int:
         print(f"aegisflow: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    if args.speak:
+        policy = policy.for_voice()
     verdict = verify_change(before, after, args.path, policy)
+    if args.speak:
+        return _print_spoken(verdict, policy, deletions=() if after is not None else (args.path,))
     if args.json:
         print(verdict.to_json(indent=2))
     else:
@@ -122,7 +128,11 @@ def _check_diff(args) -> int:
         print(f"aegisflow: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    if args.speak:
+        policy = policy.for_voice()
     verdict = verify_diff(text, root=args.root, policy=policy)
+    if args.speak:
+        return _print_spoken(verdict, policy)
     if args.json:
         print(verdict.to_json(indent=2))
     else:
@@ -148,6 +158,23 @@ def _hook(args) -> int:
         print(render(verdict, change), file=sys.stderr)
         return EXIT_ERROR
     return EXIT_OK
+
+
+def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> int:
+    from .speech import speak
+
+    utterance = speak(
+        verdict,
+        deletions=deletions,
+        max_details=policy.voice.max_spoken_findings,
+        confirm_threshold=policy.voice.confirm_on_removals,
+    )
+    print(utterance.summary)
+    for detail in utterance.details:
+        print(f"  {detail}")
+    if utterance.confirmation:
+        print(f"\n  {utterance.confirmation.question}")
+    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
 
 
 def _linters(args) -> int:

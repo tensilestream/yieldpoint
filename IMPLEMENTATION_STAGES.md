@@ -164,80 +164,125 @@ stand in for a benchmark.
 
 ---
 
-## Stage 8 — Voice
+## Stage 8 — Voice ✅
 
 `Verdict.speak()`, confirmation tokens, mode-dependent severity. See section 9.
 
 **Gate:** a verdict renders as one spoken sentence, and a high-blast-radius change requires
-explicit assent before apply.
+explicit assent before apply. ✅
+
+```sh
+aegisflow check --path tests/test_invoice.py --before old.py --after new.py --speak
+```
+
+Implemented in `aegisflow/speech.py` as a free function rather than the `Verdict.speak()`
+method section 9.6 sketched: rendering for a listener is a separate responsibility from the
+verdict contract (RULES.md section 2), and a method would have made `verdict.py` import the
+speech layer that imports it back.
+
+Two problems shaped it, neither of them text-to-speech:
+
+- **A verdict must survive being heard.** `tests/test_invoice.py:41` is noise aloud, so
+  speech uses names, not paths, and one sentence before any detail. Details quote each
+  finding's own subject — two findings from one rule usually concern different subjects,
+  and hearing the same sentence twice tells the listener nothing. Screen notation
+  (`->`, `non_null`) is spoken as words.
+- **Assent must survive being misheard.** Listening for "yes" is unsafe: recognisers
+  mistake short words and background conversation contains them. A risky change asks for a
+  specific uncommon word, derived deterministically from the change itself — same change,
+  same word; no randomness (RULES.md section 4). `matches()` tolerates casing, punctuation
+  and filler, and rejects "yes", "sure" and "go ahead".
+
+**Mode-dependent severity composes with it.** `Policy.for_voice()` raises every rule to a
+configurable floor, defaulting to `escalate`: a `repair` finding is fine on a screen because
+the human sees the diff regardless, but spoken, nobody sees anything. A weakened assertion
+is `repair` on screen and `escalate` aloud — which then triggers the spoken checkpoint.
 
 ---
 
-## Stage 9 — Java, and the generated-code problem
+## Stage 9 — Generated code, in every language
 
-Java cannot be added by pointing a parser at `.java` files, because **the source text is
-not the program**. Lombok synthesises accessors, `equals`, `hashCode` and builders from
-`@Data`. MapStruct synthesises entire mapper implementations from an interface. Neither
-appears in the source an analyser reads.
+An earlier draft framed this as a Java problem about Lombok and MapStruct. That was too
+narrow. **The source text is not the program** in every ecosystem, and the two named tools
+are one instance of a phenomenon with many.
 
-### 9.1. What actually breaks, and what does not
+### 9.1. It is not N frameworks — it is five mechanisms
 
-Being precise here matters, because the fix differs per case.
+Enumerating tools is an unbounded treadmill. Enumerating *mechanisms* is not, and each one
+has a different detection strategy and a different consequence.
 
-| Concern | Affected? | Why |
-|---|---|---|
-| Assertion monotonicity | **No** | Subjects are compared as *expressions*. `invoice.getTotal()` is a string to be matched against the other side; the engine never resolves what the method is or where it came from. Code generation is invisible to it. |
-| Field ↔ accessor refactor | **Yes** | `invoice.total` → `invoice.getTotal()` reads as one subject lost and another gained. Same class as the subject-aliasing limitation already documented in `tests/test_monotonicity.py`. |
-| Boundary / import rules | **Yes** | `InvoiceMapperImpl` exists only in generated output, so an import of it looks unresolvable and would be wrongly flagged. |
-| Silent misanalysis | **Yes — the dangerous one** | Analysing a partially-visible program as if it were complete produces a confident wrong verdict. That is the failure mode this project exists to prevent, so it must not be the failure mode it ships with. |
+| # | Mechanism | Examples | Artifact on disk? | Strategy |
+|---|---|---|---|---|
+| 1 | **Ahead-of-time codegen** | Lombok, MapStruct, Dagger, protobuf, Prisma, GraphQL codegen, `go generate`, bindgen, OpenAPI | **Yes** — real source | Read it, and never analyse it as authored ✅ **built** |
+| 2 | **Compile-time expansion** | Rust proc macros, C++ templates and the preprocessor, Scala macros, Vue/Svelte compiler macros | No | `cargo expand`, `gcc -E`; else degrade |
+| 3 | **Runtime metaprogramming** | Python `__getattr__`, pydantic, SQLAlchemy, Django ORM, Ruby `method_missing`, ActiveRecord | No — nothing exists until import | Cannot resolve statically; degrade, or use type stubs |
+| 4 | **Type-level only** | TS mapped and conditional types, `.d.ts`, tRPC inference | Types only | Low impact: tests call members, not types |
+| 5 | **Call-time injection** | pytest fixtures, Spring, Dagger, DI containers | No | Low impact: the subject expression still stands |
 
-That comparison-over-resolution design is deliberate and should be preserved: the less the
-engine resolves, the less generated code can mislead it.
+### 9.2. Most of this does not affect the core check, and that is by design
 
-### 9.2. Ask the build, not the framework
+Assertion monotonicity compares subject *expressions*. `invoice.getTotal()` is matched
+against the other side as written; the engine never resolves what the method is or where it
+came from. Mechanisms 2 through 5 are therefore largely invisible to it.
 
-The tempting answer is an MCP per framework — Lombok, MapStruct, Immutables, AutoValue,
-Dagger, Querydsl, JPA metamodel, Kotlin data classes. That is an unbounded integration
-treadmill, and every entry is a separate thing to trust and keep current.
+That is not luck. Comparing rather than resolving is what makes the check robust to code
+generation, and it should be preserved deliberately as more languages are added.
 
-They all converge on one place. Every one of them is a **javac annotation processor**, and
-every annotation processor writes real Java source into the build's generated-sources
-output:
+Where generation genuinely bites:
 
-```
-target/generated-sources/annotations/**     # Maven
-build/generated/sources/annotationProcessor/**   # Gradle
-```
+- **Field ↔ accessor refactors** — `invoice.total` → `invoice.getTotal()` reads as one
+  subject lost and another gained. Same class as the subject-aliasing limitation already
+  pinned in `tests/test_monotonicity.py`. Affects Java, C# properties, Python `@property`,
+  Ruby `attr_accessor`.
+- **Anything resolution-based** — boundary and import rules, where `InvoiceMapperImpl`
+  exists only in generated output.
+- **Analysing generated output as authored** — the dangerous one, addressed below.
 
-**One integration reads the compiler's own output and covers every processor that exists or
-will ever exist.** It is also the authoritative answer rather than a reimplementation of
-someone else's code generator, so it cannot drift from what actually compiles.
+### 9.3. Built: language-general detection ✅
 
-`delombok` remains available as a fallback for Lombok specifically when no build output is
-present.
+`aegisflow/core/generated.py` detects generated files with **no parser and no build**,
+because generated files announce themselves. Two signals:
 
-### 9.3. Staleness is the hard part, and it degrades rather than guesses
+- **Header markers**, and the conventions are shared across ecosystems: Go specifies
+  `// Code generated ... DO NOT EDIT.`, .NET emits `<auto-generated/>`, and the bare
+  `@generated` tag is common. Checked only in the first 15 lines.
+- **Paths**: build output and codegen conventions across JVM, protobuf, Go, TS/JS, .NET,
+  Dart and Kubernetes. Extendable per project via `generated.extra_patterns`.
 
-Generated sources exist only after a build. Inside an agent loop, before a write, they are
-frequently absent or stale — which is exactly when a confident verdict would be most
-wrong.
+**Detection is biased toward "authored" on purpose.** Calling authored code generated
+silently skips verification of a real test file — the exact hole this project exists to
+close. Calling generated code authored merely wastes a check. So a bare `DO NOT EDIT` is
+*not* sufficient (`// do not edit without asking Priya` is a human comment on human code),
+and `generated by …` must open a comment line rather than appear in prose
+(`# the id is generated by the database`). Both cases are pinned as tests.
 
-The rule, enforced in code rather than by convention:
+Two consequences, both language-general:
 
-- generated sources present and newer than the source that produced them → `Confidence.EXACT`
-- absent, stale, or the module declares annotation processors we cannot account for →
-  `Confidence.UNRESOLVED`
+1. **Generated files are never verified as authored source.** Nobody wrote their
+   assertions and their style is not a person's choice. They are recorded in `skipped`,
+   never in `checked`.
+2. **Hand-editing generated output is itself a finding.** The next build discards the edit,
+   so the fix belongs in the source or the generator configuration.
 
-`Confidence.UNRESOLVED` **cannot block** — `Finding.__post_init__` raises if a finding tries
-to. A degraded analysis can advise; it can never stop work. The reasoning is in
-`verdict.py` and the guarantee is tested.
+The second needed a distinction worth keeping: **regenerating is normal, hand-editing is
+not.** `verify_change(..., hand_edit=True)` is passed by the hook, which sees an edit being
+composed; the diff path leaves it off, so committed regenerated output stays silent.
 
-### 9.4. Accessor equivalence
+### 9.4. Not yet built
 
-A Java language profile normalises `x.total`, `x.getTotal()` and `x.isTotal()` to one
-subject, which removes the field↔accessor false positive **without needing Lombok at all**.
-Cheap, deterministic, no build dependency. This is the first thing to build in this stage,
-because it is the highest value per line of the whole Java effort.
+- **Accessor equivalence** — normalise `x.total` / `x.getTotal()` / `x.isTotal()` to one
+  subject. Removes the field↔accessor false positive with no parser and no build
+  dependency. Highest value per line remaining in this stage.
+- **Reading generated sources** for resolution-based rules (mechanism 1), from
+  `target/generated-sources/**` and `build/generated/**`. One integration covers every
+  annotation processor, because they all write there. Ask the build, not the framework.
+- **Staleness handling.** Generated sources exist only after a build; inside an agent loop
+  they are often absent or stale. Present and fresh → `Confidence.EXACT`; otherwise
+  `Confidence.UNRESOLVED`, which **cannot block** — enforced in `Finding.__post_init__`,
+  not by convention.
+- **Per-language parsers.** Java, TypeScript and the rest need a parser dependency, which
+  breaks the core's zero-runtime-dependency property. That is a deliberate decision to make
+  when a language is scheduled, not to drift into.
 
 ### 9.5. AegisFlow exposes the MCP; it does not consume others
 
@@ -247,20 +292,10 @@ The MCP surface is worth building, inverted from the obvious direction. Its valu
 > *"What members does `Invoice` actually have?"*
 > → `getTotal(): BigDecimal — generated by Lombok @Data, from target/generated-sources/…`
 
-That is information the agent **cannot obtain by reading the file**, which is precisely the
-gap worth filling. One oracle the agent can trust, answering from source plus the build's
-real output, instead of eight framework integrations each guessing.
-
-When the answer is unknown, the MCP says so explicitly. An oracle that admits ignorance is
-usable; one that guesses is worse than none.
-
-### 9.6. Gate
-
-- A Lombok `@Data` class: accessor-based assertions compare correctly against field-based
-  ones, with no false positive.
-- A MapStruct mapper: imports of the generated `*Impl` do not raise boundary findings.
-- **With generated sources deleted, every finding degrades to `UNRESOLVED` and nothing
-  blocks.** Verified by deleting them and re-running, not by assertion.
+That is information an agent **cannot obtain by reading the file**, which is precisely the
+gap worth filling. One oracle answering from source plus the build's real output, rather
+than an integration per framework. When the answer is unknown it says so: an oracle that
+admits ignorance is usable, one that guesses is worse than none.
 
 ---
 

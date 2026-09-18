@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable, Mapping
 
 from .core import diff as diffmod
+from .core import generated as generatedmod
 from .core import monotonicity, testintegrity
 from .core.assertions import extract
 from .core.linters import registry, runner
@@ -27,6 +28,7 @@ from .core.verdict import Confidence, Finding, Status, Verdict
 Reader = Callable[[str], "str | None"]
 
 ASSERTION_MONOTONICITY = "assertion_monotonicity"
+GENERATED_FILE_EDITED = "generated_file_edited"
 
 #: Only Python is analysed exactly today. Other languages are reported as
 #: skipped rather than silently passed; see IMPLEMENTATION_STAGES.md.
@@ -47,14 +49,24 @@ def verify_change(
     policy: Policy | str | dict | None = None,
     *,
     also_covered: Mapping[str, Relation] | None = None,
+    hand_edit: bool = False,
 ) -> Verdict:
     """Verify one file's transition from ``before`` to ``after``.
 
     ``before`` is ``None`` for a newly created file and ``after`` is ``None`` for
     a deleted one. ``also_covered`` carries subjects verified elsewhere in the
     same change set, so relocating a test is not reported as loss.
+
+    ``hand_edit`` says this change is being composed right now rather than
+    arriving as a committed diff, which is what distinguishes hand-editing a
+    generated file from regenerating one.
     """
     resolved = Policy.load(policy)
+
+    origin = _generated(before, after, path, resolved, hand_edit)
+    if origin is not None:
+        return origin
+
     findings: list[Finding] = []
     checked: list[str] = []
     skipped: list[str] = []
@@ -154,6 +166,45 @@ def _read_file(path: Path) -> str | None:
         return path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return None
+
+
+def _generated(before, after, path, policy, hand_edit) -> Verdict | None:
+    """Short-circuit for generated files. ``None`` means the file looks authored.
+
+    Generated output is not analysed as authored source: nobody wrote its
+    assertions, and its style is not a person's choice. Editing it by hand is
+    reported, because the next build discards the edit — the fix belongs in the
+    source or the template.
+    """
+    if not policy.generated.detect:
+        return None
+
+    origin = generatedmod.detect(
+        path, after or before, extra_patterns=policy.generated.extra_patterns
+    )
+    if origin is None:
+        return None
+
+    status = policy.generated.on_hand_edit
+    modified = before is not None and after is not None and before != after
+    if hand_edit and modified and status is not None:
+        return Verdict.of(
+            [Finding(
+                rule=GENERATED_FILE_EDITED,
+                status=status,
+                file=path,
+                line=1,
+                detail=f"{path} is generated code — {origin.reason}.",
+                prescription=(
+                    "Do not edit generated output by hand; the next build will discard "
+                    "the change. Edit the source it is generated from, or the generator "
+                    "configuration, and regenerate."
+                ),
+                confidence=Confidence.EXACT,
+            )],
+            skipped=[f"{path}: generated code, not verified as authored source"],
+        )
+    return Verdict.of([], skipped=[f"{path}: generated code ({origin.reason})"])
 
 
 def _test_contract(before, after, path, policy, also_covered) -> Verdict:

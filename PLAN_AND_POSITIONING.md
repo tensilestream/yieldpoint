@@ -399,7 +399,9 @@ Phase 1.5 tests exactly that for about a week of work, before any larger bet is 
 
 ### 9.2. What voice requires from the engine
 
-- **`Verdict.speak()`** — a one-sentence spoken summary with a drill-down tree behind it:
+- **`aegisflow.speech.speak(verdict)`** — a one-sentence spoken summary with a drill-down
+  tree behind it (a free function, not a `Verdict` method: see IMPLEMENTATION_STAGES.md
+  Stage 8):
   *"Three files changed. Assertions held. One boundary warning in `checkout`."* This is a
   formatting concern over the existing `Verdict`, not new analysis.
 - **Confirmation tokens.** For an irreversible or high-blast-radius change, the verdict
