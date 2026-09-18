@@ -51,15 +51,33 @@ _SEVERITY = {Status.PASS: 0, Status.REPAIR: 1, Status.ESCALATE: 2, Status.BLOCK:
 
 
 class Confidence(str, Enum):
-    """How the finding was derived.
+    """How the finding was derived, and therefore what it is worth.
 
-    Surfaced to the caller because it changes what the finding is worth: an
-    ``EXACT`` finding came from a real parse of both sides, a ``LEXICAL`` one from
-    pattern matching and may be wrong. Never let a LEXICAL finding block.
+    This is a safety mechanism, not metadata. Only :attr:`EXACT` findings are
+    permitted to block, and :meth:`Finding.__post_init__` enforces it, so a
+    weaker analyser physically cannot stop an agent's work.
     """
 
     EXACT = "exact"
+    """Both sides were parsed and the whole program is visible."""
+
     LEXICAL = "lexical"
+    """Derived by pattern matching rather than parsing. May be wrong."""
+
+    UNRESOLVED = "unresolved"
+    """Parsed correctly, but part of the program is generated and was not
+    available — Lombok accessors, MapStruct implementations, any annotation
+    processor's output, or a build that has not run. The source text is not the
+    program, and a verdict reached without the generated half is a guess."""
+
+    EXTERNAL = "external"
+    """Produced by a third-party tool (ruff, Spotless, ESLint). Deterministic for
+    a given tool version, but the version is an environment read, so the same
+    change can be judged differently on another machine. Advisory only."""
+
+    @property
+    def may_block(self) -> bool:
+        return self is Confidence.EXACT
 
 
 @dataclass(frozen=True)
@@ -86,10 +104,11 @@ class Finding:
             raise ValueError(f"line must be non-negative, got {self.line}")
         if not self.rule:
             raise ValueError("finding requires a rule name")
-        if self.status is Status.BLOCK and self.confidence is Confidence.LEXICAL:
+        if self.status is Status.BLOCK and not self.confidence.may_block:
             raise ValueError(
-                f"rule {self.rule!r} cannot BLOCK on a lexical finding; "
-                "see RULES.md section 6"
+                f"rule {self.rule!r} cannot BLOCK on a {self.confidence.value} "
+                "finding; only fully resolved analysis may block. "
+                "See RULES.md section 6."
             )
 
     @property

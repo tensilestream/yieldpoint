@@ -2,7 +2,9 @@
   "version": "1.0",
   "project": {
     "name": "AegisFlow",
-    "languages": ["python"]
+    "languages": [
+      "python"
+    ]
   },
   "test_contract": {
     "protected_patterns": [
@@ -44,6 +46,17 @@
         ],
         "reason": "Adapters depend only on the verdict API, never on core internals. See RULES.md section 2, Interface Segregation."
       }
+    ]
+  },
+  "linters": {
+    "_comment": "Off by default. Findings from external tools are advisory and can never block an edit; see RULES.md section 4. Run 'aegisflow linters' to list available tools.",
+    "enabled": false,
+    "severity": "repair",
+    "timeout_seconds": 10,
+    "include_slow": false,
+    "tools": [
+      "ruff",
+      "ruff-format"
     ]
   },
   "loop_breaker": {

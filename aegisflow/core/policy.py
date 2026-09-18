@@ -65,6 +65,23 @@ class LoopBreaker:
 
 
 @dataclass(frozen=True)
+class Linters:
+    """Optional integration with the project's existing linters and formatters.
+
+    Off by default, deliberately. Enabling it makes verdicts depend on which tool
+    versions are installed, which is an environment read the core otherwise
+    forbids — so linter findings carry ``Confidence.EXTERNAL`` and can advise but
+    never block.
+    """
+
+    enabled: bool = False
+    severity: Status | None = Status.REPAIR
+    timeout_seconds: int = 10
+    include_slow: bool = False
+    tools: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class Policy:
     version: str = "1.0"
     project_name: str = "unnamed"
@@ -72,6 +89,7 @@ class Policy:
     test_contract: TestContract = field(default_factory=TestContract)
     boundaries: Boundaries = field(default_factory=Boundaries)
     loop_breaker: LoopBreaker = field(default_factory=LoopBreaker)
+    linters: Linters = field(default_factory=Linters)
     source: str = "defaults"
     warnings: tuple[str, ...] = ()
 
@@ -121,6 +139,7 @@ class Policy:
         contract = _section(raw, "test_contract", warnings)
         boundaries = _section(raw, "boundaries", warnings)
         breaker = _section(raw, "loop_breaker", warnings)
+        linters = _section(raw, "linters", warnings)
 
         patterns = _str_tuple(contract.get("protected_patterns"), warnings, "protected_patterns")
 
@@ -156,6 +175,7 @@ class Policy:
                 on_trip=_status(
                     breaker.get("on_trip"), Status.ESCALATE, warnings, "on_trip"),
             ),
+            linters=_linters(linters, warnings),
             source=source_name,
             warnings=tuple(warnings),
         )
@@ -213,6 +233,35 @@ def _str_tuple(value: Any, warnings: list[str], label: str) -> tuple[str, ...]:
         warnings.append(f"{label}: expected a list; ignoring.")
         return ()
     return tuple(str(item) for item in value)
+
+
+def _linters(raw: dict[str, Any], warnings: list[str]) -> Linters:
+    from .linters import registry
+
+    requested = _str_tuple(raw.get("tools"), warnings, "linters.tools")
+    known, unknown = [], []
+    for name in requested:
+        (known if registry.get(name) else unknown).append(name)
+    if unknown:
+        warnings.append(
+            f"linters.tools: unknown tool(s) {', '.join(sorted(unknown))}; "
+            f"available: {', '.join(registry.names())}"
+        )
+
+    severity = _status(raw.get("severity"), Status.REPAIR, warnings, "linters.severity")
+    if severity is Status.BLOCK:
+        # An external tool's verdict depends on its installed version, so it is
+        # never authoritative enough to stop work outright.
+        warnings.append("linters.severity: 'block' is not permitted; using 'escalate'.")
+        severity = Status.ESCALATE
+
+    return Linters(
+        enabled=bool(raw.get("enabled", False)),
+        severity=severity,
+        timeout_seconds=_int(raw.get("timeout_seconds"), 10, warnings, "linters.timeout_seconds"),
+        include_slow=bool(raw.get("include_slow", False)),
+        tools=tuple(known),
+    )
 
 
 def _zones(value: Any, warnings: list[str]) -> tuple[Zone, ...]:

@@ -40,6 +40,19 @@ class TestFinding(unittest.TestCase):
         with self.assertRaises(ValueError):
             finding(status=Status.BLOCK, confidence=Confidence.LEXICAL)
 
+    def test_unresolved_finding_may_not_block(self):
+        """Generated code we could not see means the verdict is a guess."""
+        with self.assertRaises(ValueError):
+            finding(status=Status.BLOCK, confidence=Confidence.UNRESOLVED)
+
+    def test_unresolved_finding_may_still_advise(self):
+        self.assertIsNotNone(finding(status=Status.REPAIR, confidence=Confidence.UNRESOLVED))
+
+    def test_only_exact_analysis_may_block(self):
+        self.assertTrue(Confidence.EXACT.may_block)
+        self.assertFalse(Confidence.LEXICAL.may_block)
+        self.assertFalse(Confidence.UNRESOLVED.may_block)
+
     def test_lexical_finding_may_repair(self):
         self.assertIsNotNone(finding(status=Status.REPAIR, confidence=Confidence.LEXICAL))
 

@@ -16,6 +16,8 @@ from typing import Mapping
 
 from .core import monotonicity, testintegrity
 from .core.assertions import extract
+from .core.linters import registry, runner
+from .core.linters.adapter import FAST
 from .core.policy import Policy
 from .core.relation import Relation
 from .core.verdict import Confidence, Finding, Status, Verdict
@@ -49,9 +51,27 @@ def verify_change(
     same change set, so relocating a test is not reported as loss.
     """
     resolved = Policy.load(policy)
+    findings: list[Finding] = []
+    checked: list[str] = []
+    skipped: list[str] = []
 
-    if not resolved.protects(path):
-        # Not a protected test file: the test contract does not apply.
+    lint_findings, lint_skipped = _lint(after, path, resolved)
+    findings.extend(lint_findings)
+    skipped.extend(lint_skipped)
+
+    contract = _test_contract(before, after, path, resolved, also_covered)
+    findings.extend(contract.findings)
+    checked.extend(contract.checked)
+    skipped.extend(contract.skipped)
+
+    if not checked and not skipped:
+        checked.append(path)
+    return Verdict.of(_deduplicate(findings), checked=checked, skipped=skipped)
+
+
+def _test_contract(before, after, path, policy, also_covered) -> Verdict:
+    """The assertion-integrity rules, which apply only to protected test files."""
+    if not policy.protects(path):
         return Verdict.of([], checked=[path])
 
     if not path.endswith(EXACT_SUFFIXES):
@@ -65,9 +85,58 @@ def verify_change(
             return Verdict.of([], skipped=[f"{path}: {label} state unparseable — {state.error}"])
 
     findings: list[Finding] = []
-    findings.extend(_monotonicity(before_state, after_state, path, resolved, also_covered))
-    findings.extend(_integrity(before_state, after_state, path, resolved))
-    return Verdict.of(_deduplicate(findings), checked=[path])
+    findings.extend(_monotonicity(before_state, after_state, path, policy, also_covered))
+    findings.extend(_integrity(before_state, after_state, path, policy))
+    return Verdict.of(findings, checked=[path])
+
+
+def _lint(after: str | None, path: str, policy: Policy) -> tuple[list[Finding], list[str]]:
+    """Run the project's own linters, if the project asked for them.
+
+    Findings are ``Confidence.EXTERNAL``: reproducible for a given tool version,
+    but the version is an environment read, so they advise and never block.
+    """
+    config = policy.linters
+    if not config.enabled or not config.tools or after is None or config.severity is None:
+        return [], []
+
+    findings: list[Finding] = []
+    skipped: list[str] = []
+    for adapter in registry.for_path(path, config.tools):
+        if adapter.cost != FAST and not config.include_slow:
+            skipped.append(f"{path}: {adapter.name} skipped (slow; set linters.include_slow)")
+            continue
+        result = runner.run(adapter, path, after, timeout=config.timeout_seconds)
+        if not result.ran:
+            skipped.append(f"{path}: {adapter.name} — {result.skipped}")
+            continue
+        for item in result.findings:
+            findings.append(
+                Finding(
+                    rule=_lint_rule(item),
+                    status=config.severity,
+                    file=path,
+                    line=item.line,
+                    detail=item.message,
+                    prescription=_lint_prescription(adapter, item),
+                    confidence=Confidence.EXTERNAL,
+                )
+            )
+    return findings, skipped
+
+
+def _lint_rule(item) -> str:
+    """``lint.ruff.F401``, without repeating a tool name the code already carries."""
+    code = item.code if not item.code.startswith(item.tool) else item.code[len(item.tool):]
+    code = code.strip(".") or item.tool
+    return f"lint.{item.tool}.{code}"
+
+
+def _lint_prescription(adapter, item) -> str:
+    if adapter.fix_hint:
+        suffix = " This is auto-fixable." if item.fixable else ""
+        return f"Run `{adapter.fix_hint}`.{suffix}"
+    return f"Resolve the {adapter.name} diagnostic before writing."
 
 
 def _monotonicity(before, after, path, policy, also_covered) -> list[Finding]:

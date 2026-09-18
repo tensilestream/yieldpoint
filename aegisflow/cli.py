@@ -64,6 +64,10 @@ def _parser() -> argparse.ArgumentParser:
         help="report findings but never deny an edit")
     hook.set_defaults(handler=_hook)
 
+    linters = sub.add_parser("linters", help="list the linters this build can run")
+    linters.add_argument("--policy", help="path to .aegisflow.json")
+    linters.set_defaults(handler=_linters)
+
     install = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
     install.add_argument("--settings", help="settings file (default: .claude/settings.json)")
     install.add_argument("--advisory", action="store_true", help="install in advisory mode")
@@ -118,6 +122,34 @@ def _hook(args) -> int:
         # Exit code 2 is the blocking signal; stderr is fed back to the agent.
         print(render(verdict, change), file=sys.stderr)
         return EXIT_ERROR
+    return EXIT_OK
+
+
+def _linters(args) -> int:
+    """Show the catalogue, which tools are enabled, and which are installed."""
+    import shutil
+
+    from .core.linters import registry
+    from .core.linters.adapter import FAST
+
+    try:
+        policy = Policy.load(args.policy)
+    except (OSError, ValueError):
+        policy = Policy()
+
+    enabled = set(policy.linters.tools)
+    state = "enabled" if policy.linters.enabled else "disabled"
+    print(f"linters: {state}  ({len(enabled)} tool(s) selected)\n")
+    print(f"  {'tool':22} {'cost':6} {'installed':10} {'on':4} description")
+    for name in registry.names():
+        adapter = registry.get(name)
+        print(
+            f"  {name:22} {'fast' if adapter.cost == FAST else 'slow':6} "
+            f"{'yes' if shutil.which(adapter.argv[0]) else 'no':10} "
+            f"{'*' if name in enabled else '':4} {adapter.description}"
+        )
+    print('\nEnable with: "linters": {"enabled": true, "tools": ["ruff"]} in .aegisflow.json')
+    print("Linter findings are advisory — they can never block an edit.")
     return EXIT_OK
 
 
