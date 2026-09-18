@@ -26,11 +26,11 @@ build lands at Stage 5 instead of after the CI path.
 
 `verdict.py`, `glob.py`, `policy.py`, `pyproject.toml`.
 
-**Gate:** 45 tests pass; AegisFlow's own `.aegisflow.json` loads warning-free. ✅
+**Gate:** tests pass; AegisFlow's own `.aegisflow.json` loads warning-free. ✅
 
 ---
 
-## Stage 1 — Canonical assertions
+## Stage 1 — Canonical assertions ✅
 
 `core/relation.py` — the partial order over assertion relations.
 `core/assertions.py` — Python AST extraction into `(subject, relation, expected)` triples,
@@ -43,7 +43,7 @@ propagate.
 
 ---
 
-## Stage 2 — Monotonicity
+## Stage 2 — Monotonicity ✅
 
 `core/monotonicity.py` — pair test functions across before/after (by qualified name, then
 by structural similarity), then run the per-subject domination check.
@@ -58,7 +58,7 @@ does so without crying wolf on ordinary refactors is the product.
 
 ---
 
-## Stage 3 — Verification entry point
+## Stage 3 — Verification entry point ✅
 
 `core/testintegrity.py` — vacuous assertions, newly-added skip markers, emptied bodies,
 swallowed exceptions.
@@ -69,7 +69,7 @@ severities and recording `checked`/`skipped`.
 
 ---
 
-## Stage 4 — CLI
+## Stage 4 — CLI ✅
 
 `cli.py` — `aegisflow check --path P --before A --after B [--json]`, exit code 0 on pass
 and 1 on findings.
@@ -78,7 +78,7 @@ and 1 on findings.
 
 ---
 
-## Stage 5 — **MVP: Claude Code hook** 🎯
+## Stage 5 — **MVP: Claude Code hook** ✅ 🎯
 
 `hook.py` — reads a `PreToolUse` payload on stdin, reconstructs before/after for `Edit`,
 `MultiEdit` and `Write`, and returns a deny decision with the prescription attached.
@@ -90,6 +90,20 @@ downgraded and what to restore. Verified by doing it, not by asserting it.
 
 At this point the tool is genuinely usable, on this repository, by the person who asked
 for it.
+
+**Install:**
+
+```sh
+pip install -e .              # or: export PYTHONPATH=$PWD
+aegisflow install-hook        # add --advisory to report without denying
+```
+
+Then start a new Claude Code session. `aegisflow install-hook` backs up any existing
+`.claude/settings.json` before writing, and re-running it replaces rather than duplicates
+the entry.
+
+**Verified end to end:** a weakening `Edit` exits 2 with the prescription on stderr; a
+strengthening edit, a non-test file, and a `Bash` call all exit 0. 170 tests pass.
 
 ---
 

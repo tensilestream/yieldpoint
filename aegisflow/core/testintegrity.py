@@ -84,13 +84,15 @@ def _for_test(test: TestCase) -> list[Offence]:
                 key=f"{EMPTY_TEST}:{test.qualname}",
             )
         )
-    elif not any(a.effective.verifies_anything for a in test.assertions):
+    elif not test.assertions:
+        # Only when there is nothing to point at. A test whose assertions are all
+        # vacuous or all disabled is reported by those rules, which are specific.
         found.append(
             Offence(
                 rule=EMPTY_TEST,
                 test=test.qualname,
                 line=test.line,
-                detail=f"{test.qualname} runs code but asserts nothing that can fail.",
+                detail=f"{test.qualname} runs code but asserts nothing.",
                 prescription=f"Add an assertion to {test.qualname} that can fail.",
                 key=f"{EMPTY_TEST}:{test.qualname}",
             )
