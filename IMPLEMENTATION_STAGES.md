@@ -132,13 +132,35 @@ judged per-file, which does report it.
 
 ---
 
-## Stage 7 — LangGraph node
+## Stage 7 — LangGraph node ✅
 
 `langgraph/node.py`, `router.py`, `breaker.py`, plus a runnable example.
 
 **Gate:** an agent that tries to weaken a test is routed to `repair` with the prescription
-in state, and converges. Model-call count measured with the node in and out — the cost
-claim in PLAN_AND_POSITIONING.md section 4.1 is measured here or dropped.
+in state, and converges. ✅
+
+**The adapter imports nothing from LangGraph.** A node is a callable `(state) -> dict` and
+a conditional edge is a callable `(state) -> str`, so `aegisflow.langgraph` is
+framework-shaped but framework-free: fully unit-testable with nothing installed, and usable
+by any graph library sharing that convention.
+
+**Verified against real LangGraph 1.2.11**, in a compiled graph, not in theory:
+
+| Scenario | Result |
+|---|---|
+| Agent weakens a test, then gets the prescription | converges, `applied`, 2 model calls |
+| Agent repeats the *identical* cheat | loop breaker trips, `escalated` |
+| Agent alternates between two different cheats | breaker does not trip; repair budget exhausts, `escalated` |
+| `max_repairs=1` | `escalated` after one attempt |
+
+Those last three matter: the breaker catches *no* progress and the budget catches *slow*
+progress. Both terminate, which is what stops a `repair` verdict cycling forever.
+
+**On the cost claim in PLAN_AND_POSITIONING.md section 4.1** — partially settled. That the
+prescription costs zero model calls is demonstrated and is a property of the architecture.
+That the loop converges in fewer *total* calls is **not** measured: the example's model is
+scripted. Section 4.1 has been amended to separate the two rather than let a scripted run
+stand in for a benchmark.
 
 ---
 

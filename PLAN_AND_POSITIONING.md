@@ -144,10 +144,18 @@ is an LLM-as-judge: 5–15s of latency, a doubled token bill, and a verdict that
 reproducible run to run.
 
 AegisFlow returns a structured prescription in microseconds, for free, and returns the
-*same* verdict every time — so the repair loop converges in fewer model calls.
+*same* verdict every time.
 
-**That is a cost argument aimed at the person paying the inference bill, which is the
-strongest argument available to this persona.** Safety is the second reason they adopt it.
+**Status of this claim, split into what is proven and what is not** (RULES.md section 5):
+
+- **Proven.** The prescription costs *zero model calls*. It is assembled from the verdict,
+  not generated. `examples/langgraph_repair_loop.py` runs against real LangGraph and the
+  repair round adds no inference. An LLM-as-judge adds one call per round by construction.
+  This part is architecture, not measurement, and it holds.
+- **Not yet measured.** That the loop therefore *converges in fewer total model calls*
+  against a **real** model. The example uses a scripted model, which demonstrates the
+  mechanism and proves nothing about convergence. Until a real-model benchmark exists,
+  this stays a hypothesis and must not be stated as a result in any external material.
 
 Determinism is also what makes it usable as a *blocking* gate at all: you cannot gate a
 production pipeline on a judge that flakes.
