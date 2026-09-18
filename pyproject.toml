@@ -36,7 +36,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-langgraph = ["langgraph>=0.2"]
+langgraph = ["langgraph>=1.2.11"]
 
 [project.urls]
 Homepage = "https://github.com/tensilestream/AgeisFlow"
