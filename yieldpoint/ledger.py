@@ -216,15 +216,17 @@ def _append(target: Path, line: str) -> None:
     # PermissionError (sharing violation). A thread lock protects the
     # in-process fan-out, and a retry loop handles cross-process contention.
     with _APPEND_LOCK:
-        for attempt in range(300):
+        for attempt in range(500):
             try:
                 with target.open("a", encoding="utf-8") as handle:
                     handle.write(line)
                 return
-            except PermissionError:
-                if attempt == 299:
+            except (PermissionError, FileNotFoundError):
+                if attempt == 499:
                     raise
-                time.sleep(0.005 * (attempt % 11 + 1))
+                jitter = 0.005 * ((os.getpid() + attempt) % 7 + 1)
+                backoff = min(0.08, 0.005 * (1.15 ** min(attempt, 20)))
+                time.sleep(backoff + jitter)
 
 
 def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
@@ -273,7 +275,12 @@ def _prepare(directory: Path) -> None:
         raw = str(directory).replace("\\", "/")
         if raw.startswith(("/proc", "/dev", "/sys")) or ":/proc" in raw:
             raise OSError(f"virtual filesystem path is unwritable on Windows: {directory}")
-    directory.mkdir(parents=True, exist_ok=True)
+    if not directory.exists():
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            if not directory.exists():
+                raise
     marker = directory / ".gitignore"
     if not marker.exists():
         try:
