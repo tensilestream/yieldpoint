@@ -20,6 +20,7 @@ have to hold, and each was a real defect before it was a test.
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import json
 import subprocess
 import sys
@@ -183,26 +184,49 @@ class TestRunningTotalStaysCheap(unittest.TestCase):
         self.assertEqual(totals(self.path).verdicts, 25)
 
     def test_it_does_not_slow_down_as_the_ledger_grows(self):
-        """The footer reads this on every verdict, so it must not scale with size."""
+        """The footer reads this on every verdict, so it must not scale with size.
+
+        Measured in bytes handed to the fold, not in seconds. The property is
+        that a read costs the size of the *new* events rather than the size of
+        the ledger, and wall-clock is only a proxy for it — one that cannot tell
+        a quadratic fold from a busy disk, and that failed on a shared CI runner
+        while this code was correct.
+        """
         self._fill(200)
-        totals(self.path)
-        small = self._time_one()
+        totals(self.path)                      # prime the cache
+        with self._bytes_folded() as read:
+            totals(self.path)
+        small = sum(read)
 
         self._fill(4000)
-        totals(self.path)
-        large = self._time_one()
+        totals(self.path)                      # prime again
+        with self._bytes_folded() as read:
+            totals(self.path)
+        large = sum(read)
 
         self.assertLess(
-            large, small * 8 + 0.005,
-            f"reading the total went from {small * 1000:.2f}ms to {large * 1000:.2f}ms "
-            "as the ledger grew; the fold is no longer incremental",
+            large, small * 8 + 1,
+            f"reading the total folded {small:,} bytes at 200 events and "
+            f"{large:,} at 4,200; the fold is no longer incremental",
         )
 
-    def _time_one(self) -> float:
-        start = time.perf_counter()
-        for _ in range(20):
-            totals(self.path)
-        return (time.perf_counter() - start) / 20
+    @contextlib.contextmanager
+    def _bytes_folded(self):
+        """How many bytes each ``totals()`` call actually handed to the fold."""
+        from yieldpoint import totals as module
+
+        seen: list[int] = []
+        original = module._fold
+
+        def spy(running, text):
+            seen.append(len(text.encode("utf-8")))
+            return original(running, text)
+
+        module._fold = spy
+        try:
+            yield seen
+        finally:
+            module._fold = original
 
     def test_a_corrupt_cache_falls_back_rather_than_lying(self):
         self._fill(30)
