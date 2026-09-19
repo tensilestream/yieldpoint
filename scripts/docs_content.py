@@ -55,44 +55,69 @@ yieldpoint review    <span class="c"># what you have already broken</span></code
 # yieldpoint: allow function_too_long - a page of prose, not a procedure. "Extract the distinct steps" has no meaning for one HTML literal, and splitting it would hide the page from anyone editing the words.
 def start_page() -> str:
     return """<h1>Getting started</h1>
-<p class="lede">Two commands to install, one to find out whether the change you just
-made took something away.</p>
+<p class="lede">Pick the path that matches how you work. Every one ends the same way:
+<code>yieldpoint review</code> tells you whether the change you just made took something
+away.</p>
 
 <h2>Install</h2>
 <pre><code>pip install yieldpoint            <span class="c"># zero runtime dependencies</span>
 pipx install yieldpoint           <span class="c"># isolated CLI</span>
 uv tool install yieldpoint        <span class="c"># same, via uv</span></code></pre>
-<p>Python 3.10 or newer, and nothing else.</p>
+<p>Python 3.10 or newer, and nothing else. To try it without installing anything, run
+<code>uvx yieldpoint review</code> in a repository with uncommitted work.</p>
 
-<h2>Try it without installing anything</h2>
-<pre><code>uvx yieldpoint review</code></pre>
-<p>Run that in any repository with uncommitted work. It reads your diff from git,
-including unstaged files, and tells you whether anything you changed weakens what the
-tests verify.</p>
-
-<h2>Set it up properly</h2>
-<pre><code>yieldpoint init</code></pre>
-<p><code>init</code> writes three files and backs up anything it touches:</p>
-<table>
-<tr><th>File</th><th>What it does</th></tr>
-<tr><td><code>.yieldpoint.json</code></td><td>The rules. Committed, so the team shares one definition.</td></tr>
-<tr><td><code>.mcp.json</code></td><td>Registers the MCP server, so your agent can <em>ask</em> what a rule means.</td></tr>
-<tr><td><code>.claude/settings.json</code></td><td>Registers the hook, which is the part that actually <em>enforces</em>.</td></tr>
-</table>
+<h2>Claude Code</h2>
+<p>The only client that gets all three doors, because it is the only one with a pre-edit
+hook.</p>
+<pre><code>yp init                 <span class="c"># config + MCP + hook + commit gate</span>
+yp install-hook         <span class="c"># only to change the mode later</span></code></pre>
 
 <div class="warn">
-  <h3>Restart your editor after <code>init</code></h3>
-  <p>Hooks and MCP servers are read when a session starts, so nothing you install is
-  active in the session you install it from &mdash; and that looks exactly like it
-  working: no output, no error, every edit allowed. <code>yieldpoint doctor</code>
-  reports whether the hook has actually seen an edit, which is the only way to tell
-  those two states apart. <code>yieldpoint review</code> works immediately, with no
-  restart.</p>
+  <h3>Restart your Claude Code session</h3>
+  <p>Hooks and MCP servers are read when a session starts, so nothing you just installed
+  is active in the session you installed it from &mdash; and that looks exactly like it
+  working: no output, no error, every edit allowed.</p>
 </div>
 
-<h2>It starts advisory</h2>
-<p>The hook reports and never blocks. Run <code>yieldpoint init --enforce</code> once you
-are happy with what it reports.</p>
+<p>In the <em>new</em> session, <code>yp doctor</code> is the only way to tell "installed
+and working" from "installed and never ran":</p>
+<pre><code>  [ok  ] hook             running (advisory — reports, never blocks); 6 edit(s) seen
+  [ok  ] stop gate        running (advisory — reports, never blocks); 8 turn(s) verified
+  [ok  ] mcp              registered and runnable</code></pre>
+<p><code>0 edit(s) seen</code> after you have edited something means the hook is
+registered but not firing. Restart again, and check it was the right window.</p>
+<p>The hook starts advisory. When you are happy with what it reports,
+<code>yp init --enforce</code> makes it refuse the edit instead of describing it.</p>
+
+<h2>Cursor, VS Code, Windsurf, Zed, Cline, Roo, Kiro, Trae</h2>
+<p>MCP so the agent can ask what a rule means, and the commit gate as the enforcing
+half.</p>
+<pre><code>yp init --client cursor --no-hook</code></pre>
+<p><code>--no-hook</code> skips the Claude-specific files, which would do nothing for
+you. Restart the editor, then <code>yp doctor</code>.</p>
+
+<h2>Gemini CLI, Amazon Q, opencode, Claude Desktop</h2>
+<pre><code>yp init --client gemini-cli --no-hook</code></pre>
+
+<h2>LibreChat, Continue, Goose, Codex CLI</h2>
+<p>These configure MCP in YAML or TOML, which this package will not take a dependency to
+write safely, so it prints the snippet instead of editing your file.</p>
+<pre><code>yp init --no-hook
+yp install-mcp --client continue --show</code></pre>
+
+<h2>No editor integration</h2>
+<pre><code>yp init --no-hook                 <span class="c"># config + .git/hooks/pre-commit</span></code></pre>
+<p>Plus <code>pre-commit</code> and CI &mdash; see <a href="integrations.html">Integrations</a>.
+<code>yp install-mcp --list</code> shows every client name.</p>
+
+<h2>Three doors, deliberately</h2>
+<p>No single surface sees everything, which is why there are three.</p>
+<table>
+<tr><th>Door</th><th>Catches</th><th>Misses</th></tr>
+<tr><td>Per-edit hook</td><td>An edit before it lands</td><td>Anything not written through Claude Code's file-edit tools</td></tr>
+<tr><td>Stop gate</td><td>Everything the hook could not see, including edits made through the shell</td><td>Work that never ends a turn</td></tr>
+<tr><td>Pre-commit</td><td>Every provider, because all of their work arrives at a commit</td><td>Nothing you commit &mdash; it is the backstop</td></tr>
+</table>
 
 <h2>Reading a verdict</h2>
 <pre><code>$ yieldpoint review
@@ -113,6 +138,30 @@ change does not have to be diagnosed by guessing.</p>
 <tr><td><code>2</code></td><td>The tool itself failed.</td></tr>
 <tr><td><code>3</code></td><td><strong>Nothing could be analysed.</strong> Not a pass.</td></tr>
 </table>
+
+<h2>Is it saving anything?</h2>
+<p>Every verdict is recorded locally &mdash; no network call, ever. <code>yp stats</code>
+adds it up.</p>
+<pre><code>$ yp stats
+────────────────────────────────────────────────────────────────
+  SAVED  on this repository, across 243 verification(s)
+
+             243   model calls not made      architectural
+      ~1,194,287   input tokens not read     estimated
+          ~$3.58   at $3.00 per M tokens     your stated rate
+
+  over 27 distinct file set(s); 112 verification(s) re-analysed one already counted
+────────────────────────────────────────────────────────────────</code></pre>
+<p>Three different kinds of number, never added together. <strong>Model calls</strong> is
+architectural: Yieldpoint makes none, and a judge producing the same critique makes one
+per verdict. <strong>Tokens</strong> is an estimate. <strong>Cost</strong> is that
+estimate times a rate you supply &mdash; there is no default, because a vendor price
+baked in here would be stale within a quarter.</p>
+<pre><code>yp stats --price 3.00      <span class="c"># one run</span>
+yp stats --since today     <span class="c"># a window</span>
+yp stats --html            <span class="c"># the same figures as a page</span>
+yp export                  <span class="c"># every event as JSON Lines</span></code></pre>
+<p>Or set it permanently: <code>"metrics": { "price_per_million": 3.00 }</code>.</p>
 """
 
 

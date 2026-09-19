@@ -95,29 +95,181 @@ pip install git+https://github.com/tensilestream/yieldpoint    # from source
 
 ## Quick start
 
-Two commands. The first sets everything up; the second tells you what you already broke.
+Pick the one that matches how you work. Every path ends the same way: `yieldpoint review`
+tells you whether the change you just made took something away.
+
+<details open>
+<summary><strong>Claude Code</strong> — the full setup, including the part that enforces</summary>
 
 ```sh
-yieldpoint init         # config + MCP server + editor hook, in one go
-yieldpoint review       # check everything you have changed but not committed
+yp init                 # .yieldpoint.json + .mcp.json + .claude/settings.json
+yp install-hook         # only if you skipped it above, or want to change the mode
 ```
 
-> **Restart your editor after `init`.** Hooks and MCP servers are read when a session
-> starts, so nothing you install is active in the session you install it from — and that
-> looks exactly like it working: no output, no error, every edit allowed. `yieldpoint doctor`
-> reports whether the hook has actually seen an edit, which is the only way to tell those
-> two states apart. `yieldpoint review` works immediately, with no restart.
+**Then restart your Claude Code session.** Hooks and MCP servers are read when a session
+starts, so nothing you just installed is active in the session you installed it from —
+and that looks exactly like it working: no output, no error, every edit allowed.
 
-`init` writes three files and backs up anything it touches:
+```sh
+yp doctor               # in the NEW session
+```
+
+`doctor` is the only way to tell "installed and working" from "installed and never ran":
+
+```console
+  [ok  ] hook             running (advisory — reports, never blocks); 6 edit(s) seen
+  [ok  ] stop gate        running (advisory — reports, never blocks); 8 turn(s) verified
+  [ok  ] mcp              registered and runnable
+```
+
+If it says `0 edit(s) seen` after you have edited something, the hook is registered but
+not firing — restart again, and check you restarted the right window.
+
+The hook starts **advisory**: it reports and never blocks. Once you are happy with what
+it reports:
+
+```sh
+yp init --enforce       # now it refuses the edit instead of describing it
+```
+</details>
+
+<details>
+<summary><strong>Cursor, VS Code, Windsurf, Zed, Cline, Roo, Kiro, Trae</strong></summary>
+
+These have an MCP server but no pre-edit hook, so the agent can *ask* Yieldpoint what a
+rule means, and the *enforcing* half is your commit.
+
+```sh
+yp init --client cursor --no-hook   # or vscode, windsurf, zed, cline, roo, kiro, trae
+```
+
+That writes `.yieldpoint.json`, registers the MCP server for your editor, and installs
+the `.git/hooks/pre-commit` gate — which is the enforcing half here, because a commit is
+where every provider's work arrives. `--no-hook` skips the Claude-specific files, which
+would do nothing for you.
+
+Restart the editor, then `yp doctor` to confirm. `yp install-mcp --list` shows every
+client name.
+</details>
+
+<details>
+<summary><strong>Gemini CLI, Amazon Q, opencode, Claude Desktop</strong></summary>
+
+```sh
+yp init --client gemini-cli --no-hook   # or amazonq, opencode, claude-desktop
+```
+
+Restart the client. Same as above: MCP for asking, the commit gate for enforcing.
+</details>
+
+<details>
+<summary><strong>LibreChat, Continue, Goose, Codex CLI</strong> — YAML or TOML</summary>
+
+These configure MCP in formats this package will not take a dependency to write safely,
+so it prints the snippet instead of editing your file:
+
+```sh
+yp init --no-hook                          # config + the commit gate
+yp install-mcp --client continue --show    # or librechat, goose, codex
+```
+
+Paste the snippet into your client's config and restart it.
+</details>
+
+<details>
+<summary><strong>No editor integration — CI and pre-commit only</strong></summary>
+
+```sh
+yp init --no-hook                          # config + the .git/hooks/pre-commit gate
+```
+
+```yaml
+# .pre-commit-config.yaml — for the whole team
+repos:
+  - repo: https://github.com/tensilestream/yieldpoint
+    rev: v0.1.1
+    hooks:
+      - id: yieldpoint
+```
+
+```yaml
+# CI
+- run: pip install yieldpoint
+- run: yieldpoint review --against origin/main --json
+```
+</details>
+
+<details>
+<summary><strong>Just trying it</strong> — nothing installed, nothing written</summary>
+
+```sh
+uvx yieldpoint review      # reads your uncommitted diff, writes nothing
+```
+</details>
+
+### What `init` writes
 
 | File | What it does |
 |---|---|
 | `.yieldpoint.json` | The rules. Committed, so the team shares one definition. |
 | `.mcp.json` | Registers the MCP server, so your agent can *ask* what a rule means. |
-| `.claude/settings.json` | Registers the hook, which is the part that actually *enforces*. |
+| `.claude/settings.json` | The per-edit hook and Stop gate. Claude Code only. |
+| `.git/hooks/pre-commit` | The commit gate. Not committed — each clone runs `init`. |
 
-The hook starts **advisory** — it reports and never blocks. Run `yieldpoint init --enforce`
-once you are happy with what it reports. Restart your editor so it picks both up.
+Anything it touches is backed up first. Skip pieces with `--no-hook`, `--no-git`,
+`--no-report`.
+
+**Three doors, deliberately**, because no single one sees everything:
+
+| Door | Catches | Misses |
+|---|---|---|
+| **Per-edit hook** | An edit before it lands | Anything not written through Claude Code's file-edit tools |
+| **Stop gate** | Everything the hook could not see, including edits made through the shell | Work that never ends a turn |
+| **Pre-commit** | Every provider, because all of their work arrives at a commit | Nothing you commit; it is the backstop |
+
+### Is it actually saving anything?
+
+The ledger records every verdict locally — no network call, ever. `yp stats` adds it up:
+
+```console
+$ yp stats
+────────────────────────────────────────────────────────────────
+  SAVED  on this repository, across 243 verification(s)
+
+             243   model calls not made      architectural
+      ~1,194,287   input tokens not read     estimated
+          ~$3.58   at $3.00 per M tokens     your stated rate
+
+  over 27 distinct file set(s); 112 verification(s) re-analysed one already counted
+────────────────────────────────────────────────────────────────
+
+PER TURN  when each verdict happened, and the running total after it
+  when                 surface  status     found     ms  calls   ~tokens  saved so far
+  2026-09-19 15:16:09  review   pass           0     20      1    11,480  242 calls · ~1,192,748 tokens saved
+  2026-09-19 15:16:13  check    pass           0      4      1     1,539  243 calls · ~1,194,287 tokens saved
+```
+
+Three different kinds of number, never added together. **Model calls not made** is
+architectural — Yieldpoint makes none, and an LLM-as-judge producing the same critique
+makes one per verdict. **Tokens** is an estimate, measured characters over a stated
+constant. **Cost** is that estimate times a rate you supply, because a vendor price baked
+in here would be stale within a quarter:
+
+```sh
+yp stats --price 3.00                          # one run
+# or, permanently:  "metrics": { "price_per_million": 3.00 }  in .yieldpoint.json
+```
+
+The repeat line is not an apology. Verifying the same suite all day counts once per
+verdict, because a judge asked the same question all day would read it once per verdict
+too — but a large number reads as "a lot of different code", and usually it is not, so
+the report says which.
+
+```sh
+yp stats --since today     # a window
+yp stats --html            # the same figures as a page
+yp export                  # every event as JSON Lines, for a dashboard
+```
 
 ### `yieldpoint review` — the whole product in one command
 

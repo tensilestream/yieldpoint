@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "yieldpoint hook --advisory"
+            "command": "yieldpoint hook"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "yieldpoint hook --stop --advisory"
+            "command": "yieldpoint hook --stop"
           },
           {
             "type": "command",

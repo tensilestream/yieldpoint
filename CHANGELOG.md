@@ -12,6 +12,21 @@ package version is not.
 
 ## [0.1.1] — unreleased
 
+### Added
+
+- **A quick start per client**, in the README and on the documentation site. Claude Code
+  gets `yp init`, the restart, and `yp doctor` to tell "installed and working" from
+  "installed and never ran". Cursor, VS Code, Windsurf, Zed, Cline, Roo, Kiro, Trae,
+  Gemini CLI, Amazon Q, opencode and Claude Desktop get `yp init --client X --no-hook`;
+  the YAML and TOML clients get the `--show` snippet. Each says which of the three doors
+  it actually gets, since only Claude Code has a pre-edit hook.
+- **A section on what `yp stats` is worth**, with the savings panel and what each of the
+  three figures means.
+- **`tests/test_docs.py` now executes the prose**: every `yp <command>` named in the
+  README or on the site must exist in the CLI. The first draft of the quick start told
+  people to run `yieldpoint install-git-gate`, which has never existed — the commit gate
+  is installed by `init`.
+
 ### Changed
 
 - **Maintainability findings no longer fail a run.** `file_too_long`,

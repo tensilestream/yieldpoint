@@ -95,3 +95,36 @@ class TestTheSiteIsBuilt(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDocumentedCommandsExist(unittest.TestCase):
+    """A quick start that names a command the CLI does not have is worse than none.
+
+    The first draft of this page told people to run `yieldpoint install-git-gate`,
+    which has never existed — the commit gate is installed by `init`. Nothing
+    caught it, because prose is not executed. This executes it.
+    """
+
+    def _subcommands(self) -> set:
+        import re
+        out = subprocess.run([sys.executable, "-m", "yieldpoint.cli", "--help"],
+                             capture_output=True, text=True, cwd=str(ROOT)).stdout
+        listed = re.search(r"\{([a-z,\-]+)\}", out)
+        self.assertIsNotNone(listed, out)
+        return set(listed.group(1).split(","))
+
+    def test_every_command_named_in_the_docs_exists(self):
+        import re
+
+        known = self._subcommands()
+        pages = list(DOCS.glob("*.html")) + [ROOT / "README.md"]
+        invented = set()
+        for page in pages:
+            for cmd in re.findall(r"\b(?:yp|yieldpoint) ([a-z][a-z-]{2,})\b",
+                                  page.read_text(encoding="utf-8")):
+                if cmd not in known:
+                    invented.add(f"{page.name}: {cmd}")
+        self.assertEqual(sorted(invented), [])
+
+    def test_the_check_would_notice_an_invented_command(self):
+        self.assertNotIn("install-git-gate", self._subcommands())
