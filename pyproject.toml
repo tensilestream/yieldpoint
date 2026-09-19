@@ -12,8 +12,10 @@ license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE", "TRADEMARK.md"]
 authors = [{ name = "Yieldpoint contributors" }]
 keywords = [
-  "langgraph", "agents", "verification", "guardrails", "testing",
-  "assertions", "code-review", "static-analysis", "ai",
+  "ai-agents", "coding-agents", "claude-code", "cursor", "copilot",
+  "mcp", "model-context-protocol", "guardrails", "evals",
+  "langgraph", "crewai", "verification", "code-review",
+  "static-analysis", "software-testing", "assertions", "developer-tools",
 ]
 classifiers = [
   "Development Status :: 3 - Alpha",
