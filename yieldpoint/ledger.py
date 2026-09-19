@@ -216,7 +216,7 @@ def stamp(event: Event) -> Event:
 def _write_once(target: Path, line: str) -> None:
     """One append, under the cross-process lock. Closed before the lock drops."""
     with filelock.exclusive(target):
-        with target.open("a", encoding="utf-8") as handle:
+        with target.open("a", encoding="utf-8", newline="\n") as handle:
             handle.write(line)
 
 

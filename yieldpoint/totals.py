@@ -66,23 +66,27 @@ def totals(path: str | Path = DEFAULT_PATH) -> Totals:
         offset, running = 0, Totals()  # rotated or truncated: start again
 
     try:
-        with target.open("r", encoding="utf-8") as handle:
+        with target.open("rb") as handle:
             handle.seek(offset)
-            fresh = handle.read()
-            consumed = offset + len(fresh.encode("utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError):
+            raw = handle.read()
+            consumed = offset + len(raw)
+    except (OSError, ValueError):
         return running
 
     # A final line without its newline is a write still in flight. Leave it for
     # next time rather than counting half an event.
-    if fresh and not fresh.endswith("\n"):
-        cut = fresh.rfind("\n")
-        consumed -= len(fresh[cut + 1:].encode("utf-8"))
-        fresh = fresh[: cut + 1]
+    if raw and not raw.endswith(b"\n"):
+        cut = raw.rfind(b"\n")
+        if cut == -1:
+            return running
+        consumed = offset + cut + 1
+        raw = raw[: cut + 1]
 
+    fresh = raw.decode("utf-8", errors="replace")
     running = _fold(running, fresh)
     _store(cache, consumed, running)
     return running
+
 
 
 def _fold(running: Totals, text: str) -> Totals:
