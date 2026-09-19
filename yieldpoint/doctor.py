@@ -39,6 +39,8 @@ class Check:
 
 def run(root: str | Path = ".") -> list[Check]:
     """Every check, in the order someone would want to read them."""
+    from .doctorwiring import _git_gate, _hook, _mcp, _stop_gate
+
     base = Path(root)
     policy = _policy(base)
     return [
@@ -48,6 +50,8 @@ def run(root: str | Path = ".") -> list[Check]:
         _protected(base, policy),
         _escalate_paths(base, policy),
         _hook(base),
+        _stop_gate(base),
+        _git_gate(base),
         _mcp(base),
         _metrics(base, policy),
     ]
@@ -59,17 +63,33 @@ def _policy(base: Path) -> Policy:
 
 
 def _command() -> Check:
-    """The command an editor will try to run, not the one you typed."""
+    """The command an editor will try to run, not the one you typed.
+
+    On PATH is not the same as runnable. An editable install whose source
+    directory has since moved leaves the console script behind and takes the
+    package with it, and a check that stopped at :func:`shutil.which` would
+    call that healthy — on the very line a reader looks at first to find out
+    why nothing works. So it is asked, the same way the hook is.
+    """
+    import shlex
+
     found = shutil.which("yieldpoint")
-    if found:
-        return Check("command", OK, f"yieldpoint on PATH at {found}")
-    return Check(
-        "command", WARN,
-        "yieldpoint is not on PATH; editors launched from a desktop icon will "
-        "not find it",
-        "pip install yieldpoint, or let `yieldpoint init` register the "
-        "interpreter path instead",
-    )
+    if not found:
+        return Check(
+            "command", WARN,
+            "yieldpoint is not on PATH; editors launched from a desktop icon will "
+            "not find it",
+            "pip install yieldpoint, or let `yieldpoint init` register the "
+            "interpreter path instead",
+        )
+    if not _runs(shlex.quote(found)):
+        return Check(
+            "command", FAIL, f"{found} is on PATH but does not run",
+            "the install is broken rather than missing — most often an editable "
+            "install whose source directory has moved. Reinstall it from the "
+            "current checkout: pip install -e .",
+        )
+    return Check("command", OK, f"yieldpoint on PATH at {found}")
 
 
 def _git() -> Check:
@@ -129,86 +149,6 @@ def _escalate_paths(base: Path, policy: Policy) -> Check:
         "a path list that has stopped matching protects nothing; correct or "
         "remove these",
     )
-
-
-def _hook(base: Path) -> Check:
-    settings = base / ".claude" / "settings.json"
-    if not settings.is_file():
-        return Check("hook", WARN, "not installed; nothing is enforcing",
-                     "yieldpoint init  (or yieldpoint install-hook)")
-    import json
-
-    try:
-        data = json.loads(settings.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        return Check("hook", FAIL, f"{settings} is unreadable: {exc}")
-
-    entries = [
-        hook.get("command", "")
-        for entry in data.get("hooks", {}).get("PreToolUse", [])
-        for hook in entry.get("hooks", [])
-        if "yieldpoint" in str(hook.get("command", ""))
-    ]
-    if not entries:
-        return Check("hook", WARN, f"{settings} has no Yieldpoint PreToolUse hook",
-                     "yieldpoint install-hook")
-    command = entries[0]
-    if not _runs(command):
-        return Check("hook", FAIL, f"registered command does not run: {command}",
-                     "yieldpoint install-hook  (it will register a command that resolves)")
-    mode = "advisory — reports, never blocks" if "--advisory" in command else "enforcing"
-    return _fired(base, mode)
-
-
-def _fired(base: Path, mode: str) -> Check:
-    """Installed is not the same as running.
-
-    A hook is read when a session starts, so one installed mid-session does
-    nothing until the next one — and the symptom is indistinguishable from
-    working: no output, no error, every edit allowed. This is the check that
-    tells the two apart, by asking whether the hook has ever recorded a verdict.
-    """
-    from . import ledger
-    from .core.policy import Policy
-
-    policy = Policy.discover(base)
-    resolved = Policy.load(policy) if policy else Policy()
-    if not ledger.enabled(resolved):
-        return Check("hook", OK, f"installed and runnable ({mode}); "
-                                 "recording is off, so it cannot be confirmed running")
-
-    seen = sum(1 for e in ledger.load(ledger.path_for(resolved, base))
-               if e.surface == "hook")
-    if seen:
-        return Check("hook", OK, f"running ({mode}); {seen:,} edit(s) seen")
-    return Check(
-        "hook", WARN,
-        f"installed and runnable ({mode}), but it has never seen an edit",
-        "hooks are read when a session starts — restart your editor, or start "
-        "a new session. Until then use `yieldpoint review` before committing.",
-    )
-
-
-def _mcp(base: Path) -> Check:
-    config = base / ".mcp.json"
-    if not config.is_file():
-        return Check("mcp", WARN, "not registered for this project",
-                     "yieldpoint install-mcp --client claude-code")
-    import json
-
-    try:
-        data = json.loads(config.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as exc:
-        return Check("mcp", FAIL, f"{config} is unreadable: {exc}")
-    entry = data.get("mcpServers", {}).get("yieldpoint")
-    if not entry:
-        return Check("mcp", WARN, f"{config} has no yieldpoint server",
-                     "yieldpoint install-mcp --client claude-code")
-    command = " ".join([entry.get("command", ""), *entry.get("args", [])])
-    if not _runs(command):
-        return Check("mcp", FAIL, f"registered command does not run: {command}",
-                     "yieldpoint install-mcp --client claude-code")
-    return Check("mcp", OK, "registered and runnable")
 
 
 def _metrics(base: Path, policy: Policy) -> Check:

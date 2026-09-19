@@ -14,7 +14,8 @@ never a gate that stops work on a guess.
 
 Identity is the command text with neutering suffixes stripped, so a step that
 gains `|| true` is recognised as the *same* step, disabled — not as one step
-removed and a different one added.
+removed and a different one added. For an action, identity is the action
+without its `@ref`, so a version bump is not mistaken for a removal either.
 """
 
 from __future__ import annotations
@@ -144,10 +145,23 @@ def _identity(body: list[str]) -> str:
         if match and match.group("key") in ("uses", "repo"):
             value = match.group("value").strip()
             if value:
-                return f"uses:{value}"
+                return f"uses:{_action(value)}"
 
     command = _command(body)
     return f"run:{_normalise(command)}" if command else ""
+
+
+def _action(value: str) -> str:
+    """The action a step runs, without the ref it is pinned to.
+
+    A dependency bump rewrites `@v5` to `@v7`. If the pin were part of the
+    step's identity, that one-line change would read as a check removed and a
+    different check added — which is how the rule most often meets a real
+    repository, and it is wrong every time. The check is the action; the ref is
+    only which copy of it runs.
+    """
+    name, separator, _ = value.partition("@")
+    return name if separator else value
 
 
 def _command(body: list[str]) -> str:

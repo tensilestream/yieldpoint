@@ -17,6 +17,10 @@
         "hooks": [
           {
             "type": "command",
+            "command": "yieldpoint hook --stop --advisory"
+          },
+          {
+            "type": "command",
             "command": "yieldpoint report"
           }
         ]

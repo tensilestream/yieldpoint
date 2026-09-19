@@ -67,17 +67,30 @@ def install_mcp(args) -> int:
     return EXIT_OK
 
 
-def _refresh_report_each_turn(hooks: dict) -> None:
-    """Regenerate the report when the agent stops.
+def _verify_each_turn(hooks: dict, *, advisory: bool, report: bool = True) -> None:
+    """The turn-level gate, and the report, both on ``Stop``.
+
+    Two hooks, one event, in this order for a reason.
+
+    The ``PreToolUse`` gate above sees a tool call. It therefore sees only edits
+    made with tools whose payload can be replayed — ``Write`` carries the new
+    content, ``Edit`` carries the replacement. An agent that edits through the
+    shell (``sed -i``, a heredoc, ``patch``) produces a payload with no
+    after-state in it, so that gate is silent. It is not a matcher that can be
+    widened; there is nothing in a ``Bash`` payload to verify.
+
+    ``yieldpoint hook --stop`` asks git instead of the tool call, so it sees
+    every edit regardless of which tool made it. Registering only the per-edit
+    gate is what makes an install look complete and enforce nothing.
 
     The report is one file refreshed in place, so a page left open shows the
-    current state after every turn without accumulating anything. Registered on
-    ``Stop`` rather than on each edit because it reads the whole working tree,
-    and doing that per keystroke would be felt.
+    current state after every turn without accumulating anything.
     """
+    gate = command_line("hook", "--stop") + (" --advisory" if advisory else "")
+    commands = [gate] + ([command_line("report")] if report else [])
     entry = {
         "matcher": "",
-        "hooks": [{"type": "command", "command": command_line("report")}],
+        "hooks": [{"type": "command", "command": c} for c in commands],
     }
     stop = hooks.setdefault("Stop", [])
     stop[:] = [e for e in stop if not _is_yieldpoint(e)] + [entry]
@@ -137,18 +150,81 @@ def install_hook(args) -> int:
     pre = hooks.setdefault("PreToolUse", [])
     pre[:] = [e for e in pre if not _is_yieldpoint(e)] + [entry]
 
-    if not getattr(args, "no_report", False):
-        _refresh_report_each_turn(hooks)
+    _verify_each_turn(hooks, advisory=args.advisory,
+                      report=not getattr(args, "no_report", False))
 
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     mode = "advisory" if args.advisory else "blocking"
     print(f"registered '{command}' on {HOOK_MATCHER} in {path} ({mode} mode)")
+    print(f"registered '{command_line('hook', '--stop')}' on Stop, which catches")
+    print("  edits made through the shell — the per-edit gate above cannot see those")
     if not getattr(args, "no_report", False):
         print(f"registered '{command_line('report')}' on Stop, so "
               ".yieldpoint/report.html")
         print("  refreshes at the end of every turn")
     print("Restart Claude Code, or start a new session, for it to take effect.")
     return EXIT_OK
+
+
+#: Marks the script as ours, so re-installing replaces it and a hand-written
+#: one is never overwritten without being backed up first.
+GIT_MARKER = "# installed by yieldpoint"
+
+GIT_GATE = """#!/bin/sh
+{marker}
+# The provider-independent gate. Editor hooks belong to one editor and see only
+# that editor's edit tools; a commit is where every agent's work arrives,
+# whichever tool wrote it and whichever model drove it. Remove this file to
+# uninstall.
+command -v {executable} >/dev/null 2>&1 || {{
+  echo "yieldpoint: {executable} not found — commit allowed, nothing verified" >&2
+  exit 0
+}}
+{invocation} review --staged
+status=$?
+# 0 clean, 1 findings, 3 nothing analysable. Only findings refuse: a commit
+# blocked because no rule understood the language is a gate people delete.
+[ "$status" -eq 1 ] && exit 1
+exit 0
+"""
+
+
+def install_git_gate(root: Path) -> tuple[Path | None, str]:
+    """Write ``.git/hooks/pre-commit``. Returns the path and what happened."""
+    git = root / ".git"
+    if git.is_file():  # a worktree: .git is a file pointing at the real directory
+        try:
+            pointer = git.read_text(encoding="utf-8").split("gitdir:", 1)[1].strip()
+            git = Path(pointer)
+        except (OSError, IndexError):
+            return None, "cannot resolve the worktree's git directory"
+    if not git.is_dir():
+        return None, "not a git repository — nothing to gate commits with"
+
+    hooks = git / "hooks"
+    hooks.mkdir(parents=True, exist_ok=True)
+    path = hooks / "pre-commit"
+
+    note = "wrote"
+    if path.exists():
+        existing = path.read_text(encoding="utf-8", errors="replace")
+        if GIT_MARKER in existing:
+            note = "replaced"
+        else:
+            backup = path.with_suffix(".yieldpoint-backup")
+            backup.write_text(existing, encoding="utf-8")
+            note = f"replaced (yours backed up to {backup})"
+
+    from .mcp.clients import command_argv
+
+    executable, _ = command_argv()
+    path.write_text(
+        GIT_GATE.format(marker=GIT_MARKER, executable=executable,
+                        invocation=command_line()),
+        encoding="utf-8",
+    )
+    path.chmod(0o755)
+    return path, note
 
 
 STARTER_CONFIG = {
@@ -200,6 +276,8 @@ def init(args) -> int:
     except OSError as exc:
         print(f"  mcp      could not write configuration: {exc}", file=sys.stderr)
 
+    _report_git_gate(root, skip=bool(getattr(args, "no_git", False)))
+
     if args.no_hook:
         print("  hook     skipped (--no-hook); nothing will enforce, only explain")
     else:
@@ -210,17 +288,44 @@ def init(args) -> int:
         )
         install_hook(hook_args)
 
+    _next_steps(args.enforce, not args.no_hook)
+    return EXIT_OK
+
+
+def _report_git_gate(root: Path, *, skip: bool) -> None:
+    """Install the commit gate and say what happened, in init's voice."""
+    if skip:
+        print("  git      skipped (--no-git); commits are not gated")
+        return
+    gate, note = install_git_gate(root)
+    if gate is None:
+        print(f"  git      {note}")
+        return
+    print(f"  git      {note} {gate}")
+    print("           every provider's work passes through a commit, so this")
+    print("           gate holds for agents with no editor hook at all")
+
+
+def _next_steps(enforce: bool, hooked: bool) -> None:
+    """What to do now. Separated so ``init`` stays readable as a sequence."""
+    print("\nThree doors, deliberately:")
+    print("  per-edit hook   catches an edit before it lands — Claude Code only,")
+    print("                  and only for edits made with its file-edit tools")
+    print("  Stop gate       catches everything that hook cannot see, including")
+    print("                  edits written through the shell")
+    print("  pre-commit      holds for every other provider, because a commit is")
+    print("                  where all of their work arrives")
+
     print("\nNext:")
     print("  1. RESTART your editor, or start a new session.")
     print("     Hooks and MCP servers are read when a session starts, so")
     print("     nothing you just installed is active in this one — and that")
     print("     looks exactly like it working: no output, every edit allowed.")
-    print("  2. yieldpoint doctor        # confirms the hook has actually run")
+    print("  2. yieldpoint doctor        # confirms each door has actually run")
     print("  3. yieldpoint review        # works right now, no restart needed")
-    if not args.enforce and not args.no_hook:
+    if not enforce and hooked:
         print("\nThe hook is advisory: it reports and never blocks. Re-run with")
         print("  yieldpoint init --enforce   once you are happy with what it reports.")
-    return EXIT_OK
 
 
 @dataclass

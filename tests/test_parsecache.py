@@ -21,6 +21,13 @@ from yieldpoint.core import metrics, parsecache, symbols
 
 ROOT = Path(__file__).resolve().parent.parent
 
+#: Every routine that reads through the cache, with the routine it must agree
+#: with. Adding a cached routine means adding a row, not copying a test.
+CACHED = [
+    ("metrics", metrics.measure, metrics._measure),
+    ("symbols", symbols.scan, symbols._scan),
+]
+
 SOURCES = [
     "x = 1\n",
     "import os\n\ndef f(a, b):\n    if a:\n        return b\n    return a\n",
@@ -53,25 +60,17 @@ class TestAHitEqualsARecomputation(unittest.TestCase):
         parsecache.clear()
         self.tmp.cleanup()
 
-    def test_metrics_match_the_uncached_routine(self):
-        for source in SOURCES:
-            with self.subTest(source[:20]):
-                parsecache.clear()
-                first = metrics.measure(source, filename="a.py")
-                parsecache.clear()          # force a database read
-                second = metrics.measure(source, filename="a.py")
-                self.assertEqual(first, second)
-                self.assertEqual(first, metrics._measure(source, "a.py"))
-
-    def test_symbols_match_the_uncached_routine(self):
-        for source in SOURCES:
-            with self.subTest(source[:20]):
-                parsecache.clear()
-                first = symbols.scan(source, filename="a.py")
-                parsecache.clear()
-                second = symbols.scan(source, filename="a.py")
-                self.assertEqual(first, second)
-                self.assertEqual(first, symbols._scan(source, "a.py"))
+    def test_every_cached_routine_matches_its_uncached_one(self):
+        """One property, stated once. A new cached routine joins CACHED."""
+        for name, cached, uncached in CACHED:
+            for source in SOURCES:
+                with self.subTest(routine=name, source=source[:20]):
+                    parsecache.clear()
+                    first = cached(source, filename="a.py")
+                    parsecache.clear()          # force a database read
+                    second = cached(source, filename="a.py")
+                    self.assertEqual(first, second)
+                    self.assertEqual(first, uncached(source, "a.py"))
 
     def test_an_unparseable_file_caches_its_error_too(self):
         broken = "def f(:\n"

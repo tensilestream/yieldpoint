@@ -48,9 +48,12 @@ class TestNode(unittest.TestCase):
         self.assertEqual(self.node(change_state(after=ORIGINAL))["verdict"]["status"], PASS)
 
     def test_state_is_serialisable_for_checkpointers(self):
+        """A checkpointer writes the state and reads it back; both halves must hold."""
         import json
 
-        json.dumps(self.node(change_state()))
+        update = self.node(change_state())
+        restored = json.loads(json.dumps(update))
+        self.assertEqual(restored, update)
 
     def test_attempts_increment_across_iterations(self):
         state = dict(change_state())

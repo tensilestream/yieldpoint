@@ -50,6 +50,111 @@ REPAIR  1 finding(s)
          original assertion passes. Restore `assert inv.total == Decimal('42.00')`.
 ```
 
+## Contents
+
+- [Install](#install) · [Quick start](#quick-start) — two commands
+- [`yieldpoint review`](#yieldpoint-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
+- [The vision](#the-vision) · [Where it goes in the loop](#where-it-goes-in-the-loop)
+- [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
+- [What it checks](#what-it-checks) · [Configuration](#configuration)
+- [Routing and gating](#routing-and-gating--decisions-instead-of-round-trips) · [Fan-out and long sessions](#fan-out-and-long-running-sessions)
+- [Examples](./examples/)
+- [Running it in an organisation](#running-it-in-an-organisation) · [Speed](#speed-a-content-addressed-index)
+- [Performance](#performance--run-the-benchmark-dont-trust-the-readme)
+- [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--yieldpoint-stats)
+- [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
+- [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
+- [Contributing](#contributing) · [License](#license)
+
+---
+
+## Install
+
+```sh
+pip install yieldpoint                 # the engine and CLI, zero dependencies
+pip install "yieldpoint[langgraph]"    # plus the LangGraph example's requirements
+```
+
+Requires Python 3.10 or newer. Nothing else — the verification core has no runtime
+dependencies, makes no network calls, and never invokes a model.
+
+<details>
+<summary>Other install methods</summary>
+
+```sh
+pipx install yieldpoint                            # isolated CLI
+uv tool install yieldpoint                         # same, via uv
+pip install git+https://github.com/tensilestream/yieldpoint    # from source
+```
+</details>
+
+## Quick start
+
+Two commands. The first sets everything up; the second tells you what you already broke.
+
+```sh
+yieldpoint init         # config + MCP server + editor hook, in one go
+yieldpoint review       # check everything you have changed but not committed
+```
+
+> **Restart your editor after `init`.** Hooks and MCP servers are read when a session
+> starts, so nothing you install is active in the session you install it from — and that
+> looks exactly like it working: no output, no error, every edit allowed. `yieldpoint doctor`
+> reports whether the hook has actually seen an edit, which is the only way to tell those
+> two states apart. `yieldpoint review` works immediately, with no restart.
+
+`init` writes three files and backs up anything it touches:
+
+| File | What it does |
+|---|---|
+| `.yieldpoint.json` | The rules. Committed, so the team shares one definition. |
+| `.mcp.json` | Registers the MCP server, so your agent can *ask* what a rule means. |
+| `.claude/settings.json` | Registers the hook, which is the part that actually *enforces*. |
+
+The hook starts **advisory** — it reports and never blocks. Run `yieldpoint init --enforce`
+once you are happy with what it reports. Restart your editor so it picks both up.
+
+### `yieldpoint review` — the whole product in one command
+
+No arguments. It reads your uncommitted diff from git, including files you have not staged
+yet, and tells you whether anything you changed weakens what the tests verify.
+
+```console
+$ yieldpoint review
+REPAIR  1 finding(s)
+
+  tests/test_invoice.py:14 in test_total  [assertion_monotonicity]
+    Assertion on invoice.total was weakened: eq -> non_null.
+    fix: Re-assert invoice.total at eq strength, or fix the code under test so the
+         original assertion passes. Restore `assert invoice.total == 42`.
+```
+
+That verdict cost zero model calls and is byte-identical on every machine.
+
+```sh
+yieldpoint review --staged             # only what is staged
+yieldpoint review --against main       # a whole branch
+yieldpoint review --json               # for CI
+```
+
+### Prefer to do it a piece at a time?
+
+```sh
+yieldpoint scan                        # audit the repo as it stands
+yieldpoint install-mcp --client cursor # MCP only, any editor
+yieldpoint install-hook --advisory     # the enforcing half, on its own
+yieldpoint check --path tests/test_invoice.py --before old.py --after new.py
+git diff --cached | yieldpoint check --diff -
+```
+
+Everything also runs without anything on your `PATH`:
+
+```sh
+python -m yieldpoint review
+```
+
+---
+
 ## The vision
 
 Agents that write code are now fast enough that nobody reads everything they produce. The
@@ -148,113 +253,23 @@ Three insertion points, saving three different things:
 |---|---|---|
 | **Before the model** | `harness.middleware` | Sending a docstring fix to a frontier model |
 | **Before the tool** | hook, `before_tool` | The test run, the failure trace, the model's reasoning about it, and the retry |
+| **Before the turn ends** | `yieldpoint hook --stop` | An edit written through the shell, which no per-tool gate can see |
 | **Before the merge** | CI, pre-commit, LangGraph node | A weakened suite reaching main, where nothing else will find it |
 
 Point 2 is the one that matters most, and it is the one an MCP tool cannot do — an agent
 chooses whether to call a tool, and an agent about to weaken a test does not ask.
 
-## Contents
+Point 2 also has a blind spot worth stating plainly. It verifies a **tool call**, by
+replaying it: `Write` carries the new content, `Edit` carries the replacement. An agent
+that edits through the shell instead — `sed -i`, a heredoc, `patch` — hands the gate a
+command string with no after-state in it, and nothing can be verified. The matcher cannot
+be widened around this; there is nothing in a `Bash` payload to check.
 
-- [The vision](#the-vision) · [Where it goes in the loop](#where-it-goes-in-the-loop)
-- [Install](#install) · [Quick start](#quick-start) — two commands
-- [`yieldpoint review`](#yieldpoint-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
-- [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
-- [What it checks](#what-it-checks) · [Configuration](#configuration)
-- [Routing and gating](#routing-and-gating--decisions-instead-of-round-trips) · [Fan-out and long sessions](#fan-out-and-long-running-sessions)
-- [Examples](./examples/)
-- [Running it in an organisation](#running-it-in-an-organisation) · [Speed](#speed-a-content-addressed-index)
-- [Performance](#performance--run-the-benchmark-dont-trust-the-readme)
-- [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--yieldpoint-stats)
-- [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
-- [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
-- [Contributing](#contributing) · [License](#license)
-
----
-
-## Install
-
-```sh
-pip install yieldpoint                 # the engine and CLI, zero dependencies
-pip install "yieldpoint[langgraph]"    # plus the LangGraph example's requirements
-```
-
-Requires Python 3.10 or newer. Nothing else — the verification core has no runtime
-dependencies, makes no network calls, and never invokes a model.
-
-<details>
-<summary>Other install methods</summary>
-
-```sh
-pipx install yieldpoint                            # isolated CLI
-uv tool install yieldpoint                         # same, via uv
-pip install git+https://github.com/tensilestream/yieldpoint    # from source
-```
-</details>
-
-## Quick start
-
-Two commands. The first sets everything up; the second tells you what you already broke.
-
-```sh
-yieldpoint init         # config + MCP server + editor hook, in one go
-yieldpoint review       # check everything you have changed but not committed
-```
-
-> **Restart your editor after `init`.** Hooks and MCP servers are read when a session
-> starts, so nothing you install is active in the session you install it from — and that
-> looks exactly like it working: no output, no error, every edit allowed. `yieldpoint doctor`
-> reports whether the hook has actually seen an edit, which is the only way to tell those
-> two states apart. `yieldpoint review` works immediately, with no restart.
-
-`init` writes three files and backs up anything it touches:
-
-| File | What it does |
-|---|---|
-| `.yieldpoint.json` | The rules. Committed, so the team shares one definition. |
-| `.mcp.json` | Registers the MCP server, so your agent can *ask* what a rule means. |
-| `.claude/settings.json` | Registers the hook, which is the part that actually *enforces*. |
-
-The hook starts **advisory** — it reports and never blocks. Run `yieldpoint init --enforce`
-once you are happy with what it reports. Restart your editor so it picks both up.
-
-### `yieldpoint review` — the whole product in one command
-
-No arguments. It reads your uncommitted diff from git, including files you have not staged
-yet, and tells you whether anything you changed weakens what the tests verify.
-
-```console
-$ yieldpoint review
-REPAIR  1 finding(s)
-
-  tests/test_invoice.py:14 in test_total  [assertion_monotonicity]
-    Assertion on invoice.total was weakened: eq -> non_null.
-    fix: Re-assert invoice.total at eq strength, or fix the code under test so the
-         original assertion passes. Restore `assert invoice.total == 42`.
-```
-
-That verdict cost zero model calls and is byte-identical on every machine.
-
-```sh
-yieldpoint review --staged             # only what is staged
-yieldpoint review --against main       # a whole branch
-yieldpoint review --json               # for CI
-```
-
-### Prefer to do it a piece at a time?
-
-```sh
-yieldpoint scan                        # audit the repo as it stands
-yieldpoint install-mcp --client cursor # MCP only, any editor
-yieldpoint install-hook --advisory     # the enforcing half, on its own
-yieldpoint check --path tests/test_invoice.py --before old.py --after new.py
-git diff --cached | yieldpoint check --diff -
-```
-
-Everything also runs without anything on your `PATH`:
-
-```sh
-python -m yieldpoint review
-```
+That is why point 3 exists and why `init` installs it by default. It asks git rather than
+the tool call, so it sees every edit regardless of which tool made it — and point 4 (the
+`.git/hooks/pre-commit` gate `init` also writes) holds for providers that have no editor
+hooks at all. The three overlap on purpose: each is blind to a case the others catch, and
+a gate that is installed and never reached is the failure mode this tool exists to avoid.
 
 ---
 

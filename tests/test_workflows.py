@@ -45,8 +45,22 @@ def rules(before, after, config=CONFIG):
 class TestExtraction(unittest.TestCase):
     def test_actions_and_commands_are_both_steps(self):
         identities = {step.identity for step in steps_of(WORKFLOW)}
-        self.assertIn("uses:actions/checkout@v4", identities)
+        self.assertIn("uses:actions/checkout", identities)
         self.assertIn("run:python -m unittest discover -q", identities)
+
+    def test_an_action_is_identified_without_its_pin(self):
+        """Otherwise every dependency bump reads as a removal."""
+        bumped = WORKFLOW.replace("actions/checkout@v4", "actions/checkout@v7")
+        self.assertEqual(
+            {step.identity for step in steps_of(WORKFLOW)},
+            {step.identity for step in steps_of(bumped)},
+        )
+        self.assertEqual(rules(WORKFLOW, bumped), [])
+
+    def test_a_local_action_keeps_its_path(self):
+        source = "jobs:\n  a:\n    steps:\n      - uses: ./.github/actions/setup\n"
+        self.assertEqual(steps_of(source)[0].identity,
+                         "uses:./.github/actions/setup")
 
     def test_every_step_is_found(self):
         self.assertEqual(len(steps_of(WORKFLOW)), 4)

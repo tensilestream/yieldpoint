@@ -151,6 +151,9 @@ def check_diff(args) -> int:
 
 
 def hook_command(args) -> int:
+    if getattr(args, "stop", False):
+        return stop_command(args)
+
     from .ledger import Timer
 
     payload = read_payload(sys.stdin.read())
@@ -177,6 +180,40 @@ def hook_command(args) -> int:
     # Exit code 2 is the blocking signal; stderr is fed back to the agent.
     print(render(verdict, change), file=sys.stderr)
     return EXIT_ERROR
+
+
+def stop_command(args) -> int:
+    """Verify the whole working tree when the agent stops.
+
+    The per-edit hook cannot see a change made through the shell; this can,
+    because it asks git rather than the tool call. Always exits 0 — a Stop hook
+    signals through its JSON, and a non-zero exit here would read as the hook
+    itself being broken.
+    """
+    from . import stop
+    from .ledger import Timer
+
+    payload = read_payload(sys.stdin.read())
+    with Timer() as timer:
+        outcome = stop.evaluate(args.root, args.policy)
+
+    if outcome.ran:
+        _record(
+            outcome.verdict,
+            Run("stop", outcome.analysed, timer.elapsed_ms, outcome.root),
+            Policy.load(args.policy),
+        )
+
+    response = stop.decision(
+        outcome, advisory=args.advisory, looped=stop.suppressed(payload)
+    )
+    if response:
+        print(json.dumps(response))
+    elif outcome.reason:
+        # Not a finding and not silence: say why nothing was checked, on stderr
+        # so it cannot be mistaken for the hook's JSON response.
+        print(f"yieldpoint: {outcome.reason}", file=sys.stderr)
+    return EXIT_OK
 
 
 def _allow_notice(verdict, change, advisory: bool) -> str:

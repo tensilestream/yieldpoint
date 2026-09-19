@@ -111,6 +111,9 @@ def _add_setup_commands(sub) -> None:
         "--enforce", action="store_true", help="hook blocks instead of only reporting")
     init_cmd.add_argument("--no-hook", action="store_true", help="MCP only, no enforcement")
     init_cmd.add_argument(
+        "--no-git", action="store_true",
+        help="do not install the .git/hooks/pre-commit gate")
+    init_cmd.add_argument(
         "--no-report", action="store_true",
         help="do not refresh .yieldpoint/report.html at the end of each turn")
     init_cmd.set_defaults(handler=init)
@@ -169,6 +172,34 @@ def _greet(args) -> None:
     show(args.command or "")
 
 
+def _add_gate_commands(sub) -> None:
+    """The commands a gate runs: the hook, and the two audits beside it."""
+    hook_cmd = sub.add_parser("hook", help="run as a Claude Code hook (reads stdin)")
+    hook_cmd.add_argument("--policy", help="path to .yieldpoint.json")
+    hook_cmd.add_argument(
+        "--stop", action="store_true",
+        help="run as a Stop hook: verify the whole working tree, whatever edited it")
+    hook_cmd.add_argument("--root", default=".", help="repository directory (with --stop)")
+    hook_cmd.add_argument(
+        "--json-decision", action="store_true",
+        help="emit a structured permission decision instead of exiting non-zero")
+    hook_cmd.add_argument(
+        "--advisory", action="store_true",
+        help="report findings but never deny an edit")
+    hook_cmd.set_defaults(handler=hook_command)
+
+    scan_cmd = sub.add_parser("scan", help="audit a repository as it stands")
+    scan_cmd.add_argument("path", nargs="?", default=".", help="directory or file to audit")
+    scan_cmd.add_argument("--policy", help="path to .yieldpoint.json")
+    scan_cmd.add_argument("--json", action="store_true", help="emit the verdict as JSON")
+    scan_cmd.add_argument("--rule", action="append", help="only report this rule (repeatable)")
+    scan_cmd.set_defaults(handler=scan_command)
+
+    linters_cmd = sub.add_parser("linters", help="list the linters this build can run")
+    linters_cmd.add_argument("--policy", help="path to .yieldpoint.json")
+    linters_cmd.set_defaults(handler=linters_command)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yieldpoint",
@@ -192,26 +223,7 @@ def _parser() -> argparse.ArgumentParser:
     _add_reporting_commands(sub)
 
 
-    hook_cmd = sub.add_parser("hook", help="run as a Claude Code PreToolUse hook (reads stdin)")
-    hook_cmd.add_argument("--policy", help="path to .yieldpoint.json")
-    hook_cmd.add_argument(
-        "--json-decision", action="store_true",
-        help="emit a structured permission decision instead of exiting non-zero")
-    hook_cmd.add_argument(
-        "--advisory", action="store_true",
-        help="report findings but never deny an edit")
-    hook_cmd.set_defaults(handler=hook_command)
-
-    scan_cmd = sub.add_parser("scan", help="audit a repository as it stands")
-    scan_cmd.add_argument("path", nargs="?", default=".", help="directory or file to audit")
-    scan_cmd.add_argument("--policy", help="path to .yieldpoint.json")
-    scan_cmd.add_argument("--json", action="store_true", help="emit the verdict as JSON")
-    scan_cmd.add_argument("--rule", action="append", help="only report this rule (repeatable)")
-    scan_cmd.set_defaults(handler=scan_command)
-
-    linters_cmd = sub.add_parser("linters", help="list the linters this build can run")
-    linters_cmd.add_argument("--policy", help="path to .yieldpoint.json")
-    linters_cmd.set_defaults(handler=linters_command)
+    _add_gate_commands(sub)
 
     _add_setup_commands(sub)
 

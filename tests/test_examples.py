@@ -8,13 +8,22 @@ least parsed and checked for the imports they claim to demonstrate.
 from __future__ import annotations
 
 import ast
+import os
 import re
 import subprocess
 import sys
 import unittest
 from pathlib import Path
 
-EXAMPLES = Path(__file__).resolve().parent.parent / "examples"
+ROOT = Path(__file__).resolve().parent.parent
+EXAMPLES = ROOT / "examples"
+
+#: Python puts the *script's* directory on ``sys.path``, not the working
+#: directory — so an example run from ``examples/`` cannot import Yieldpoint
+#: unless it is installed. The suite is meant to pass against a bare
+#: interpreter with nothing installed, so the checkout is put on the path here.
+ENV = {**os.environ, "PYTHONPATH": os.pathsep.join(
+    [str(ROOT), os.environ.get("PYTHONPATH", "")]).rstrip(os.pathsep)}
 
 #: Examples that run standalone, with no third-party framework installed.
 RUNNABLE = ("plain_loop.py", "eval_harness.py", "langgraph_fanout.py",
@@ -34,7 +43,7 @@ class TestRunnableExamples(unittest.TestCase):
                 completed = subprocess.run(
                     [sys.executable, str(EXAMPLES / name)],
                     capture_output=True, text=True, timeout=180,
-                    cwd=str(EXAMPLES.parent),
+                    cwd=str(ROOT), env=ENV,
                 )
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 self.assertTrue(completed.stdout.strip(), "produced no output")
@@ -43,7 +52,8 @@ class TestRunnableExamples(unittest.TestCase):
         """Its whole point is that isolated verification gets this wrong."""
         completed = subprocess.run(
             [sys.executable, str(EXAMPLES / "langgraph_fanout.py")],
-            capture_output=True, text=True, timeout=180, cwd=str(EXAMPLES.parent),
+            capture_output=True, text=True, timeout=180,
+            cwd=str(ROOT), env=ENV,
         )
         isolated, pooled = completed.stdout.split("pooled change set:")
         # Asserting on the verdict, not the wording: the message for a moved-out
@@ -55,9 +65,12 @@ class TestRunnableExamples(unittest.TestCase):
 
 class TestIllustrativeExamples(unittest.TestCase):
     def test_they_parse(self):
-        for path in EXAMPLES.glob("*.py"):
+        paths = sorted(EXAMPLES.glob("*.py"))
+        self.assertTrue(paths, "no examples found — the glob, not the examples, broke")
+        for path in paths:
             with self.subTest(path.name):
-                ast.parse(path.read_text(encoding="utf-8"))
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                self.assertTrue(tree.body, f"{path.name} parses to nothing")
 
     def test_they_import_only_lazily(self):
         """A framework import at module level would break `python -c 'import'`."""

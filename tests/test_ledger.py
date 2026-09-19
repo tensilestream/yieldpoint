@@ -223,6 +223,9 @@ class TestATestRunRecordsNothing(unittest.TestCase):
             self.assertFalse(ledger.under_test())
             self.assertTrue(ledger.enabled(Policy()))
 
+    # Each class documents one direction of the same switch; merging them would
+    # hide which override wins where.
+    # yieldpoint: allow duplicate_implementation - deliberate mirror of the off switch
     def test_it_can_be_forced_back_on(self):
         import os
         from unittest import mock

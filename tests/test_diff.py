@@ -25,6 +25,17 @@ BEFORE = (
     '    assert inv.total == 42\n    assert inv.currency == "USD"\n'
 )
 
+# A file that exists on only one side. The two are the same patch read from
+# opposite ends, so they live here as data rather than as two copied bodies.
+ADDED = (
+    "diff --git a/new.py b/new.py\nnew file mode 100644\n"
+    "--- /dev/null\n+++ b/new.py\n@@ -0,0 +1,2 @@\n+def test_x():\n+    assert a == 1\n"
+)
+DELETED = (
+    "diff --git a/old.py b/old.py\ndeleted file mode 100644\n"
+    "--- a/old.py\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-def test_x():\n-    assert a == 1\n"
+)
+
 
 class TestParsing(unittest.TestCase):
     def test_modified_file(self):
@@ -35,20 +46,13 @@ class TestParsing(unittest.TestCase):
         self.assertEqual(len(changes[0].hunks), 1)
 
     def test_added_file(self):
-        text = (
-            "diff --git a/new.py b/new.py\nnew file mode 100644\n"
-            "--- /dev/null\n+++ b/new.py\n@@ -0,0 +1,2 @@\n+def test_x():\n+    assert a == 1\n"
-        )
-        change = parse(text)[0]
+        change = parse(ADDED)[0]
         self.assertTrue(change.added)
         self.assertIsNone(change.old_path)
+        self.assertEqual(change.new_path, "new.py")
 
     def test_deleted_file(self):
-        text = (
-            "diff --git a/old.py b/old.py\ndeleted file mode 100644\n"
-            "--- a/old.py\n+++ /dev/null\n@@ -1,2 +0,0 @@\n-def test_x():\n-    assert a == 1\n"
-        )
-        change = parse(text)[0]
+        change = parse(DELETED)[0]
         self.assertTrue(change.deleted)
         self.assertIsNone(change.new_path)
 

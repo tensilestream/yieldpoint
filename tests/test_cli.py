@@ -3,6 +3,7 @@
 import io
 import json
 import os
+import subprocess
 import tempfile
 import unittest
 
@@ -12,6 +13,10 @@ from pathlib import Path
 
 from yieldpoint.mcp.clients import command_line
 from yieldpoint.cli import EXIT_UNVERIFIED, EXIT_ERROR, EXIT_FINDINGS, EXIT_OK, main
+
+
+def _git(*args, cwd):
+    return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
 
 BEFORE = 'def test_total():\n    assert inv.total == 42\n'
 WEAKER = 'def test_total():\n    assert inv.total is not None\n'
@@ -168,6 +173,55 @@ class TestInstallHook(CliCase):
         self.assertIn("--advisory", settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"])
 
 
+class TestTheStopGateIsAlwaysRegistered(CliCase):
+    """An install without it enforces nothing against a shell-editing agent.
+
+    The per-edit hook can only verify tool calls it can replay. Registering it
+    alone produces a settings file that looks complete and lets every
+    ``sed``-written weakening through, which is the failure this class exists to
+    keep from coming back.
+    """
+
+    def _stop_commands(self):
+        settings = json.loads((self.root / ".claude/settings.json").read_text())
+        return [h["command"] for e in settings["hooks"]["Stop"] for h in e["hooks"]]
+
+    def test_install_hook_registers_it(self):
+        run(["install-hook"])
+        self.assertTrue(any("--stop" in c for c in self._stop_commands()))
+
+    def test_it_carries_the_same_enforcement_mode_as_the_edit_gate(self):
+        run(["install-hook", "--advisory"])
+        gate = next(c for c in self._stop_commands() if "--stop" in c)
+        self.assertIn("--advisory", gate)
+
+    def test_enforcing_install_leaves_it_enforcing(self):
+        run(["install-hook"])
+        gate = next(c for c in self._stop_commands() if "--stop" in c)
+        self.assertNotIn("--advisory", gate)
+
+    def test_the_report_still_runs_beside_it(self):
+        run(["install-hook"])
+        commands = self._stop_commands()
+        self.assertTrue(any(c.endswith("report") for c in commands))
+        self.assertEqual(len(commands), 2)
+
+    def test_no_report_keeps_the_gate(self):
+        """The report is optional. The gate is not."""
+        from yieldpoint.install import _verify_each_turn
+
+        hooks = {}
+        _verify_each_turn(hooks, advisory=False, report=False)
+        commands = [h["command"] for e in hooks["Stop"] for h in e["hooks"]]
+        self.assertEqual(len(commands), 1)
+        self.assertIn("--stop", commands[0])
+
+    def test_reinstalling_does_not_duplicate_it(self):
+        run(["install-hook"])
+        run(["install-hook"])
+        self.assertEqual(len(self._stop_commands()), 2)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -188,6 +242,18 @@ class TestInit(CliCase):
         self.assertTrue((root / ".mcp.json").is_file())
         self.assertTrue((root / ".claude" / "settings.json").is_file())
         self.assertIn("advisory", out)
+
+    def test_it_registers_all_three_doors(self):
+        """Config and MCP explain; these three are what actually enforce."""
+        root = self._repo()
+        _git("init", "-q", ".", cwd=root)
+        run(["init", "--root", str(root)])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        pre = [h["command"] for e in settings["hooks"]["PreToolUse"] for h in e["hooks"]]
+        stop = [h["command"] for e in settings["hooks"]["Stop"] for h in e["hooks"]]
+        self.assertTrue(any("hook" in c for c in pre), "per-edit gate")
+        self.assertTrue(any("--stop" in c for c in stop), "turn gate")
+        self.assertTrue((root / ".git" / "hooks" / "pre-commit").is_file(), "commit gate")
 
     def test_the_hook_is_advisory_unless_enforce_is_given(self):
         root = self._repo()
@@ -249,10 +315,22 @@ class TestTurnEndReport(CliCase):
         self.assertTrue(any("report" in c for c in commands))
 
     def test_it_can_be_declined(self):
+        """--no-report drops the report. It does not drop the gate beside it.
+
+        This assertion used to be `Stop not in hooks`, from when the report was
+        the only thing registered there. The verification gate lives on Stop
+        now, and letting a cosmetic flag switch off enforcement is how a tool
+        ends up installed and silent.
+        """
         root = self._repo()
         run(["init", "--root", str(root), "--no-report"])
         settings = json.loads((root / ".claude" / "settings.json").read_text())
-        self.assertNotIn("Stop", settings["hooks"])
+        commands = [
+            h["command"]
+            for entry in settings["hooks"]["Stop"] for h in entry["hooks"]
+        ]
+        self.assertFalse([c for c in commands if c.endswith("report")])
+        self.assertTrue([c for c in commands if "--stop" in c], "the gate stays")
 
     def test_running_init_twice_does_not_duplicate_the_stop_hook(self):
         root = self._repo()

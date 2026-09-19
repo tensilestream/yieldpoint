@@ -96,12 +96,17 @@ class TestTheCliStaysParseable(unittest.TestCase):
         )
 
     def test_json_output_parses(self):
+        """--json makes stdout a document, not a report: keys a pipeline reads."""
         import json
 
         done = self._run(["check", "--path", "t.py",
                           "--before", ".yieldpoint.json",
                           "--after", ".yieldpoint.json", "--json"])
-        json.loads(done.stdout)
+        parsed = json.loads(done.stdout)
+        self.assertEqual(parsed["checked"], ["t.py"])
+        self.assertEqual(parsed["status"], "pass")
+        self.assertIn("schema_version", parsed)
+        self.assertEqual(parsed["findings"], [])
 
     def test_stdout_never_carries_escape_codes_when_piped(self):
         done = self._run(["review"])

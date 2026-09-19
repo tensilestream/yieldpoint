@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -66,6 +68,27 @@ class TestDoctorFindsSilentFailures(unittest.TestCase):
         check = self._check("escalate paths")
         self.assertEqual(check.state, doctor.WARN)
         self.assertIn("protects nothing", check.fix)
+
+    def test_a_command_on_path_that_cannot_run_is_a_failure(self):
+        """An editable install whose source moved: present, and broken.
+
+        `which` finds the console script the move left behind, so a check that
+        asked only that would report the install healthy while every hook
+        invocation raised ModuleNotFoundError.
+        """
+        with mock.patch.object(doctor.shutil, "which",
+                               return_value="/nonexistent/bin/yieldpoint"):
+            check = self._check("command")
+        self.assertEqual(check.state, doctor.FAIL)
+        self.assertIn("does not run", check.detail)
+        self.assertIn("pip install -e .", check.fix)
+
+    def test_a_command_that_is_absent_is_only_a_warning(self):
+        """Not installed is a different problem from installed wrong."""
+        with mock.patch.object(doctor.shutil, "which", return_value=None):
+            check = self._check("command")
+        self.assertEqual(check.state, doctor.WARN)
+        self.assertIn("not on PATH", check.detail)
 
     def test_a_missing_hook_says_nothing_is_enforcing(self):
         check = self._check("hook")
@@ -171,10 +194,6 @@ class TestBacktest(unittest.TestCase):
         self.assertIn("cannot tell you which findings were", text)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestHookFiredCheck(unittest.TestCase):
     """Installed is not the same as running.
 
@@ -197,9 +216,15 @@ class TestHookFiredCheck(unittest.TestCase):
             {"test_contract": {"protected_patterns": ["**/test_*.py"]}}))
         settings = self.root / ".claude"
         settings.mkdir()
+        # The interpreter form of the hook, not the `yieldpoint` console script:
+        # these tests assert what the check reports *once the command resolves*,
+        # and the bare name only resolves where the package has been installed.
+        # Hard-coding it would make this pass or fail on the environment rather
+        # than on the behaviour. The command that cannot run has its own test.
+        command = f"{shlex.quote(sys.executable)} -m yieldpoint.cli hook --advisory"
         (settings / "settings.json").write_text(json.dumps({
             "hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [
-                {"type": "command", "command": "yieldpoint hook --advisory"}]}]}
+                {"type": "command", "command": command}]}]}
         }))
 
     def tearDown(self):
@@ -307,3 +332,7 @@ class TestHtmlReport(unittest.TestCase):
         page = render(Page("<script>x</script>", Summary(verdicts=1),
                            scope="<b>s</b>"))
         self.assertNotIn("<script>", page)
+
+
+if __name__ == "__main__":
+    unittest.main()

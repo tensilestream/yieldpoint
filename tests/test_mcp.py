@@ -161,8 +161,10 @@ class TestResilience(unittest.TestCase):
         message = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                               "params": {"name": "yieldpoint_verify_change", "arguments": WEAKENED}})
         serve(io.StringIO(message + "\n"), out, POLICY)
-        for line in out.getvalue().splitlines():
-            json.loads(line)  # raises if anything non-protocol was written
+        lines = out.getvalue().splitlines()
+        self.assertEqual(len(lines), 1, "one call, one line: anything else is a stray print")
+        for line in lines:
+            self.assertEqual(json.loads(line)["jsonrpc"], "2.0")
 
     def test_blank_lines_are_ignored(self):
         out = io.StringIO()
