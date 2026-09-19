@@ -85,6 +85,14 @@ def _emit(verdict, args, policy, deletions: tuple = ()) -> int:
     return _exit_for(verdict)
 
 
+def _use_cache_for(root) -> None:
+    """Store analysis beside the repository, not beside the shell's cwd."""
+    from .core.locate import repository
+    from .core.parsecache import configure
+
+    configure(repository(root))
+
+
 def review_command(args) -> int:
     """Verify whatever is not committed yet. The zero-argument entry point.
 
@@ -100,6 +108,7 @@ def review_command(args) -> int:
         print(f"aegisflow: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    _use_cache_for(args.root)
     diff = uncommitted(args.root, staged=args.staged, against=args.against or "")
     if not diff.ok:
         # Nothing to check is not a failure, and neither is "not a git
@@ -112,30 +121,32 @@ def review_command(args) -> int:
     with Timer() as timer:
         verdict = verify_diff(diff.text, root=diff.root, policy=policy)
     _record(verdict, Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
-    return _emit(verdict, args, policy)
+    code = _emit(verdict, args, policy)
+    if not args.json:
+        _print_pace(verdict, diff, policy)
+    return code
 
 
-def stats_command(args) -> int:
-    """Report what the ledger holds. Reads only; records nothing."""
-    from . import ledger
-    from .report import render, to_dict
-    from .stats import summarise
+def _print_pace(verdict, diff, policy: Policy) -> None:
+    """Say whether this is a good place to stop.
 
-    try:
-        policy = Policy.load(args.policy)
-    except (OSError, ValueError) as exc:
-        print(f"aegisflow: {exc}", file=sys.stderr)
-        return EXIT_ERROR
+    Printed after the findings because it answers a different question: not
+    "what is wrong" but "should this land now". An agent working for hours
+    needs the second one every turn, while stopping is still cheap.
+    """
+    from .harness.pacing import bar, pace
 
-    path = ledger.path_for(policy, args.root)
-    summary = summarise(ledger.load(path))
-    if args.json:
-        print(json.dumps(to_dict(summary), indent=2))
-    else:
-        print(render(summary))
-        if summary.verdicts:
-            print(f"\n  recorded in {path}")
-    return EXIT_OK
+    added = sum(
+        1 for line in diff.text.splitlines()
+        if line.startswith("+") and not line.startswith("+++")
+    )
+    files = len({
+        line.split()[-1] for line in diff.text.splitlines()
+        if line.startswith("+++")
+    })
+    decision = pace(verdict, added, files, policy.structure.max_change_lines)
+    print(f"\n{decision.value.upper():<10} {bar(decision)}")
+    print(f"           {decision.reason}")
 
 
 def check_diff(args) -> int:
@@ -179,8 +190,7 @@ def hook_command(args) -> int:
         return EXIT_OK
 
     if args.advisory or not blocks(verdict):
-        if verdict.findings:
-            print(render(verdict, change), file=sys.stderr)
+        print(_allow_notice(verdict, change, args.advisory), file=sys.stderr, end="")
         for note in verdict.skipped:
             print(f"aegisflow: not evaluated — {note}", file=sys.stderr)
         return EXIT_OK
@@ -188,6 +198,21 @@ def hook_command(args) -> int:
     # Exit code 2 is the blocking signal; stderr is fed back to the agent.
     print(render(verdict, change), file=sys.stderr)
     return EXIT_ERROR
+
+
+def _allow_notice(verdict, change, advisory: bool) -> str:
+    """What to say on an edit that was permitted.
+
+    In advisory mode the full report is right — nothing is being enforced, so
+    the point is to show what would have been. Otherwise only the deferred
+    findings are worth mentioning, because the rest were genuinely fine.
+    """
+    from .hook import render_deferred
+
+    if advisory and verdict.findings:
+        return render(verdict, change) + "\n"
+    note = render_deferred(verdict)
+    return note + "\n" if note else ""
 
 
 def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> int:
@@ -301,11 +326,47 @@ def _running_total(policy: Policy, root: str = ".") -> str:
     return running_line(totals(ledger.path_for(policy, root)))
 
 
+def _dead_patterns(policy: Policy, root: str = ".") -> None:
+    """Warn about configured paths that no longer match anything."""
+    from .scan import unmatched_patterns
+
+    patterns = getattr(policy.routing, "escalate_paths", ())
+    for pattern in unmatched_patterns(root, patterns):
+        print(
+            f"policy warning: routing.escalate_paths pattern {pattern!r} matches "
+            "no file in this repository; it is protecting nothing",
+            file=sys.stderr,
+        )
+
+
+#: Skips worth naming one by one. Anything else is a file nobody expected a
+#: rule to apply to, and listing those pushes the findings off the screen.
+_NOTABLE_SKIPS = ("unparseable", "could not", "no exact analyser",
+                  "lexically", "generated code", "binary")
+
+
+def _print_skips(notes) -> None:
+    """Name the interesting skips; count the rest.
+
+    "README.md: no rule applies" is true and useless — of course no rule
+    applies to a README. A file that *could* have been analysed and was not is
+    worth a line each; the rest are worth one line in total, so the fact stays
+    visible without burying what the reader came for.
+    """
+    notable = [n for n in notes if any(k in n for k in _NOTABLE_SKIPS)]
+    for note in notable:
+        print(f"skipped: {note}", file=sys.stderr)
+    rest = len(notes) - len(notable)
+    if rest:
+        print(f"skipped: {rest} file(s) no rule applies to (docs, config)",
+              file=sys.stderr)
+
+
 def _print_human(verdict: Verdict, policy: Policy) -> None:
     for warning in policy.warnings:
         print(f"policy warning: {warning}", file=sys.stderr)
-    for note in verdict.skipped:
-        print(f"skipped: {note}", file=sys.stderr)
+    _dead_patterns(policy)
+    _print_skips(verdict.skipped)
 
     if verdict.status is Status.PASS:
         if verdict.checked:

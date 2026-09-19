@@ -8,6 +8,7 @@ least parsed and checked for the imports they claim to demonstrate.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 import unittest
@@ -45,8 +46,11 @@ class TestRunnableExamples(unittest.TestCase):
             capture_output=True, text=True, timeout=180, cwd=str(EXAMPLES.parent),
         )
         isolated, pooled = completed.stdout.split("pooled change set:")
-        self.assertIn("was removed", isolated, "isolated view should flag the move")
-        self.assertNotIn("was removed", pooled, "pooled view should not")
+        # Asserting on the verdict, not the wording: the message for a moved-out
+        # test has already been improved once, and a test that breaks on phrasing
+        # teaches people to stop improving it.
+        self.assertIn("repair", isolated, "isolated view should flag the move")
+        self.assertNotIn("repair", pooled, "pooled view should not")
 
 
 class TestIllustrativeExamples(unittest.TestCase):
@@ -80,3 +84,32 @@ class TestIllustrativeExamples(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReadmeRendersEverywhere(unittest.TestCase):
+    """The README is also the PyPI project page, and PyPI renders no diagrams.
+
+    Mermaid blocks show as raw source there, and in most editor previews. A
+    diagram nobody can see is worse than no diagram: it occupies the place
+    where the explanation should have been.
+    """
+
+    README = EXAMPLES.parent / "README.md"
+
+    def test_it_contains_no_mermaid(self):
+        self.assertNotIn(
+            "```mermaid", self.README.read_text(encoding="utf-8"),
+            "PyPI and most editor previews render mermaid as raw text; "
+            "use a ```text diagram instead",
+        )
+
+    def test_every_fence_is_closed(self):
+        fences = re.findall(r"^```", self.README.read_text(encoding="utf-8"), re.M)
+        self.assertEqual(len(fences) % 2, 0, "an unclosed code fence")
+
+    def test_diagrams_fit_a_terminal(self):
+        text = self.README.read_text(encoding="utf-8")
+        for index, block in enumerate(re.findall(r"```text\n(.*?)```", text, re.S), 1):
+            with self.subTest(diagram=index):
+                widest = max((len(line) for line in block.splitlines()), default=0)
+                self.assertLessEqual(widest, 96, "wraps in a narrow viewer")

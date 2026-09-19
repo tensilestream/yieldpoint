@@ -79,8 +79,29 @@ class TestSwitchingItOff(unittest.TestCase):
     def test_policy_disables_it(self):
         self.assertFalse(ledger.enabled(Policy.load({"metrics": {"enabled": False}})))
 
+    def test_policy_still_wins_when_metrics_are_forced_on(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1"}):
+            # A forced-on switch is about context, not about consent: a project
+            # that turned recording off in its committed policy stays off.
+            self.assertFalse(
+                ledger.enabled(Policy.load({"metrics": {"enabled": False}})))
+
     def test_it_is_on_by_default(self):
-        self.assertTrue(ledger.enabled(Policy()))
+        """Outside a test run, with nothing configured, it records.
+
+        Patched on ``recording``, not on ``ledger``: the name is re-exported
+        from there for callers' convenience, and ``enabled`` resolves it in its
+        own module. Patching the re-export changes nothing.
+        """
+        from unittest import mock
+
+        from aegisflow import recording
+
+        with mock.patch.object(recording, "under_test", return_value=False):
+            self.assertTrue(ledger.enabled(Policy()))
 
     def test_the_environment_variable_wins(self):
         import os
@@ -167,3 +188,58 @@ class TestItDoesNotPolluteTheRepository(unittest.TestCase):
             ledger.record(ledger.observe(_verdict(), "hook"),
                           root / ".aegisflow" / "metrics.jsonl")
             self.assertEqual((root / ".gitignore").read_text(), "__pycache__/\n")
+
+
+class TestATestRunRecordsNothing(unittest.TestCase):
+    """A project's own suite must not write into its own metrics.
+
+    The failure is silent: the numbers simply drift, running the suite twice
+    changes them, and running it in CI corrupts them for everyone. Nothing
+    says why, which is what makes it worth detecting rather than leaving each
+    project to remember.
+    """
+
+    def test_this_very_suite_is_detected_as_a_test_run(self):
+        self.assertTrue(ledger.under_test())
+
+    def test_and_therefore_recording_is_off(self):
+        self.assertFalse(ledger.enabled(Policy()))
+
+    def test_pytest_is_detected_by_its_own_variable(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "t::x (call)"}):
+            self.assertTrue(ledger.under_test())
+
+    def test_a_real_run_still_records(self):
+        """Detection must not extend to CI actually verifying a change."""
+        import os
+        import sys
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {}, clear=True), \
+             mock.patch.dict(sys.modules, {"__main__": _NotATest()}):
+            self.assertFalse(ledger.under_test())
+            self.assertTrue(ledger.enabled(Policy()))
+
+    def test_it_can_be_forced_back_on(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1"}):
+            self.assertTrue(ledger.enabled(Policy()))
+
+    def test_no_metrics_still_wins_over_forcing_it_on(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1",
+                                          "AEGISFLOW_NO_METRICS": "1"}):
+            self.assertFalse(ledger.enabled(Policy()))
+
+
+class _NotATest:
+    """Stands in for a ``__main__`` that is not a test runner."""
+
+    __spec__ = None

@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
@@ -85,6 +86,12 @@ class Event:
     """Paths analysed, capped. Needed to tell a finding that was fixed from one
     in a file nothing has looked at since."""
 
+    at: int = 0
+    """When this was recorded, in whole seconds since the epoch. Stamped by
+    ``record``, never by ``observe`` — the clock is a surface concern, and a
+    check that reads one is not reproducible (RULES.md section 4). Zero on
+    events written before the field existed."""
+
     run: str = ""
     """Groups every verdict from one orchestrated job. Set by the orchestrator
     through ``AEGISFLOW_RUN_ID``; empty when nobody is coordinating."""
@@ -116,6 +123,7 @@ class Event:
             files_checked=int(data.get("files_checked", 0)),
             files_skipped=int(data.get("files_skipped", 0)),
             duration_ms=int(data.get("duration_ms", 0)),
+            at=int(data.get("at", 0)),
             run=str(data.get("run", "")),
             agent=str(data.get("agent", "")),
             acknowledged=int(data.get("acknowledged", 0)),
@@ -134,7 +142,13 @@ MAX_PATHS = 60
 
 @dataclass(frozen=True)
 class Who:
-    """Which orchestrated run and which worker produced a verdict."""
+    """Which orchestrated run and which worker produced a verdict.
+
+    Field order is part of the contract: ``identity()`` returns ``(run, agent)``
+    and is splatted into this. Inserting a field above them silently rebinds
+    both, which is a bug no type checker catches and no verdict looks wrong
+    from — the attribution is simply wrong afterwards.
+    """
 
     run: str = ""
     agent: str = ""
@@ -190,8 +204,13 @@ def _language(path: str) -> str:
     return suffix.lower() if suffix and suffix != path else "other"
 
 
+def stamp(event: Event) -> Event:
+    """Add the wall-clock time. Separated so ``observe`` stays pure."""
+    return event if event.at else replace(event, at=int(time.time()))
+
+
 def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
-    """Append one event. Returns whether it was written; never raises.
+    """Append one event, stamped with the time. Never raises.
 
     A failure to record must never fail a verification — the verdict is the
     product and the ledger is bookkeeping, so every error here is swallowed.
@@ -199,7 +218,7 @@ def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
     try:
         target = Path(path)
         _prepare(target.parent)
-        line = _fit(event)
+        line = _fit(stamp(event))
         # One atomic append. No read-modify-write anywhere in this path: with
         # many agents writing at once, reading the file in order to rewrite it
         # is how lines get lost.
@@ -305,66 +324,16 @@ def _read(path: Path) -> str:
         return ""
 
 
-@dataclass(frozen=True)
-class Run:
-    """What a surface knows about a verification that the verdict does not."""
-
-    surface: str
-    analysed: int
-    elapsed: int = 0
-    root: str = "."
-
-
-def record_run(verdict, run: Run, policy) -> bool:
-    """Record one verification. The single place every surface goes through.
-
-    Shared rather than repeated per surface: two copies of this drift, and a
-    ledger that counts differently depending on which door was used is worse
-    than no ledger.
-    """
-    if not enabled(policy):
-        return False
-    return record(
-        observe(verdict, run.surface, analysed_chars=run.analysed,
-                duration_ms=run.elapsed),
-        path_for(policy, run.root),
-    )
-
-
-class Timer:
-    """Elapsed milliseconds around a verification, read outside ``core``."""
-
-    def __init__(self) -> None:
-        self._start = 0.0
-        self.elapsed_ms = 0
-
-    def __enter__(self) -> "Timer":
-        self._start = time.perf_counter()
-        return self
-
-    def __exit__(self, *exc) -> bool:
-        self.elapsed_ms = int((time.perf_counter() - self._start) * 1000)
-        return False
-
-
-def enabled(policy) -> bool:
-    """Whether to record, honouring the policy and an environment override.
-
-    ``AEGISFLOW_NO_METRICS`` switches it off without editing a committed file,
-    which is what a CI job or a privacy-conscious user reaches for first.
-    """
-    if os.environ.get("AEGISFLOW_NO_METRICS"):
-        return False
-    return bool(getattr(getattr(policy, "metrics", None), "enabled", True))
-
-
-def path_for(policy, root: str | Path = ".") -> Path:
-    configured = getattr(getattr(policy, "metrics", None), "path", None)
-    return Path(root) / (configured or DEFAULT_PATH)
-
+# Re-exported at the foot of the module so the rest of the package keeps one
+# import. recording.py imports from here, so this has to come after everything
+# it needs — the split is about which file a maintainer opens, not about
+# giving callers two doors.
+from .recording import (  # noqa: E402
+    Run, Timer, enabled, path_for, record_run, under_test,
+)
 
 __all__ = [
-    "Event", "Run", "Who", "Timer", "observe", "record", "record_run", "load",
-    "enabled", "path_for",
+    "Event", "Who", "observe", "record", "stamp", "load",
+    "Run", "Timer", "record_run", "enabled", "under_test", "path_for",
     "DEFAULT_PATH", "CHARS_PER_TOKEN", "MAX_LINE_BYTES", "MAX_BYTES",
 ]

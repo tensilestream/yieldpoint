@@ -52,7 +52,47 @@ class Symbols:
 
 
 def scan(source: str, *, filename: str = "<source>") -> Symbols:
-    """Collect the name information for one module. Never raises."""
+    """Collect the name information for one module. Never raises.
+
+    Cached by a hash of the source, like the other analysers: walking a module
+    for every name it binds and loads is the second largest cost in a scan
+    after parsing, and both are avoided entirely on a file that has not
+    changed. See parsecache.py — and note that ``filename`` is excluded from
+    the key on purpose, so a renamed file is still a hit.
+    """
+    from .parsecache import Codec, through
+
+    return through(
+        source, Codec("symbols", _encode, _decode),
+        compute=lambda: _scan(source, filename),
+    )
+
+
+def _encode(found: "Symbols") -> dict:
+    return {
+        "bound": sorted(found.bound),
+        "loaded": sorted(found.loaded),
+        "definitions": list(found.definitions),
+        "exports": list(found.exports),
+        "star_import": found.star_import,
+        "error": found.error,
+        "lines": found.lines,
+    }
+
+
+def _decode(payload: dict) -> "Symbols":
+    return Symbols(
+        bound=frozenset(payload["bound"]),
+        loaded=frozenset(payload["loaded"]),
+        definitions=tuple(payload["definitions"]),
+        exports=tuple(payload["exports"]),
+        star_import=payload["star_import"],
+        error=payload["error"],
+        lines=dict(payload["lines"]),
+    )
+
+
+def _scan(source: str, filename: str) -> Symbols:
     try:
         tree = ast.parse(source, filename=filename)
     except SyntaxError as exc:

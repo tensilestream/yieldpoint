@@ -33,6 +33,21 @@ UTILITY_MODULE = "utility_module"
 DUPLICATE_IMPLEMENTATION = "duplicate_implementation"
 CHANGE_TOO_LARGE = "change_too_large"
 
+#: Fixture methods that frameworks define as per-class by convention.
+#:
+#: Two classes both writing ``def tearDown(self): self.tmp.cleanup()`` are not
+#: duplicating an implementation — they are each declaring their own teardown,
+#: which is what the framework asks for. "Extract the shared implementation"
+#: here means introducing a base class, and that is a design decision about
+#: test structure rather than a mechanical deduplication. Flagging it trains
+#: people to skim past the rule, which costs more than the duplication does.
+_FIXTURE_NAMES = frozenset({
+    "setup", "teardown", "setupclass", "teardownclass",
+    "setupmodule", "teardownmodule", "setup_method", "teardown_method",
+    "setup_class", "teardown_class", "setup_function", "teardown_function",
+    "asyncsetup", "asyncteardown", "setUpTestData",
+})
+
 #: Names that signal a module with no single responsibility.
 _DUMP_NAMES = frozenset({"utils", "util", "helpers", "helper", "misc", "common", "shared"})
 
@@ -159,6 +174,8 @@ def _duplicates(was, now, path, config) -> list[Finding]:
     for shape, group in _shape_groups(now.functions).items():
         if len(group) < 2 or shape in existing:
             continue
+        if all(_is_fixture(f) for f in group):
+            continue
         first, *rest = group
         for duplicate in rest:
             findings.append(_finding(
@@ -179,6 +196,13 @@ def _shape_groups(functions) -> dict[str, list[FunctionMetrics]]:
         if function.substantial:
             groups.setdefault(function.shape, []).append(function)
     return groups
+
+
+def _is_fixture(function) -> bool:
+    """A framework fixture, which convention requires each class to repeat."""
+    return function.name.replace("_", "").lower() in {
+        name.replace("_", "").lower() for name in _FIXTURE_NAMES
+    }
 
 
 def _shape_pairs(functions) -> set[str]:

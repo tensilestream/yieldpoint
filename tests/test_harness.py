@@ -173,3 +173,63 @@ class TestGate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPolicyDrivenRouting(unittest.TestCase):
+    """Thresholds are configuration, not constants.
+
+    A team that cannot move a number without forking stops using the routing
+    instead, which costs them the whole benefit to avoid one disagreement.
+    """
+
+    def test_a_threshold_can_be_raised(self):
+        change = Change("src/x.py", PLAIN, PLAIN + "\n".join(
+            f"# note {i}" for i in range(20)))
+        self.assertEqual(risk(change).value, "low")
+        self.assertEqual(risk(change, {"routing": {"small_churn": 40}}).value, "trivial")
+
+    def test_escalate_paths_override_shape(self):
+        """The escape hatch for importance the syntax tree cannot see."""
+        change = Change("src/payments/rate.py", PLAIN, DOCSTRING_ONLY)
+        self.assertEqual(risk(change).value, "trivial")
+        escalated = {"routing": {"escalate_paths": ["src/payments/**"]}}
+        self.assertEqual(risk(change, escalated).value, "critical")
+        self.assertEqual(tier(change, escalated).value, "human")
+
+    def test_contradictory_thresholds_are_rejected_not_applied(self):
+        from aegisflow.core.policy import Policy
+
+        policy = Policy.load({"routing": {"small_churn": 100, "moderate_churn": 5}})
+        self.assertEqual(policy.routing.small_churn, 12, "defaults must stand")
+        self.assertTrue(any("must increase" in w for w in policy.warnings))
+
+    def test_tiers_can_be_named_once_in_the_policy(self):
+        mw = middleware({"routing": {"tiers": {"small": "haiku", "standard": "sonnet"}}})
+        self.assertEqual(mw.model_name(Change("src/x.py", PLAIN, DOCSTRING_ONLY)), "haiku")
+
+
+class TestFailurePolicy(unittest.TestCase):
+    def test_it_fails_open_by_default(self):
+        gate = middleware().before_tool("Edit", {"nonsense": True})
+        self.assertTrue(gate.allowed)
+        self.assertIn("fail_closed=False", gate.reason)
+
+    def test_fail_closed_refuses_and_says_why(self):
+        gate = middleware(fail_closed=True).before_tool("Edit", {"nonsense": True})
+        self.assertFalse(gate.allowed)
+        self.assertIn("could not verify", gate.prescription)
+
+
+class TestDecisionSchema(unittest.TestCase):
+    def test_every_decision_carries_a_version_and_a_certainty(self):
+        from aegisflow.harness.decisions import DECISION_SCHEMA_VERSION
+
+        payload = tier(Change("src/x.py", PLAIN, DOCSTRING_ONLY)).to_dict()
+        self.assertEqual(payload["schema_version"], DECISION_SCHEMA_VERSION)
+        self.assertTrue(payload["certain"])
+
+    def test_the_decision_version_is_pinned(self):
+        """Bumping it is a deliberate act with consumers to update."""
+        from aegisflow.harness.decisions import DECISION_SCHEMA_VERSION
+
+        self.assertEqual(DECISION_SCHEMA_VERSION, 1)

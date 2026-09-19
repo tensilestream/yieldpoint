@@ -23,7 +23,8 @@ The suite is green. Coverage is unchanged — the weaker assertion executes the 
 The linter is silent. Nothing in a normal toolchain reports this, because every tool in it
 grades the code *as it now stands*, and this is a statement about what was **taken away**.
 
-AegisFlow grades the transition. Deterministically, in microseconds, with no model call.
+AegisFlow grades the **transition**. Deterministically, with no model call, and with the
+same answer on every machine.
 
 ```console
 $ aegisflow check --path tests/test_invoice.py --before old.py --after new.py
@@ -35,14 +36,120 @@ REPAIR  1 finding(s)
          original assertion passes. Restore `assert inv.total == Decimal('42.00')`.
 ```
 
+## The vision
+
+Agents that write code are now fast enough that nobody reads everything they produce. The
+missing piece is not a smarter reviewer — it is a **layer of decisions that software can
+act on**, computed rather than asked for.
+
+AegisFlow answers three kinds of question about a change, all without a model call:
+
+```text
+                                    ┌─────────────────────────────┐
+                                ┌──▶│ Risk    Score               │──┐
+                                │   │         trivial .. critical │  │
+  ┌──────────┐   ┌───────────┐  │   └─────────────────────────────┘  │  ┌──────────────┐
+  │ A change │──▶│  Signals  │──┤   ┌─────────────────────────────┐  ├─▶│ Your harness │
+  │ proposed │   │ read from │  ├──▶│ Tier    Choice              │──┤  │  branches on │
+  └──────────┘   │ the syntax│  │   │         none .. human       │  │  │ typed values │
+                 │    tree   │  │   └─────────────────────────────┘  │  └──────────────┘
+                 └───────────┘  │   ┌─────────────────────────────┐  │
+                                └──▶│ Gate    allow / deny        │──┘
+                                    │         + what to restore   │
+                                    └─────────────────────────────┘
+```
+
+Each answer is a typed value with the evidence attached, not a paragraph to re-read. That
+is the whole design: **your code branches on it; nothing has to interpret it.**
+
+| Primitive | Question it answers | Returns |
+|---|---|---|
+| `Score` | Where on an ordered scale? | A level, its rank, and `at_least("high")` |
+| `Choice` | Which one of a fixed set? | One option, plus the options it chose from |
+| `Gate` | Should this proceed? | `True`/`False`, and a prescription when false |
+
+Compose them the way you would any predicate — ask each factor separately, combine in your
+own code:
+
+```python
+from aegisflow.harness import middleware, Change
+
+mw = middleware(policy=".aegisflow.json")
+facts = mw.assess(Change(path, before, after))       # one parse, all three answers
+
+if facts["risk"]["value"] == "critical":
+    escalate()
+elif facts["tier"]["value"] == "none":
+    apply_directly()                                  # no model call at all
+else:
+    call_model(mw.model_name(change))
+```
+
+**What it will not do.** These read the *shape* of a change, never its meaning. Where a
+rule cannot answer honestly it returns `unknown` rather than a plausible default, so your
+harness falls back to a model instead of acting on a guess.
+
+## Where it goes in the loop
+
+Three insertion points, saving three different things:
+
+```text
+      Task
+       │
+       ▼
+  ╔═══════════════════════╗  tier: human
+  ║ 1. BEFORE THE MODEL   ║──────────────────────▶ Ask a person
+  ║    aegisflow.harness  ║
+  ║    how much model     ║──────────────────────┐ tier: none
+  ║    does this need?    ║                      │ (no model call)
+  ╚═══════════════════════╝                      │
+       │ tier: small | capable                   │
+       ▼                                         │
+  ┌───────────────────┐                          │
+  │  Call the model   │◀──────────┐              │
+  └───────────────────┘           │              │
+       │                          │ deny +       │
+       ▼                          │ prescription │
+  ╔═══════════════════════╗       │              │
+  ║ 2. BEFORE THE TOOL    ║───────┘              │
+  ║    hook / middleware  ║                      │
+  ║    does this edit     ║                      │
+  ║    weaken the suite?  ║                      │
+  ╚═══════════════════════╝                      │
+       │ allow                                   │
+       ▼                                         │
+  ┌───────────────────┐                          │
+  │  Apply the edit   │◀─────────────────────────┘
+  └───────────────────┘
+       │
+       ▼
+  ╔═══════════════════════╗  findings
+  ║ 3. BEFORE THE MERGE   ║────────────▶ back to the model
+  ║    CI / pre-commit    ║
+  ║    the whole change   ║────────────▶ Merge
+  ╚═══════════════════════╝  clean
+```
+
+| Point | Mechanism | What it saves |
+|---|---|---|
+| **Before the model** | `harness.middleware` | Sending a docstring fix to a frontier model |
+| **Before the tool** | hook, `before_tool` | The test run, the failure trace, the model's reasoning about it, and the retry |
+| **Before the merge** | CI, pre-commit, LangGraph node | A weakened suite reaching main, where nothing else will find it |
+
+Point 2 is the one that matters most, and it is the one an MCP tool cannot do — an agent
+chooses whether to call a tool, and an agent about to weaken a test does not ask.
+
 ## Contents
 
+- [The vision](#the-vision) · [Where it goes in the loop](#where-it-goes-in-the-loop)
 - [Install](#install) · [Quick start](#quick-start) — two commands
 - [`aegisflow review`](#aegisflow-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
 - [What it checks](#what-it-checks) · [Configuration](#configuration)
 - [Routing and gating](#routing-and-gating--decisions-instead-of-round-trips) · [Fan-out and long sessions](#fan-out-and-long-running-sessions)
 - [Examples](./examples/)
+- [Running it in an organisation](#running-it-in-an-organisation) · [Speed](#speed-a-content-addressed-index)
+- [Performance](#performance--run-the-benchmark-dont-trust-the-readme)
 - [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--aegisflow-stats)
 - [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
 - [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
@@ -78,6 +185,12 @@ Two commands. The first sets everything up; the second tells you what you alread
 aegisflow init         # config + MCP server + editor hook, in one go
 aegisflow review       # check everything you have changed but not committed
 ```
+
+> **Restart your editor after `init`.** Hooks and MCP servers are read when a session
+> starts, so nothing you install is active in the session you install it from — and that
+> looks exactly like it working: no output, no error, every edit allowed. `aegisflow doctor`
+> reports whether the hook has actually seen an edit, which is the only way to tell those
+> two states apart. `aegisflow review` works immediately, with no restart.
 
 `init` writes three files and backs up anything it touches:
 
@@ -376,6 +489,42 @@ Also available in-session as the `aegis_assess` MCP tool.
 
 ---
 
+## Pacing a long-running agent
+
+`change_too_large` is a true finding that arrives too late to act on: by the time it
+fires, splitting means unpicking thousands of lines. An agent working for hours needs the
+same judgement one turn at a time, so `aegisflow review` and `aegis_review` end with:
+
+```console
+WRAP-UP    [################........] 820/1,200 lines
+           820 of 1,200 lines used (68%). Finish the current piece, then commit
+           before starting anything new
+```
+
+| | Meaning |
+|---|---|
+| `continue` | Room to keep going |
+| `wrap-up` | Past the commit threshold — finish the current piece, then commit |
+| `overdue` | Past the limit — finish what you are on, and start nothing new until you have |
+| `fix-first` | Correctness is broken; worth attention before the next turn builds on it |
+
+**None of these is an instruction to stop where you are.** Nothing in pacing denies an
+edit, fails a command, or changes an exit code — it is a `Choice`, not a `Gate`, and the
+type carries the guarantee. Interrupting an agent halfway through a function to enforce a
+line budget leaves the repository in a worse state than letting it finish: the limit is
+about what a human can review, and half-written code is not reviewable at any length. So
+the advice is always phrased against the **next natural boundary**; the urgency grows with
+the overrun, the instruction does not change.
+
+Correctness is the one input that does not wait for a boundary, because every further turn
+is built on top of it. Size always can.
+
+**What it cannot tell you is whether the work is finished.** It says the change is large
+enough, and sound enough, that the next stopping point should be a commit. Whether the
+feature actually works stays the agent's judgement — this is one input to it.
+
+---
+
 ## Fan-out and long-running sessions
 
 A verifier for people building agents has to survive how agents are actually run: many
@@ -470,7 +619,24 @@ calls. That needs a benchmark against a real model, it does not exist, and until
 the number will not appear here.
 
 ```sh
-aegisflow stats --json      # the same figures, tiered the same way
+aegisflow stats --since session   # the last 8 hours — what this sitting produced
+aegisflow stats --since today
+aegisflow stats --since 2h        # also 30m, 7d, 1w
+aegisflow stats --run job-42      # one orchestrated run
+aegisflow stats --agent worker-7  # one worker in a fan-out
+aegisflow stats --json            # the same figures, tiered the same way
+```
+
+The ledger is append-only and has no concept of a session, which is right for the file and
+wrong for the question. A session is a window of time, so that is what these select. An
+event recorded before timestamps existed is **excluded** from a period rather than assumed
+recent — assuming would fold old work into today's numbers.
+
+A period it cannot read is an error, not a silent widening:
+
+```console
+$ aegisflow stats --since "last tuesday"
+aegisflow: cannot read the period 'last tuesday'; try 2h, 30m, 7d, or today
 ```
 
 Recording is **local only** — there is no network call anywhere in this package. The file
@@ -478,6 +644,165 @@ lives in `.aegisflow/`, which ignores itself, so it never shows up in a diff. Tu
 with `"metrics": { "enabled": false }` in `.aegisflow.json`, or `AEGISFLOW_NO_METRICS=1`.
 
 ---
+
+## Running it in an organisation
+
+Everything that decides anything is configurable in the committed `.aegisflow.json`, so a
+team tunes it in review rather than forking it.
+
+### Importance is derived, not declared
+
+The obvious design is a list of important paths. It is also the wrong one: somebody writes
+it on day one, a directory is renamed in month four, and the list silently stops matching —
+the worst failure a safety control can have, because it goes on reporting success.
+
+Most of what that list is trying to say is already in the code. **A module that forty
+others import is load-bearing; one nothing imports is not.** AegisFlow builds the import
+graph and ranks each file by how much of the repository depends on it, so the same edit
+gets a different answer depending on where it lands:
+
+```console
+$ # identical one-line docstring edit, no configuration whatsoever
+  aegisflow/core/verdict.py    risk=high      tier=capable   44 modules import this one
+  aegisflow/speech.py          risk=trivial   tier=small     2 modules import this one
+```
+
+```text
+                                                    ┌──────────────────────┐
+                                              yes   │ risk: high           │
+                                           ┌───────▶│ → capable model      │
+  ┌────────────┐   ┌──────────────┐   ┌────┴─────┐  └──────────────────────┘
+  │ Repository │──▶│ Import graph │──▶│  Top 10% │
+  │            │   │  built once, │   │ by blast │  ┌──────────────────────┐
+  └────────────┘   │ cached on    │   │  radius? │  │ risk from shape:     │
+                   │ disk         │   └────┬─────┘─▶│ churn, structure,    │
+                   └──────────────┘        │   no   │ complexity           │
+                      ranked as a          │        └──────────────────────┘
+                      percentile of
+                      THIS repository
+```
+
+The rank is a **percentile, not a count**, which is what makes one default work everywhere:
+a fan-in of ten means something different in a fifty-file service and a five-thousand-file
+monolith. Nothing to tune per repository, or per language.
+
+| Language | How imports are found | Consequence |
+|---|---|---|
+| Python | Parsed | Exact |
+| JS, TS, Java, Kotlin, Go, Rust, C# | `import` / `require` / `use` lines matched | Lexical — may miss a runtime import, so it can inform routing but never block |
+
+Built once and cached on disk against a fingerprint of the tree; **13× faster warm** on a
+12,000-module repository, so a fan-out of workers does not each pay for it.
+
+```jsonc
+{
+  "routing": {
+    "critical_importance": 0.9,  // top 10% by blast radius counts as high risk
+    "use_import_graph": true,    // false makes those rules dormant, not wrong
+    "small_churn": 12,           // below this, a non-structural edit is cosmetic
+    "large_churn": 250,          // above this, nobody reviews it properly
+    "tiers": { "small": "haiku", "standard": "sonnet", "capable": "opus" }
+  }
+}
+```
+
+### What the graph still cannot know
+
+Fan-in measures **blast radius, not importance**. A payments calculation imported by one
+caller is still the most dangerous file you have. For that, `escalate_paths` remains —
+now as an optional override for domain knowledge, rather than the primary mechanism:
+
+```jsonc
+"escalate_paths": ["src/payments/**", "src/auth/**"]
+```
+
+And because a stale path list is worse than none, a pattern that matches no file in the
+repository is **reported, not assumed to be working**:
+
+```console
+policy warning: routing.escalate_paths pattern 'src/payments/**' matches no file
+                in this repository; it is protecting nothing
+```
+
+| Requirement | How it is met |
+|---|---|
+| **Reproducible** | No model, clock, network or environment read in any check. Same input, same bytes out, asserted in tests. |
+| **Tunable without a fork** | Every threshold, severity and tier name is policy. Contradictory thresholds are rejected with a warning, not silently applied. |
+| **Auditable** | Every verdict and decision carries the signals it came from. `aegisflow stats` reports per rule, per agent, per run. |
+| **Versioned** | `schema_version` on the verdict and on decisions, moving independently. Pinned by a test, so a bump is deliberate. |
+| **Fails predictably** | The gate fails **open** by default — an unverifiable change is allowed and reported. `fail_closed=True` inverts it where that is the right trade. |
+| **Attributable** | `AEGISFLOW_RUN_ID` / `AEGISFLOW_AGENT` label each worker in a fan-out. |
+| **Offline** | Zero runtime dependencies. No network call exists anywhere in the package. |
+| **Bounded** | The ledger self-rotates and ignores itself in git; events are capped below the atomic-append size. |
+
+```sh
+aegisflow init --enforce        # hook blocks rather than reports
+AEGISFLOW_NO_METRICS=1          # no local recording at all
+```
+
+## Speed: a content-addressed index
+
+Analysis results are stored in SQLite — from the standard library, so the persistence
+costs no dependency — keyed by a **hash of the source**, not by path. A file that is
+renamed, or replayed at a different commit, is the same input and gets the same answer.
+
+```text
+                                          yes   ┌──────────────────┐
+                                     ┌─────────▶│  Stored result   │
+  ┌─────────────┐   ┌────────────┐   │          │     ~0.03 ms     │
+  │ Source text │──▶│  blake2b   │──▶│ Seen     └──────────────────┘
+  └─────────────┘   │    hash    │   │ this            ▲
+                    └────────────┘   │ exact           │
+                                     │ content?        │ store
+                                     │                 │
+                                     │   no   ┌────────┴─────────┐
+                                     └───────▶│ Parse + measure  │
+                                              │      ~23 ms      │
+                                              └──────────────────┘
+```
+
+Safe because the cached functions are **pure**: a hit is indistinguishable from a
+recomputation, which tests assert across every file in this repository. Every failure
+mode — missing database, corrupt file, a payload written by another version — resolves to
+"compute it". The cache may make things slow; it is not permitted to make them wrong.
+
+| Path | Effect |
+|---|---|
+| `scan` a repository | **~5–10× warm.** Nearly every file is unchanged since the last run |
+| `backtest` | ~1.4×. Historical file contents differ, so many lookups genuinely miss |
+| Verifying one edit | ~1.5×. **See below** |
+
+**Where an index cannot help, and it is worth being plain about it.** Verifying a change
+compares a *before* state with an *after* state. The before state is on disk or in git and
+caches well. The after state is content the agent has just composed — it has never
+existed, so nothing can have stored it. Indexing makes a repository scan dramatically
+cheaper and an interactive edit only somewhat cheaper, and no amount of it changes that.
+
+What did move the interactive path was removing work rather than caching it: measuring a
+module used to walk each function's subtree three times — statements, nesting, complexity
+— each `ast.walk` building a deque. One descent instead, verified to produce identical
+numbers. **A 200-test file went from 272 ms to 74 ms** across that and the cache together.
+
+## Performance — run the benchmark, don't trust the README
+
+```sh
+python scripts/benchmark.py
+```
+
+No figure anywhere in this repository may exceed what that prints. Shapes on any machine:
+
+| Path | Behaviour |
+|---|---|
+| `verify_change`, typical test file | Low single-digit milliseconds |
+| `verify_change`, 400-test file | Superlinear, converging — parsing dominates |
+| The per-turn running total | **Flat** from 100 to 10,000 events; the fold is incremental |
+| `scan`, whole repository | ~3× on a 10-core machine, output byte-identical to serial |
+
+The claim this project *does* make without measurement is architectural, not empirical:
+a prescription is assembled from a verdict rather than generated, so producing it costs
+**zero model calls**. An LLM-as-judge costs one per verdict by construction. That holds
+regardless of hardware — see [`aegisflow stats`](#is-it-actually-helping--aegisflow-stats)
+for how the two are reported separately.
 
 ## How wrong is it? — run the number yourself
 

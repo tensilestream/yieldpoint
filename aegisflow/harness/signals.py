@@ -52,6 +52,16 @@ class Signals:
     exported_names: int | None = None
     imports: int | None = None
     new_dependencies: tuple[str, ...] = ()
+    depended_on_by: int | None = None
+    """How many modules in this repository import this one. ``None`` when no
+    import graph was supplied — not zero, which would read as "nothing needs
+    it" and quietly lower the risk of a load-bearing file."""
+
+    importance: float | None = None
+    """Where that fan-in sits in this repository's own distribution, 0..1.
+    A percentile rather than a count, so one default works for a fifty-file
+    service and a five-thousand-file monolith."""
+
     structural: bool | None = None
     """True when the change alters structure rather than only text — a renamed
     or removed definition, a new import. A docstring edit is not structural."""
@@ -75,13 +85,21 @@ class Signals:
             "max_complexity": self.max_complexity,
             "max_function_lines": self.max_function_lines,
             "file_lines": self.file_lines,
+            "depended_on_by": self.depended_on_by,
+            "importance": self.importance,
             "new_dependencies": list(self.new_dependencies),
             "structural": self.structural,
         }
 
 
-def measure(change: Change, policy: Policy | str | dict | None = None) -> Signals:
-    """Everything decidable about ``change``, in one parse of each side."""
+def measure(change: Change, policy: Policy | str | dict | None = None,
+            graph=None) -> Signals:
+    """Everything decidable about ``change``, in one parse of each side.
+
+    ``graph`` is the repository's import graph, when the caller has one. It is
+    optional because building it reads every file; without it the blast-radius
+    signals stay ``None`` and the rules that use them simply do not fire.
+    """
     resolved = Policy.load(policy)
     before, after = change.before or "", change.after or ""
     added, removed = _churn(before, after)
@@ -100,9 +118,21 @@ def measure(change: Change, policy: Policy | str | dict | None = None) -> Signal
         touches_generated=generated,
         analysable=analysable,
     )
+    base = _with_graph(base, graph, change.path)
     if not analysable or change.after is None:
         return base
     return _with_code(base, before, after, change.path)
+
+
+def _with_graph(base: "Signals", graph, path: str) -> "Signals":
+    """Add how much of the repository depends on this file."""
+    if graph is None:
+        return base
+    return Signals(**{
+        **_as_kwargs(base),
+        "depended_on_by": graph.depends_on_me(path),
+        "importance": graph.importance(path),
+    })
 
 
 def _churn(before: str, after: str) -> tuple[int, int]:

@@ -103,6 +103,11 @@ def verify_change(
     skipped.extend(contract.skipped)
 
     kept, answered = acknowledge.apply(contractrules.deduplicate(findings), after)
+    if not (kept or checked or skipped):
+        # No rule looked at this file, and none said why. Returning PASS here
+        # would be the green banner in its quietest form: a clean result for a
+        # file nothing examined (RULES.md section 5).
+        skipped.append(f"{path}: no rule in this policy applies to this file")
     return Verdict.of(
         kept, checked=checked, skipped=skipped, acknowledged=answered
     )

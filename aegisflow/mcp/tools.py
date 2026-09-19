@@ -210,7 +210,19 @@ def _review(arguments: dict, policy: Policy):
         verdict = verify_diff(diff.text, root=diff.root, policy=policy)
     record_run(verdict, Run("mcp:review", len(diff.text), timer.elapsed_ms,
                             diff.root), policy)
-    return _render(verdict), verdict.to_dict(), False
+
+    # The agent asking this is mid-task; "should I commit now" is the other
+    # half of the answer and it needs no extra work to produce.
+    from ..harness.pacing import pace
+
+    added = sum(1 for line in diff.text.splitlines()
+                if line.startswith("+") and not line.startswith("+++"))
+    files = len({line.split()[-1] for line in diff.text.splitlines()
+                 if line.startswith("+++")})
+    decision = pace(verdict, added, files, policy.structure.max_change_lines)
+    structured = {**verdict.to_dict(), "pace": decision.to_dict()}
+    text = f"{_render(verdict)}\n\npace: {decision.value} — {decision.reason}"
+    return text, structured, False
 
 
 def _scan(arguments: dict, policy: Policy):

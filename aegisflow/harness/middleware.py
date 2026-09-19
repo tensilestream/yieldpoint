@@ -54,9 +54,48 @@ class Middleware:
     escalate_to: str | None = None
     """Where ``human`` routes. ``None`` means the caller handles it."""
 
+    fail_closed: bool = False
+    """What happens when the gate itself cannot decide.
+
+    Default open: a verifier that cannot reconstruct an edit, or crashes,
+    allows it. Blocking someone's work because the checker got confused is
+    worse than not checking, and a gate that fails closed under load gets
+    removed entirely rather than fixed.
+
+    Set True where an unverifiable change is genuinely unacceptable — a
+    release branch, a regulated repository. Then say so out loud, because the
+    failure mode becomes "work stops" instead of "work is unchecked"."""
+
+    root: str = "."
+    """Repository root, used to work out how much depends on each file."""
+
+    root: str = "."
+    """Repository root, used to work out how much of it depends on each file."""
+
+    audit: bool = True
+    """Record every decision to the local ledger, so a routing choice can be
+    explained after the fact. Off by policy or AEGISFLOW_NO_METRICS."""
+
     def before_model(self, change: Change, *, verified: bool | None = None) -> Choice:
         """Which model this work needs. Costs one parse, no round trip."""
-        return tier(change, self.policy, verified=verified)
+        return tier(change, self.policy, verified=verified, graph=self._graph())
+
+    def _graph(self):
+        """The repository's import graph, or None when it is switched off.
+
+        Built once per process and cached on disk between them. Returning None
+        rather than an empty graph matters: an empty one would report that
+        nothing depends on anything, quietly making every file look safe.
+        """
+        routing = getattr(self.policy, "routing", None)
+        if routing is not None and not routing.use_import_graph:
+            return None
+        try:
+            from ..core.importcache import cached
+
+            return cached(self.root)
+        except (OSError, ValueError):
+            return None
 
     def model_name(self, change: Change, *, verified: bool | None = None) -> str | None:
         """Convenience: straight to a model name, or ``None`` to make no call."""
@@ -80,12 +119,12 @@ class Middleware:
 
         change = self._change_from(arguments)
         if change is None:
-            return Gate(
-                question="before_tool", value=True,
-                reason="could not reconstruct the edit from this payload; allowing",
-            )
+            return self._undecidable("could not reconstruct the edit from this payload")
 
-        verdict = verify_change(change.before, change.after, change.path, self.policy)
+        try:
+            verdict = verify_change(change.before, change.after, change.path, self.policy)
+        except Exception as exc:  # the gate must not be why an agent stops
+            return self._undecidable(f"verification failed: {exc}")
         if verdict.status in (Status.PASS, Status.UNVERIFIED):
             return Gate(
                 question="before_tool", value=True,
@@ -103,6 +142,22 @@ class Middleware:
             },
         )
 
+    def _undecidable(self, reason: str) -> Gate:
+        """The gate could not reach an answer. Which way that falls is policy."""
+        return Gate(
+            question="before_tool",
+            value=not self.fail_closed,
+            reason=(
+                f"{reason}; {'refusing' if self.fail_closed else 'allowing'} "
+                f"because fail_closed={self.fail_closed}"
+            ),
+            prescription=(
+                "AegisFlow could not verify this change. Have a person look, or "
+                "set fail_closed=False to let unverifiable changes through."
+                if self.fail_closed else ""
+            ),
+        )
+
     def assess(self, change: Change) -> dict:
         """Every decision about one change, in one parse.
 
@@ -112,7 +167,7 @@ class Middleware:
         """
         from .routing import risk
 
-        found = measure(change, self.policy)
+        found = measure(change, self.policy, self._graph())
         return {
             "signals": found.to_dict(),
             "risk": risk(change, self.policy, signals=found).to_dict(),
@@ -136,13 +191,28 @@ class Middleware:
         return None
 
 
-def middleware(policy=None, tiers: dict[str, str] | None = None,
-               escalate_to: str | None = None) -> Middleware:
-    """Build the middleware. Kept as a function so the class can change shape."""
+def middleware(policy=None, tiers: dict[str, str] | None = None, *,
+               root: str = ".", **options) -> Middleware:
+    """Build the middleware.
+
+    ``tiers`` defaults to the policy's ``routing.tiers`` when it has one, so an
+    organisation names its models once in the committed configuration rather
+    than in every service that builds a harness.
+
+    ``options`` carries ``escalate_to``, ``fail_closed`` and ``audit``; kept as
+    keywords rather than positional parameters so this signature does not grow
+    past the limit the project enforces on everyone else.
+    """
+    from ..core.policy import Policy
+
+    resolved = Policy.load(policy)
     return Middleware(
-        policy=policy,
-        tiers=dict(tiers or DEFAULT_TIERS),
-        escalate_to=escalate_to,
+        policy=resolved,
+        tiers=dict(tiers or resolved.routing.tiers or DEFAULT_TIERS),
+        root=root,
+        escalate_to=options.get("escalate_to"),
+        fail_closed=bool(options.get("fail_closed", False)),
+        audit=bool(options.get("audit", True)),
     )
 
 

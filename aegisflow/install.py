@@ -67,6 +67,22 @@ def install_mcp(args) -> int:
     return EXIT_OK
 
 
+def _refresh_report_each_turn(hooks: dict) -> None:
+    """Regenerate the report when the agent stops.
+
+    The report is one file refreshed in place, so a page left open shows the
+    current state after every turn without accumulating anything. Registered on
+    ``Stop`` rather than on each edit because it reads the whole working tree,
+    and doing that per keystroke would be felt.
+    """
+    entry = {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": command_line("report")}],
+    }
+    stop = hooks.setdefault("Stop", [])
+    stop[:] = [e for e in stop if not _is_aegisflow(e)] + [entry]
+
+
 def _list_clients() -> int:
     """Every client in the table, grouped by whether it can be written."""
     writable = [c for c in CLIENTS if c.writable]
@@ -121,9 +137,16 @@ def install_hook(args) -> int:
     pre = hooks.setdefault("PreToolUse", [])
     pre[:] = [e for e in pre if not _is_aegisflow(e)] + [entry]
 
+    if not getattr(args, "no_report", False):
+        _refresh_report_each_turn(hooks)
+
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     mode = "advisory" if args.advisory else "blocking"
     print(f"registered '{command}' on {HOOK_MATCHER} in {path} ({mode} mode)")
+    if not getattr(args, "no_report", False):
+        print(f"registered '{command_line('report')}' on Stop, so "
+              ".aegisflow/report.html")
+        print("  refreshes at the end of every turn")
     print("Restart Claude Code, or start a new session, for it to take effect.")
     return EXIT_OK
 
@@ -183,12 +206,17 @@ def init(args) -> int:
         hook_args = _HookArgs(
             settings=str(root / ".claude" / "settings.json"),
             advisory=not args.enforce,
+            no_report=bool(getattr(args, "no_report", False)),
         )
         install_hook(hook_args)
 
     print("\nNext:")
-    print("  aegisflow review          # check what you have already changed")
-    print("  restart your editor       # so it picks up the MCP server and hook")
+    print("  1. RESTART your editor, or start a new session.")
+    print("     Hooks and MCP servers are read when a session starts, so")
+    print("     nothing you just installed is active in this one — and that")
+    print("     looks exactly like it working: no output, every edit allowed.")
+    print("  2. aegisflow doctor        # confirms the hook has actually run")
+    print("  3. aegisflow review        # works right now, no restart needed")
     if not args.enforce and not args.no_hook:
         print("\nThe hook is advisory: it reports and never blocks. Re-run with")
         print("  aegisflow init --enforce   once you are happy with what it reports.")
@@ -201,6 +229,7 @@ class _HookArgs:
 
     settings: str
     advisory: bool
+    no_report: bool = False
 
 
 # ------------------------------------------------------------------- helpers

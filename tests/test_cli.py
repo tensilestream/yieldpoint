@@ -223,3 +223,52 @@ class TestInit(CliCase):
         self.assertEqual(code, EXIT_OK)
         self.assertFalse((root / ".claude" / "settings.json").exists())
         self.assertIn("only explain", out)
+
+
+class TestTurnEndReport(CliCase):
+    """One file, refreshed in place at the end of every turn.
+
+    Writing a fresh page per run would accumulate untracked files in somebody's
+    repository; writing to the repository root would put one there at all. So
+    the default lands in the state directory, which ignores itself.
+    """
+
+    def _repo(self):
+        root = self.root / "proj"
+        root.mkdir(exist_ok=True)
+        return root
+
+    def test_init_registers_a_stop_hook_that_refreshes_the_report(self):
+        root = self._repo()
+        run(["init", "--root", str(root)])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        commands = [
+            h["command"]
+            for entry in settings["hooks"]["Stop"] for h in entry["hooks"]
+        ]
+        self.assertTrue(any("report" in c for c in commands))
+
+    def test_it_can_be_declined(self):
+        root = self._repo()
+        run(["init", "--root", str(root), "--no-report"])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        self.assertNotIn("Stop", settings["hooks"])
+
+    def test_running_init_twice_does_not_duplicate_the_stop_hook(self):
+        root = self._repo()
+        run(["init", "--root", str(root)])
+        run(["init", "--root", str(root)])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        self.assertEqual(len(settings["hooks"]["Stop"]), 1)
+
+    def test_the_report_defaults_into_the_ignored_state_directory(self):
+        root = self._repo()
+        (root / ".aegisflow.json").write_text("{}")
+        (root / "a.py").write_text("x = 1\n")
+        code, out, _ = run(["report", "--root", str(root)])
+        self.assertEqual(code, EXIT_OK)
+        self.assertTrue((root / ".aegisflow" / "report.html").is_file())
+        self.assertFalse(
+            list(root.glob("*.html")),
+            "nothing may be written to the repository root",
+        )

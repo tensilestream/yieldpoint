@@ -31,6 +31,14 @@ from .subject import generalize
 PAIR_THRESHOLD = 0.5
 
 REMOVED = "removed"
+"""The subject is gone, and the test that asserted it is still here. Deleting an
+assertion out of a surviving test is not how anyone moves code."""
+
+TEST_REMOVED = "test_removed"
+"""The whole test that asserted it is gone from this file. Indistinguishable —
+from a single edit — from the first step of moving that test somewhere else,
+which is why a single-edit gate defers this one and a change-set check does not."""
+
 DOWNGRADED = "downgraded"
 DISABLED = "disabled"
 
@@ -49,6 +57,11 @@ class Weakening:
 
     @property
     def detail(self) -> str:
+        if self.kind == TEST_REMOVED:
+            return (
+                f"{self.test or 'The test'} asserted {self.subject} and is no "
+                "longer in this file."
+            )
         if self.kind == REMOVED:
             return f"Assertion on {self.subject} was removed."
         if self.kind == DISABLED:
@@ -163,6 +176,8 @@ def _weakening(subject, before_relation, resolver, pairs, after):
     kind = _kind(before_relation, after_relation, present)
     if kind is None:
         return None
+    if kind is REMOVED and owner is not None and owner.qualname not in after.by_name:
+        kind = TEST_REMOVED
 
     return Weakening(
         subject=subject,

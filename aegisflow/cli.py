@@ -22,10 +22,12 @@ from .commands import (
     check,
     check_diff,
     review_command,
-    stats_command,
     hook_command,
     linters_command,
     scan_command,
+)
+from .reports import (
+    backtest_command, doctor_command, report_command, stats_command,
 )
 from .install import HOOK_MATCHER, init, install_hook, install_mcp, mcp_command
 
@@ -48,12 +50,52 @@ def _add_reporting_commands(sub) -> None:
     review_cmd.add_argument("--json", action="store_true", help="machine-readable output")
     review_cmd.set_defaults(handler=review_command)
 
+    doctor_cmd = sub.add_parser(
+        "doctor", help="check that AegisFlow is actually working")
+    doctor_cmd.add_argument("--root", default=".", help="project directory")
+    doctor_cmd.set_defaults(handler=doctor_command)
+
+    backtest_cmd = sub.add_parser(
+        "backtest", help="replay history: what would this have flagged?")
+    backtest_cmd.add_argument("--since", default="HEAD~50",
+                              help="range start, e.g. HEAD~200 or a tag")
+    backtest_cmd.add_argument("--root", default=".", help="repository directory")
+    backtest_cmd.add_argument("--limit", type=int, default=500,
+                              help="maximum commits to replay")
+    backtest_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
+    backtest_cmd.add_argument("--json", action="store_true", help="machine-readable")
+    backtest_cmd.set_defaults(handler=backtest_command)
+
+    _add_report_command(sub)
     stats_cmd = sub.add_parser(
         "stats", help="what AegisFlow has caught, and what it cost")
     stats_cmd.add_argument("--root", default=".", help="project directory")
     stats_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
+    stats_cmd.add_argument(
+        "--since", default="", metavar="PERIOD",
+        help="only this period: 2h, 30m, 7d, today, or session (last 8h)")
+    stats_cmd.add_argument("--run", default="", help="only this AEGISFLOW_RUN_ID")
+    stats_cmd.add_argument("--agent", default="", help="only this AEGISFLOW_AGENT")
     stats_cmd.add_argument("--json", action="store_true", help="machine-readable output")
     stats_cmd.set_defaults(handler=stats_command)
+
+def _add_report_command(sub) -> None:
+    """The HTML page. Its own function only because the parser it belongs to
+    was over the length limit this project enforces on everyone else."""
+    report_cmd = sub.add_parser(
+        "report", help="write a self-contained HTML page from the ledger")
+    report_cmd.add_argument(
+        "--out", default="", metavar="FILE",
+        help="where to write it (default: .aegisflow/report.html, which is "
+             "ignored by git and refreshed in place)")
+    report_cmd.add_argument("--root", default=".", help="project directory")
+    report_cmd.add_argument("--since", default="", metavar="PERIOD",
+                            help="2h, 30m, 7d, today, or session")
+    report_cmd.add_argument("--run", default="", help="only this AEGISFLOW_RUN_ID")
+    report_cmd.add_argument("--agent", default="", help="only this AEGISFLOW_AGENT")
+    report_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
+    report_cmd.set_defaults(handler=report_command)
+
 
 def _add_setup_commands(sub) -> None:
     """Subcommands that wire AegisFlow into something else rather than run it.
@@ -68,6 +110,9 @@ def _add_setup_commands(sub) -> None:
     init_cmd.add_argument(
         "--enforce", action="store_true", help="hook blocks instead of only reporting")
     init_cmd.add_argument("--no-hook", action="store_true", help="MCP only, no enforcement")
+    init_cmd.add_argument(
+        "--no-report", action="store_true",
+        help="do not refresh .aegisflow/report.html at the end of each turn")
     init_cmd.set_defaults(handler=init)
 
     mcp_cmd = sub.add_parser("mcp", help="run the MCP server on stdio")
@@ -83,6 +128,9 @@ def _add_setup_commands(sub) -> None:
     mcp_install.set_defaults(handler=install_mcp)
 
     install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
+    install_cmd.add_argument(
+        "--no-report", action="store_true",
+        help="do not refresh .aegisflow/report.html at the end of each turn")
     install_cmd.add_argument("--settings", help="settings file (default: .claude/settings.json)")
     install_cmd.add_argument("--advisory", action="store_true", help="install in advisory mode")
     install_cmd.set_defaults(handler=install_hook)

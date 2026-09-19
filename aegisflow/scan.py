@@ -72,6 +72,9 @@ def scan(
     resolved = Policy.load(policy)
     absolute = replace(resolved, structure=replace(resolved.structure, greenfield=True))
     base = Path(root)
+    # Store analysis beside the repository being scanned, not beside wherever
+    # the command was run from.
+    _use_repository_cache(base)
     paths = list(walk(base, absolute))
 
     workers = _workers(jobs, len(paths))
@@ -94,6 +97,18 @@ def scan(
     return ScanResult(
         verdict=Verdict.combine(verdicts), files=files, unreadable=tuple(unreadable)
     )
+
+
+def _use_repository_cache(base: Path) -> None:
+    """Store analysis at the repository root, not in the directory scanned.
+
+    ``scan aegisflow`` must not leave a cache inside the package it just
+    looked at — that is how a project ends up with two state directories.
+    """
+    from .core.locate import repository
+    from .core.parsecache import configure
+
+    configure(repository(base))
 
 
 def _workers(jobs: int | None, total: int) -> int:
@@ -192,6 +207,28 @@ def _drain(futures, collected: dict, total: int, progress) -> None:
             done += 1
             if progress:
                 progress(done, total, outcome[0])
+
+
+def unmatched_patterns(root: str | Path, patterns) -> tuple[str, ...]:
+    """Configured patterns that match nothing in this tree.
+
+    A path list that has stopped matching — a directory renamed, a typo, a
+    pattern written for a layout that changed — is the worst failure a safety
+    control can have: it goes on reporting success while protecting nothing.
+    Reported so it can be seen rather than assumed.
+    """
+    if not patterns:
+        return ()
+    base = Path(root)
+    relatives = [
+        str(p.relative_to(base))
+        for p in base.rglob("*")
+        if p.is_file() and p.is_relative_to(base)
+    ]
+    return tuple(
+        pattern for pattern in patterns
+        if not any(glob.matches(pattern, rel) for rel in relatives)
+    )
 
 
 def walk(root: Path, policy: Policy) -> Iterator[Path]:

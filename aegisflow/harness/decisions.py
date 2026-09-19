@@ -28,6 +28,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+#: Incremented on any breaking change to the serialised decision shape. Separate
+#: from the verdict's version because the two are consumed by different code and
+#: should be able to move independently.
+DECISION_SCHEMA_VERSION = 1
+
 UNKNOWN = "unknown"
 """No rule could answer. Not a default answer — an admission, so the caller can
 fall back to a model rather than act on a guess."""
@@ -48,9 +53,11 @@ class Decision:
 
     def to_dict(self) -> dict:
         return {
+            "schema_version": DECISION_SCHEMA_VERSION,
             "question": self.question,
             "value": self.value,
             "reason": self.reason,
+            "certain": self.known,
             "signals": dict(self.signals),
         }
 
@@ -117,4 +124,7 @@ def unknown(question: str, reason: str) -> Decision:
     return Decision(question=question, value=UNKNOWN, reason=reason)
 
 
-__all__ = ["Decision", "Choice", "Score", "Gate", "unknown", "UNKNOWN"]
+__all__ = [
+    "Decision", "Choice", "Score", "Gate", "unknown",
+    "UNKNOWN", "DECISION_SCHEMA_VERSION",
+]

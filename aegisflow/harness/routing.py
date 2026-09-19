@@ -24,6 +24,10 @@ should escalate.
 
 from __future__ import annotations
 
+from typing import Callable
+
+from ..core import glob
+from ..core.policy import Policy
 from .decisions import Choice, Score
 from .signals import Change, Signals, measure
 
@@ -33,16 +37,12 @@ TIERS = ("none", "small", "standard", "capable", "human")
 """``none`` means no model call is needed at all — the change is mechanical and
 already verified. ``human`` means do not spend a model on this; ask."""
 
-#: Churn above which a change stops being a local edit.
-SMALL_CHURN = 12
-MODERATE_CHURN = 60
-LARGE_CHURN = 250
-
-
-def risk(change: Change, policy=None, signals: Signals | None = None) -> Score:
+def risk(change: Change, policy=None, signals: Signals | None = None,
+         graph=None) -> Score:
     """How much could this change break? An ordered, reproducible answer."""
-    found = signals or measure(change, policy)
-    level, reason = _risk_level(found)
+    resolved = Policy.load(policy)
+    found = signals or measure(change, resolved, graph)
+    level, reason = _risk_level(found, resolved.routing)
     return Score(
         question="risk",
         value=level,
@@ -52,23 +52,54 @@ def risk(change: Change, policy=None, signals: Signals | None = None) -> Score:
     )
 
 
-def _risk_level(s: Signals) -> tuple[str, str]:
-    if s.touches_protected_test:
-        return "critical", "edits a protected test file, where a weakening hides itself"
-    if s.touches_generated:
-        return "high", "edits generated output, which the next build discards"
-    if s.parses is False:
-        return "high", "the result does not parse"
-    if not s.analysable:
-        return "moderate", "no exact analyser for this file type; risk is unmeasured"
-    if s.churn >= LARGE_CHURN:
-        return "high", f"{s.churn} lines changed is past reviewing in one sitting"
-    if s.structural and s.churn >= MODERATE_CHURN:
-        return "moderate", f"structural change across {s.churn} lines"
-    if s.structural:
-        return "low", "changes what the module defines or imports"
-    if s.churn > SMALL_CHURN:
-        return "low", f"{s.churn} lines changed, none of it structural"
+#: Risk rules, most severe first: ``(level, applies, reason)``. The first whose
+#: predicate holds wins, so order is the priority and adding a rule is a row
+#: rather than another branch in a function nobody wants to re-read.
+_RISK_RULES: tuple[tuple[str, Callable, Callable], ...] = (
+    ("critical",
+     lambda s, k: glob.matches_any(k.escalate_paths, s.path),
+     lambda s, k: "this path is configured to escalate regardless of size"),
+    ("critical",
+     lambda s, k: s.touches_protected_test,
+     lambda s, k: "edits a protected test file, where a weakening hides itself"),
+    ("high",
+     lambda s, k: s.touches_generated,
+     lambda s, k: "edits generated output, which the next build discards"),
+    ("high",
+     lambda s, k: s.parses is False,
+     lambda s, k: "the result does not parse"),
+    ("moderate",
+     lambda s, k: not s.analysable,
+     lambda s, k: "no exact analyser for this file type; risk is unmeasured"),
+    ("high",
+     lambda s, k: (s.importance or 0) >= k.critical_importance,
+     lambda s, k: (
+         f"{s.depended_on_by} modules import this one — top "
+         f"{(1 - (s.importance or 0)) * 100:.0f}% of this repository by blast radius"
+     )),
+    ("high",
+     lambda s, k: s.churn >= k.large_churn,
+     lambda s, k: f"{s.churn} lines changed is past reviewing in one sitting"),
+    ("moderate",
+     lambda s, k: (s.max_complexity or 0) > k.max_complexity,
+     lambda s, k: f"a function here branches {s.max_complexity} ways"),
+    ("moderate",
+     lambda s, k: bool(s.structural) and s.churn >= k.moderate_churn,
+     lambda s, k: f"structural change across {s.churn} lines"),
+    ("low",
+     lambda s, k: bool(s.structural),
+     lambda s, k: "changes what the module defines or imports"),
+    ("low",
+     lambda s, k: s.churn > k.small_churn,
+     lambda s, k: f"{s.churn} lines changed, none of it structural"),
+)
+
+
+def _risk_level(s: Signals, limits) -> tuple[str, str]:
+    """The first matching rule, or the floor when none matches."""
+    for level, applies, explain in _RISK_RULES:
+        if applies(s, limits):
+            return level, explain(s, limits)
     return "trivial", "small, and changes nothing the module exposes"
 
 
@@ -78,6 +109,7 @@ def tier(
     signals: Signals | None = None,
     *,
     verified: bool | None = None,
+    graph=None,
 ) -> Choice:
     """How much model this work needs.
 
@@ -86,9 +118,10 @@ def tier(
     needs no further model call at all, which is the only tier that saves a
     whole round trip rather than trading one model for a cheaper one.
     """
-    found = signals or measure(change, policy)
-    level = _risk_level(found)[0]
-    choice, reason = _tier_for(level, found, verified)
+    resolved = Policy.load(policy)
+    found = signals or measure(change, resolved, graph)
+    level = _risk_level(found, resolved.routing)[0]
+    choice, reason = _tier_for(level, found, verified, resolved.routing)
     return Choice(
         question="tier",
         value=choice,
@@ -98,12 +131,12 @@ def tier(
     )
 
 
-def _tier_for(level: str, s: Signals, verified: bool | None) -> tuple[str, str]:
+def _tier_for(level: str, s: Signals, verified: bool | None, limits) -> tuple[str, str]:
     if level == "critical":
         return "human", "a protected test changed; a person should look before this lands"
     if level == "high":
         return "capable", "large or unparseable; the cheap model will not hold it"
-    if verified and not s.structural and s.churn <= SMALL_CHURN:
+    if verified and not s.structural and s.churn <= limits.small_churn:
         return "none", "verified clean, mechanical, and small — no model call needed"
     if level == "moderate":
         return "capable", "structural change of real size"

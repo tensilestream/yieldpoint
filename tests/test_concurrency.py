@@ -190,3 +190,31 @@ class TestAgentCorrelation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAttributionIsNotSilentlyRebound(unittest.TestCase):
+    """``Who(*identity())`` is positional, so field order is a contract.
+
+    A field inserted above ``run`` rebinds every worker's label to the wrong
+    column. Nothing raises and no verdict looks wrong; the attribution is just
+    false from then on, which is the kind of defect that survives for months.
+    """
+
+    def test_identity_maps_onto_who_in_that_order(self):
+        who = ledger.Who(*("a-run", "a-worker"))
+        self.assertEqual((who.run, who.agent), ("a-run", "a-worker"))
+
+    def test_the_environment_lands_in_the_right_columns(self):
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"AEGISFLOW_RUN_ID": "R",
+                                          "AEGISFLOW_AGENT": "A"}):
+            event = ledger.observe(_verdict(), "review")
+        self.assertEqual((event.run, event.agent), ("R", "A"))
+
+    def test_who_has_exactly_the_two_fields_identity_returns(self):
+        self.assertEqual(
+            list(ledger.Who.__dataclass_fields__), ["run", "agent"],
+            "identity() is splatted into Who; adding a field breaks attribution",
+        )

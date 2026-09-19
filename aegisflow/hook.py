@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from .core.policy import Policy
-from .core.verdict import Status, Verdict
+from .core.verdict import Finding, Status, Verdict
 from .verify import verify_change
 
 EDIT_TOOLS = ("Edit", "MultiEdit", "Write", "NotebookEdit")
@@ -91,6 +91,10 @@ def build_change(payload: dict[str, Any]) -> Change:
 
 def evaluate(payload: dict[str, Any], policy: Policy | str | None = None) -> tuple[Verdict, Change]:
     """Verify the change described by ``payload``. Never raises."""
+    from .core.locate import repository
+    from .core.parsecache import configure
+
+    configure(repository(Path.cwd()))
     change = build_change(payload)
     if not change.usable:
         return Verdict.of([]), change
@@ -107,12 +111,19 @@ def evaluate(payload: dict[str, Any], policy: Policy | str | None = None) -> tup
 def decision_json(verdict: Verdict, change: Change) -> str:
     """The structured PreToolUse response."""
     if not blocks(verdict):
-        payload = {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
-            }
+        allowed: dict = {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "allow",
         }
+        postponed = deferred(verdict)
+        if postponed:
+            # Allowed, but say so out loud. Silence here would be the green
+            # banner: the edit went through and something was left unchecked.
+            allowed["permissionDecisionReason"] = (
+                f"{len(postponed)} finding(s) deferred to the full change set; "
+                "run `aegisflow review` before committing."
+            )
+        payload = {"hookSpecificOutput": allowed}
     else:
         payload = {
             "hookSpecificOutput": {
@@ -134,7 +145,7 @@ _CONTRACT_RULES = frozenset({
 
 
 def _headline(verdict: Verdict) -> str:
-    rules = {f.rule for f in verdict.findings}
+    rules = {f.rule for f in immediate(verdict)}
     contract = rules & _CONTRACT_RULES
     if contract and rules - contract:
         return ("AegisFlow blocked this edit: it weakens what the test suite "
@@ -144,11 +155,35 @@ def _headline(verdict: Verdict) -> str:
     return "AegisFlow blocked this edit: it breaks a rule this project enforces."
 
 
+def render_deferred(verdict: Verdict) -> str:
+    """The note shown when an edit is allowed with something left to check.
+
+    Distinct from ``render`` because that one opens with "blocked", and
+    printing it on an edit that was permitted is worse than printing nothing:
+    the reader learns that the wording cannot be trusted.
+    """
+    postponed = deferred(verdict)
+    if not postponed:
+        return ""
+    lines = [
+        "AegisFlow allowed this edit, with "
+        f"{len(postponed)} finding(s) left to check.",
+        "",
+        "One edit cannot tell moving a test from deleting one, so these are "
+        "judged against the whole change set instead:",
+        "",
+    ]
+    for finding in postponed:
+        lines.append(f"  {finding.location}  {finding.detail}")
+    lines += ["", "Run `aegisflow review` before you commit."]
+    return "\n".join(lines)
+
+
 def render(verdict: Verdict, change: Change) -> str:
     """The message the agent reads. Must say what broke and what to do."""
     lines = [_headline(verdict), ""]
     del change  # reserved for future per-tool context in the message
-    for finding in verdict.findings:
+    for finding in immediate(verdict):
         where = f"{finding.file}:{finding.line}"
         symbol = f" in {finding.symbol}" if finding.symbol else ""
         lines.append(f"  {where}{symbol}  [{finding.rule}]")
@@ -171,6 +206,16 @@ def render(verdict: Verdict, change: Change) -> str:
             "Apply the fix above. If the rule is wrong for this repository, change "
             "it in .aegisflow.json rather than working around it."
         )
+    postponed = deferred(verdict)
+    if postponed:
+        lines.append("")
+        lines.append(
+            "Not judged here, because one edit is not enough to tell a move from "
+            "a deletion — these are checked again before the change lands:"
+        )
+        for finding in postponed:
+            lines.append(f"  {finding.location}  {finding.detail}")
+
     running = _running_total()
     if running:
         lines += ["", running]
@@ -192,12 +237,42 @@ def _running_total() -> str:
         return ""
 
 
+#: Finding kinds a single-edit gate cannot fairly judge.
+#:
+#: A ``PreToolUse`` hook sees one edit and cannot see the next one. Moving a
+#: test to another file begins by deleting it from this one, which is
+#: indistinguishable — at this instant — from deleting it. Blocking that is the
+#: false positive that gets a hook switched off during the first real refactor,
+#: and a hook that is off catches nothing at all.
+#:
+#: So a *removal* is deferred to where the whole change set is visible:
+#: ``aegisflow review``, pre-commit, or CI, all of which pool subjects across
+#: files and can tell a move from a deletion. Nothing is lost except immediacy.
+#:
+#: The distinction is narrow on purpose. Only a *whole test disappearing* is
+#: deferred, because that is what moving one looks like. Deleting an assertion
+#: from a test that is still there is refused on the spot — nobody relocates a
+#: single assertion, and quietly dropping one is the most common tampering
+#: there is. Downgrading in place is likewise refused: rewriting
+#: ``assert x == 1`` as ``assert x`` is no part of any multi-file operation.
+DEFERRED_KINDS = frozenset({"test_removed"})
+
 #: Statuses that let an edit through. ``UNVERIFIED`` is here because the hook
 #: fails open: no rule could analyse the change, and denying every edit to an
 #: unsupported language would make the hook unusable on any polyglot repository.
 #: The graph is where that decision is made — ``make_router(on_unverified=...)``
 #: — because a graph has somewhere to route to and a hook has only allow or deny.
 _ALLOWED = frozenset({Status.PASS, Status.UNVERIFIED})
+
+
+def deferred(verdict: Verdict) -> tuple[Finding, ...]:
+    """Findings this gate will not judge, because it cannot see enough."""
+    return tuple(f for f in verdict.findings if f.kind in DEFERRED_KINDS)
+
+
+def immediate(verdict: Verdict) -> tuple[Finding, ...]:
+    """Findings a single edit is enough to be sure about."""
+    return tuple(f for f in verdict.findings if f.kind not in DEFERRED_KINDS)
 
 
 def blocks(verdict: Verdict) -> bool:
@@ -212,7 +287,9 @@ def blocks(verdict: Verdict) -> bool:
     ``unverified`` and the skipped files are still reported, so the fact is not
     hidden — it just does not stand between a person and their editor.
     """
-    return verdict.status not in _ALLOWED
+    if verdict.status in _ALLOWED:
+        return False
+    return bool(immediate(verdict))
 
 
 def _read(path: Path) -> str | None:

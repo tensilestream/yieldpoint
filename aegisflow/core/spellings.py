@@ -38,6 +38,12 @@ METHOD_RELATIONS: dict[str, Relation] = {
     "assertWarns": Relation.RAISES, "assertLogs": Relation.RAISES,
     "assertTrue": Relation.TRUTHY, "assertFalse": Relation.TRUTHY,
     "assertIsNotNone": Relation.NON_NULL,
+    # JUnit and Node's assert module. Same shapes, different names.
+    "assertNotNull": Relation.NON_NULL, "assertNull": Relation.EQ,
+    "assertSame": Relation.EQ, "assertNotSame": Relation.COMPARISON,
+    "assertArrayEquals": Relation.EQ, "assertIterableEquals": Relation.EQ,
+    "assertLinesMatch": Relation.EQ, "assertThrows": Relation.RAISES,
+    "assertDoesNotThrow": Relation.RAISES, "assertTimeout": Relation.RAISES,
 }
 
 COMPARE_RELATIONS: dict[type[ast.cmpop], Relation] = {
@@ -86,6 +92,16 @@ FLUENT_RELATIONS: dict[str, Relation] = {
         "is_less_than": Relation.COMPARISON, "isLessThan": Relation.COMPARISON,
         "toBeGreaterThan": Relation.COMPARISON, "toBeLessThan": Relation.COMPARISON,
         "is_not_equal_to": Relation.COMPARISON, "isNotEqualTo": Relation.COMPARISON,
+        # Go, testify. Same shape, different casing, so the fold covers it.
+        "Equal": Relation.EQ, "EqualValues": Relation.EQ, "Exactly": Relation.EQ,
+        "Nil": Relation.EQ, "Zero": Relation.EQ,
+        "NotEqual": Relation.COMPARISON, "Greater": Relation.COMPARISON,
+        "Less": Relation.COMPARISON, "NotZero": Relation.COMPARISON,
+        "Contains": Relation.MEMBERSHIP, "ElementsMatch": Relation.MEMBERSHIP,
+        "IsType": Relation.MEMBERSHIP, "Len": Relation.MEMBERSHIP,
+        "Panics": Relation.RAISES, "Error": Relation.RAISES, "NoError": Relation.RAISES,
+        "True": Relation.TRUTHY, "False": Relation.TRUTHY,
+        "NotNil": Relation.NON_NULL, "NotEmpty": Relation.NON_NULL,
         "is_between": Relation.COMPARISON, "isBetween": Relation.COMPARISON,
         "matches": Relation.COMPARISON, "toMatch": Relation.COMPARISON,
         "startsWith": Relation.COMPARISON, "starts_with": Relation.COMPARISON,

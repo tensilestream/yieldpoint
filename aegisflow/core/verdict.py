@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Any, Iterable, Sequence
 
 #: Incremented on any breaking change to the serialised verdict shape.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class Status(str, Enum):
@@ -112,6 +112,15 @@ class Finding:
     symbol: str | None = None
     confidence: Confidence = Confidence.EXACT
 
+    kind: str = ""
+    """How the rule was broken, when it has more than one way.
+
+    Machine-readable on purpose. A surface that can only allow or deny needs to
+    tell "this assertion got weaker" from "this assertion is not in this file
+    any more" — the first is never legitimate, the second is what the first
+    step of moving a test looks like. Matching on ``detail`` text to recover
+    that would break the moment the wording improves."""
+
     def __post_init__(self) -> None:
         if self.line < 0:
             raise ValueError(f"line must be non-negative, got {self.line}")
@@ -142,6 +151,8 @@ class Finding:
             "prescription": self.prescription,
             "confidence": self.confidence.value,
         }
+        if self.kind:
+            out["kind"] = self.kind
         for key in ("before", "after", "symbol"):
             value = getattr(self, key)
             if value is not None:
@@ -161,6 +172,7 @@ class Finding:
             after=data.get("after"),
             symbol=data.get("symbol"),
             confidence=Confidence(data.get("confidence", Confidence.EXACT.value)),
+            kind=data.get("kind", ""),
         )
 
 

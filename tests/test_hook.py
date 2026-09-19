@@ -6,9 +6,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from aegisflow.core.relation import Relation
 from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
 from aegisflow.hook import (
-    Change, blocks, build_change, decision_json, evaluate, read_payload, render,
+    Change, blocks, build_change, decision_json, deferred, evaluate, immediate,
+    read_payload, render,
 )
 
 ORIGINAL = (
@@ -207,3 +209,94 @@ class TestBlockMessageHeadline(unittest.TestCase):
         message = render(verdict, Change(path="a.py"))
         self.assertIn("weakens what the test suite verifies", message)
         self.assertIn("breaks a project rule", message)
+
+
+class TestDeferredRemovals(unittest.TestCase):
+    """One edit cannot tell moving a test from deleting one.
+
+    Blocking the first step of a move is the false positive that gets a hook
+    switched off during the first real refactor — and a hook that is off catches
+    nothing at all. So a *removal* is deferred to where the whole change set is
+    visible, while a *downgrade*, which is no part of any legitimate move, is
+    still refused on the spot.
+    """
+
+    BEFORE = (
+        "from billing import invoice\n\n"
+        "def test_total():\n    assert invoice.total == 42\n\n"
+        "def test_currency():\n    assert invoice.currency == 'GBP'\n"
+    )
+    MOVED_OUT = (
+        "from billing import invoice\n\n"
+        "def test_total():\n    assert invoice.total == 42\n"
+    )
+    DOWNGRADED = (
+        "from billing import invoice\n\n"
+        "def test_total():\n    assert invoice.total\n\n"
+        "def test_currency():\n    assert invoice.currency == 'GBP'\n"
+    )
+    POLICY = {"protected_tests": ["**/test_*.py"]}
+
+    def _verdict(self, after):
+        from aegisflow.verify import verify_change
+
+        return verify_change(self.BEFORE, after, "tests/test_invoice.py", self.POLICY)
+
+    ASSERTION_DELETED = (
+        "from billing import invoice\n\n"
+        "def test_total():\n    assert invoice.total == 42\n\n"
+        "def test_currency():\n    pass\n"
+    )
+
+    def test_deleting_an_assertion_from_a_surviving_test_still_blocks(self):
+        """Nobody relocates a single assertion; dropping one is the common cheat."""
+        verdict = self._verdict(self.ASSERTION_DELETED)
+        self.assertTrue(blocks(verdict))
+
+    def test_a_removal_is_deferred_not_blocked(self):
+        verdict = self._verdict(self.MOVED_OUT)
+        self.assertTrue(verdict.findings, "the finding must still be made")
+        self.assertFalse(blocks(verdict), "but it must not stop the edit")
+        self.assertEqual(len(deferred(verdict)), 1)
+        self.assertEqual(immediate(verdict), ())
+
+    def test_a_downgrade_is_refused_immediately(self):
+        verdict = self._verdict(self.DOWNGRADED)
+        self.assertTrue(blocks(verdict))
+        self.assertEqual(deferred(verdict), ())
+
+    def test_the_allow_payload_says_something_was_left_unchecked(self):
+        """Silence here would be the green banner: allowed, and unexamined."""
+        verdict = self._verdict(self.MOVED_OUT)
+        payload = json.loads(decision_json(verdict, Change(path="tests/test_invoice.py")))
+        output = payload["hookSpecificOutput"]
+        self.assertEqual(output["permissionDecision"], "allow")
+        self.assertIn("deferred", output["permissionDecisionReason"])
+
+    def test_the_allow_message_does_not_claim_it_blocked(self):
+        from aegisflow.hook import render_deferred
+
+        message = render_deferred(self._verdict(self.MOVED_OUT))
+        self.assertIn("allowed this edit", message)
+        self.assertNotIn("blocked", message)
+        self.assertIn("aegisflow review", message)
+
+    def test_a_deletion_that_is_never_a_move_is_still_caught_later(self):
+        """The whole deferral rests on this: nothing is lost, only postponed.
+
+        The change-set check sees both sides of a move and can tell them apart,
+        which is exactly the information one edit does not have.
+        """
+        from aegisflow.verify import verify_change
+
+        verdict = verify_change(
+            self.BEFORE, self.MOVED_OUT, "tests/test_invoice.py", self.POLICY
+        )
+        self.assertIn("assertion_monotonicity", {f.rule for f in verdict.findings})
+
+        # ...and with the test present elsewhere in the same change set, it clears.
+        cleared = verify_change(
+            self.BEFORE, self.MOVED_OUT, "tests/test_invoice.py", self.POLICY,
+            also_covered={"invoice.currency": Relation.EQ},
+        )
+        self.assertEqual(cleared.findings, ())

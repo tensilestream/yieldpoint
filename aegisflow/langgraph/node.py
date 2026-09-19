@@ -49,8 +49,21 @@ def verify_node(
     reader = extract or read_change
 
     def node(state: Mapping[str, Any]) -> dict:
+        from ..ledger import Run, Timer, record_run
+
         request = reader(state)
-        verdict = _run(request, resolved, root)
+        with Timer() as timer:
+            verdict = _run(request, resolved, root)
+
+        # Recorded here rather than in verify_change: a node is a surface, and
+        # the core stays free of clocks and filesystem writes (RULES.md 4).
+        # Without this a graph — the surface the product is built for — is the
+        # one that shows nothing in `aegisflow stats`.
+        record_run(
+            verdict,
+            Run("langgraph", len(_payload(request)), timer.elapsed_ms, root),
+            resolved,
+        )
 
         history, tripped = observe(
             state.get(HISTORY_KEY),

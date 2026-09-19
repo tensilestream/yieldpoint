@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 #: Statements that open a nesting level.
 _NESTING = (ast.If, ast.For, ast.AsyncFor, ast.While, ast.With, ast.AsyncWith, ast.Try)
@@ -63,7 +63,41 @@ class ModuleMetrics:
 
 
 def measure(source: str, *, filename: str = "<source>") -> ModuleMetrics:
-    """Measure one module. Never raises."""
+    """Measure one module. Never raises.
+
+    Cached by a hash of the source. Measuring costs about four times what
+    parsing does, and most of what any run measures is a file unchanged since
+    the last one. ``filename`` is deliberately not part of the key: it appears
+    only in an error message, and keying on it would miss every renamed or
+    replayed file (see parsecache.py).
+    """
+    from .parsecache import Codec, through
+
+    return through(
+        source, Codec("metrics", _encode, _decode),
+        compute=lambda: _measure(source, filename),
+    )
+
+
+def _encode(module: "ModuleMetrics") -> dict:
+    return {
+        "lines": module.lines, "code_lines": module.code_lines,
+        "definitions": module.definitions, "imports": list(module.imports),
+        "calls": module.calls, "error": module.error,
+        "functions": [asdict(f) for f in module.functions],
+    }
+
+
+def _decode(payload: dict) -> "ModuleMetrics":
+    return ModuleMetrics(
+        lines=payload["lines"], code_lines=payload["code_lines"],
+        definitions=payload["definitions"], imports=tuple(payload["imports"]),
+        calls=dict(payload["calls"]), error=payload["error"],
+        functions=tuple(FunctionMetrics(**f) for f in payload["functions"]),
+    )
+
+
+def _measure(source: str, filename: str) -> ModuleMetrics:
     try:
         tree = ast.parse(source, filename=filename)
     except SyntaxError as exc:
@@ -109,7 +143,7 @@ def _walk(node: ast.AST, *, prefix: str, out: list[FunctionMetrics]) -> None:
 def _function(node: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str) -> FunctionMetrics:
     args = node.args
     end = getattr(node, "end_lineno", node.lineno) or node.lineno
-    statements = [n for n in ast.walk(node) if isinstance(n, ast.stmt)]
+    statements, nesting, complexity = _survey(node)
     return FunctionMetrics(
         name=node.name,
         qualname=f"{prefix}{node.name}",
@@ -119,14 +153,46 @@ def _function(node: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str) -> Func
             len(args.posonlyargs) + len(args.args) + len(args.kwonlyargs)
             + (1 if args.vararg else 0) + (1 if args.kwarg else 0)
         ),
-        nesting=_nesting(node),
-        complexity=_complexity(node),
+        nesting=nesting,
+        complexity=complexity,
         shape=shape_of(node),
-        statements=len(statements),
+        statements=statements,
     )
 
 
+def _survey(node: ast.AST) -> tuple[int, int, int]:
+    """Statements, deepest nesting and complexity, in a single descent.
+
+    These were three traversals of the same subtree, and ``ast.walk`` builds a
+    deque on every call. On a two-hundred test file that was most of the time
+    spent verifying it. One pass, same numbers — asserted against the old
+    implementations in the tests.
+    """
+    statements = 0
+    deepest = 0
+    branches = 0
+
+    stack = [(node, 0)]
+    while stack:
+        current, depth = stack.pop()
+        if isinstance(current, ast.stmt):
+            statements += 1
+        if depth > deepest:
+            deepest = depth
+        if isinstance(current, _BRANCHES):
+            branches += 1
+        elif isinstance(current, ast.BoolOp):
+            branches += len(current.values) - 1
+        elif isinstance(current, ast.match_case):
+            branches += 1
+        for child in ast.iter_child_nodes(current):
+            stack.append((child, depth + 1 if isinstance(child, _NESTING) else depth))
+
+    return statements, deepest, branches + 1
+
+
 def _nesting(node: ast.AST, depth: int = 0) -> int:
+    """Deepest nesting. Kept as the reference the fast path is tested against."""
     deepest = depth
     for child in ast.iter_child_nodes(node):
         step = depth + 1 if isinstance(child, _NESTING) else depth
@@ -135,7 +201,7 @@ def _nesting(node: ast.AST, depth: int = 0) -> int:
 
 
 def _complexity(node: ast.AST) -> int:
-    """Branch points plus one — the number of independent paths."""
+    """Branch points plus one. Kept as the reference for ``_survey``."""
     total = 1
     for child in ast.walk(node):
         if isinstance(child, _BRANCHES):

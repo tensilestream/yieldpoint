@@ -13,8 +13,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from .policyfields import (
+    _custom_rules, _fraction, _int, _linters, _positive, _routing,
+    _section, _status, _str_tuple, _structure, _zones,
+)
 from .policy import (
     Metrics,
+    Routing,
     DEFAULT_IGNORE,
     DEFAULT_PROTECTED_PATTERNS,
     Boundaries,
@@ -35,6 +40,36 @@ from .policy import (
 from .verdict import Status
 
 
+#: Every section the reader understands. A key outside this set is a typo or a
+#: name someone reasonably guessed, and either way the setting they wrote is not
+#: in force. Silence there is worse than a wrong value: they believe they
+#: configured something, and the defaults quietly apply instead.
+KNOWN_SECTIONS = frozenset({
+    "version", "project", "test_contract", "boundaries", "loop_breaker",
+    "linters", "metrics", "routing", "voice", "generated", "subjects",
+    "refactor", "structure", "ci", "scan",
+})
+
+
+def _unknown_keys(raw: dict[str, Any], warnings: list[str]) -> None:
+    for key in sorted(raw):
+        if key in KNOWN_SECTIONS or key.startswith("_"):
+            continue
+        suggestion = _closest(key)
+        hint = f"; did you mean {suggestion!r}?" if suggestion else ""
+        warnings.append(
+            f"unknown configuration key {key!r} — it is being ignored{hint}"
+        )
+
+
+def _closest(key: str) -> str | None:
+    """The known section a mistyped key most resembles, if any is close."""
+    import difflib
+
+    matches = difflib.get_close_matches(key, sorted(KNOWN_SECTIONS), n=1, cutoff=0.6)
+    return matches[0] if matches else None
+
+
 def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     """Normalise a parsed `.aegisflow.json` document into a :class:`Policy`."""
     warnings: list[str] = []
@@ -44,6 +79,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     breaker = _section(raw, "loop_breaker", warnings)
     linters = _section(raw, "linters", warnings)
     metrics = _section(raw, "metrics", warnings)
+    routing = _section(raw, "routing", warnings)
     voice = _section(raw, "voice", warnings)
     generated = _section(raw, "generated", warnings)
     subjects = _section(raw, "subjects", warnings)
@@ -51,6 +87,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     structure = _section(raw, "structure", warnings)
     ci = _section(raw, "ci", warnings)
     scanning = _section(raw, "scan", warnings)
+    _unknown_keys(raw, warnings)
 
     patterns = _str_tuple(contract.get("protected_patterns"), warnings, "protected_patterns")
 
@@ -111,6 +148,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
             on_trip=_status(breaker.get("on_trip"), Status.ESCALATE, warnings, "on_trip"),
         ),
         linters=_linters(linters, warnings),
+        routing=_routing(routing, warnings),
         metrics=Metrics(
             enabled=bool(metrics.get("enabled", True)),
             path=str(metrics.get("path") or Metrics.path),
@@ -135,143 +173,3 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
         warnings=tuple(warnings),
     )
 
-def _section(raw: dict[str, Any], key: str, warnings: list[str]) -> dict[str, Any]:
-    value = raw.get(key, {})
-    if isinstance(value, dict):
-        return value
-    warnings.append(f"{key!r} must be an object; ignoring {type(value).__name__}.")
-    return {}
-
-
-def _status(value: Any, default: Status | None, warnings: list[str], label: str) -> Status | None:
-    if value is None:
-        return default
-    if value is False or (isinstance(value, str) and value.lower() == "off"):
-        return None
-    if value is True:
-        return default
-    try:
-        return Status(str(value).lower())
-    except ValueError:
-        allowed = ", ".join(s.value for s in Status) + ", off"
-        warnings.append(f"{label}: {value!r} is not one of [{allowed}]; using {default}.")
-        return default
-
-
-def _int(value: Any, default: int, warnings: list[str], label: str) -> int:
-    if value is None:
-        return default
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        warnings.append(f"{label}: {value!r} is not an integer; using {default}.")
-        return default
-    if parsed < 1:
-        warnings.append(f"{label}: must be >= 1, got {parsed}; using {default}.")
-        return default
-    return parsed
-
-
-def _str_tuple(value: Any, warnings: list[str], label: str) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    if not isinstance(value, list):
-        warnings.append(f"{label}: expected a list; ignoring.")
-        return ()
-    return tuple(str(item) for item in value)
-
-
-def _linters(raw: dict[str, Any], warnings: list[str]) -> Linters:
-    from .linters import registry
-
-    requested = _str_tuple(raw.get("tools"), warnings, "linters.tools")
-    known, unknown = [], []
-    for name in requested:
-        (known if registry.get(name) else unknown).append(name)
-    if unknown:
-        warnings.append(
-            f"linters.tools: unknown tool(s) {', '.join(sorted(unknown))}; "
-            f"available: {', '.join(registry.names())}"
-        )
-
-    severity = _status(raw.get("severity"), Status.REPAIR, warnings, "linters.severity")
-    if severity is Status.BLOCK:
-        # An external tool's verdict depends on its installed version, so it is
-        # never authoritative enough to stop work outright.
-        warnings.append("linters.severity: 'block' is not permitted; using 'escalate'.")
-        severity = Status.ESCALATE
-
-    return Linters(
-        enabled=bool(raw.get("enabled", False)),
-        severity=severity,
-        timeout_seconds=_int(raw.get("timeout_seconds"), 10, warnings, "linters.timeout_seconds"),
-        include_slow=bool(raw.get("include_slow", False)),
-        tools=tuple(known),
-    )
-
-
-def _structure(raw: dict[str, Any], warnings: list[str]) -> Structure:
-    defaults = Structure()
-    numbers = {
-        field: _int(raw.get(field), getattr(defaults, field), warnings, f"structure.{field}")
-        for field in (
-            "max_file_lines", "max_lines", "max_parameters", "max_nesting",
-            "max_complexity", "max_added_lines", "max_change_lines",
-        )
-    }
-    return Structure(
-        severity=_status(raw.get("severity"), Status.REPAIR, warnings, "structure.severity"),
-        greenfield=bool(raw.get("greenfield", False)),
-        forbid_utility_modules=bool(raw.get("forbid_utility_modules", True)),
-        duplicate_implementation=_status(
-            raw.get("duplicate_implementation"), Status.REPAIR, warnings,
-            "structure.duplicate_implementation"),
-        custom=_custom_rules(raw.get("custom"), warnings),
-        **numbers,
-    )
-
-
-def _custom_rules(value: Any, warnings: list[str]) -> tuple[CustomRule, ...]:
-    if not isinstance(value, list):
-        if value is not None:
-            warnings.append("structure.custom: expected a list; ignoring.")
-        return ()
-    rules: list[CustomRule] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict) or not item.get("name"):
-            warnings.append(f"structure.custom[{index}]: missing 'name'; ignoring.")
-            continue
-        rules.append(CustomRule(
-            name=str(item["name"]),
-            severity=_status(
-                item.get("severity"), Status.REPAIR, warnings,
-                f"structure.custom[{index}].severity"),
-            path=str(item.get("path", "")),
-            forbid_call=str(item.get("forbid_call", "")),
-            forbid_import=str(item.get("forbid_import", "")),
-            require_name_pattern=str(item.get("require_name_pattern", "")),
-            message=str(item.get("message", "")),
-        ))
-    return tuple(rules)
-
-
-def _zones(value: Any, warnings: list[str]) -> tuple[Zone, ...]:
-    if not isinstance(value, list):
-        if value is not None:
-            warnings.append("boundaries.zones: expected a list; ignoring.")
-        return ()
-    zones: list[Zone] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict) or not item.get("path"):
-            warnings.append(f"boundaries.zones[{index}]: missing 'path'; ignoring.")
-            continue
-        zones.append(
-            Zone(
-                name=str(item.get("name", f"zone_{index}")),
-                path=str(item["path"]),
-                forbidden_imports=_str_tuple(
-                    item.get("forbidden_imports"), warnings, f"zones[{index}].forbidden_imports"),
-                reason=str(item["reason"]) if item.get("reason") else None,
-            )
-        )
-    return tuple(zones)

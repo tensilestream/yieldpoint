@@ -80,7 +80,10 @@ class TestNothingIsSilentlyPassed(unittest.TestCase):
         verdict = verify_change(BEFORE, WEAKENED, "tests/a.test.ts", Policy())
         self.assertEqual(verdict.checked, ())
         self.assertEqual(len(verdict.skipped), 1)
-        self.assertIn("no exact analyser", verdict.skipped[0])
+        # The message has improved twice; the property is what matters.
+        self.assertIsNot(verdict.status, Status.PASS)
+        self.assertTrue(verdict.skipped)
+        self.assertEqual(verdict.checked, ())
 
     def test_unparseable_after_state_is_skipped(self):
         verdict = verify_change(BEFORE, "def test_x(:", PATH, Policy())

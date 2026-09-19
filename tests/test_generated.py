@@ -133,7 +133,11 @@ class TestVerifyBehaviour(unittest.TestCase):
         policy = Policy.from_dict({"generated": {"detect": False}})
         verdict = verify_change(self.BEFORE, self.AFTER, self.PATH, policy, hand_edit=True)
         self.assertEqual(verdict.findings, ())
-        self.assertEqual(verdict.skipped, ())
+        self.assertEqual(
+            verdict.skipped,
+            (f"{self.PATH}: no rule in this policy applies to this file",),
+            "it must be skipped for want of an analyser, not as generated code",
+        )
 
     def test_severity_is_configurable(self):
         policy = Policy.from_dict({"generated": {"on_hand_edit": "escalate"}})

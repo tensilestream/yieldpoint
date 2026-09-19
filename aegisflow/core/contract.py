@@ -8,10 +8,10 @@ outgrows the 300-line limit in RULES.md section 1.
 
 from __future__ import annotations
 
-from . import monotonicity, testintegrity
-from .assertions import extract
+from . import lexical, monotonicity, testintegrity
+from .assertions import Extraction, extract
 from .policy import Policy
-from .verdict import Confidence, Finding, Verdict
+from .verdict import Confidence, Finding, Status, Verdict
 
 ASSERTION_MONOTONICITY = "assertion_monotonicity"
 
@@ -34,9 +34,15 @@ def check(before, after, path, policy, also_covered) -> Verdict:
         # nothing examined look like one that passed (RULES.md section 5).
         return Verdict.of([])
 
-    if not path.endswith(EXACT_SUFFIXES):
-        return Verdict.of([], skipped=[f"{path}: no exact analyser for this language yet"])
+    if path.endswith(EXACT_SUFFIXES):
+        return _exactly(before, after, path, policy, also_covered)
+    if lexical.reads(path):
+        return _lexically(before, after, path, policy, also_covered)
+    return Verdict.of([], skipped=[f"{path}: no analyser for this language yet"])
 
+
+def _exactly(before, after, path, policy, also_covered) -> Verdict:
+    """The Python path: parsed, and therefore permitted to block."""
     before_state = extract(before or "", filename=path)
     after_state = extract(after or "", filename=path)
 
@@ -50,10 +56,47 @@ def check(before, after, path, policy, also_covered) -> Verdict:
     return Verdict.of(findings, checked=[path])
 
 
-def _monotonicity(before, after, path, policy, also_covered) -> list[Finding]:
+def _lexically(before, after, path, policy, also_covered) -> Verdict:
+    """Languages read by shape rather than by parsing.
+
+    Only monotonicity runs. The integrity rules — vacuous assertions, swallowed
+    exceptions, unreachable code — all depend on knowing control flow, and
+    guessing at control flow from braces is how a checker starts accusing
+    people of things they did not do.
+
+    A file where nothing was recognised is reported as **unverified**, never as
+    clean: silence from an analyser that did not understand the input must not
+    read as approval (RULES.md section 5).
+    """
+    before_tests, before_ok = lexical.extract(before or "", filename=path)
+    after_tests, after_ok = lexical.extract(after or "", filename=path)
+
+    if not (before_ok or after_ok):
+        return Verdict.of([], skipped=[
+            f"{path}: read lexically, but no test assertions were recognised"
+        ])
+
+    findings = _monotonicity(
+        _as_extraction(before_tests), _as_extraction(after_tests),
+        path, policy, also_covered, confidence=Confidence.LEXICAL,
+    )
+    return Verdict.of(findings, checked=[path])
+
+
+def _as_extraction(tests) -> Extraction:
+    return Extraction(tests=tuple(tests), by_name={t.qualname: t for t in tests})
+
+
+def _monotonicity(before, after, path, policy, also_covered,
+                  confidence: Confidence = Confidence.EXACT) -> list[Finding]:
     status = policy.test_contract.assertion_monotonicity
     if status is None:
         return []
+    # A finding that was not derived from a parse may not stop anyone's work.
+    # Enforced in Finding.__post_init__ too; capped here so configuring
+    # `block` on a lexical language degrades instead of raising.
+    if not confidence.may_block and status is Status.BLOCK:
+        status = Status.ESCALATE
     return [
         Finding(
             rule=ASSERTION_MONOTONICITY,
@@ -64,7 +107,8 @@ def _monotonicity(before, after, path, policy, also_covered) -> list[Finding]:
             prescription=weakening.prescription,
             before=weakening.source or None,
             symbol=weakening.test or None,
-            confidence=Confidence.EXACT,
+            confidence=confidence,
+            kind=weakening.kind,
         )
         for weakening in monotonicity.compare(
             before, after, also_covered=also_covered,

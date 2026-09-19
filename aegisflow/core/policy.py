@@ -211,6 +211,46 @@ class Voice:
 
 
 @dataclass(frozen=True)
+class Routing:
+    """Thresholds for the risk score and the model tier it implies.
+
+    Configurable because the right answer is a property of the codebase, not of
+    this package. Twelve changed lines is cosmetic in a service and a
+    substantial edit in a compiler; a team that cannot move that number without
+    forking will instead stop using the routing, which costs them the whole
+    benefit to avoid a disagreement about one constant.
+
+    ``escalate_paths`` raises anything matching straight to ``critical``,
+    whatever its size — the escape hatch for code whose importance is not
+    visible in its shape (a payments calculation, a migration, a security
+    boundary). This is how an organisation encodes what it knows and the
+    syntax tree does not.
+    """
+
+    small_churn: int = 12
+    moderate_churn: int = 60
+    large_churn: int = 250
+    max_complexity: int = 12
+
+    critical_importance: float = 0.9
+    """Blast-radius percentile above which a change is treated as high risk.
+
+    A percentile, so the default holds whatever the repository's size: 0.9
+    means the most-depended-upon tenth of modules, which is roughly where
+    "everything breaks if this is wrong" begins in practice."""
+
+    use_import_graph: bool = True
+    """Compute importance from the import graph. Off makes the blast-radius
+    rules dormant rather than wrong — they stay ``None`` and never fire."""
+
+    escalate_paths: tuple[str, ...] = ()
+    tiers: dict[str, str] = field(default_factory=dict)
+    """Tier name to the caller's model name. Empty means the caller maps it."""
+
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
 class Metrics:
     """Local accounting of what AegisFlow did.
 
@@ -241,6 +281,7 @@ class Policy:
     voice: Voice = field(default_factory=Voice)
     generated: GeneratedCode = field(default_factory=GeneratedCode)
     metrics: Metrics = field(default_factory=Metrics)
+    routing: Routing = field(default_factory=Routing)
     source: str = "defaults"
     warnings: tuple[str, ...] = ()
 

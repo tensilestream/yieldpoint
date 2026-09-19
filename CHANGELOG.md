@@ -66,8 +66,22 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   an eval harness, and no framework at all. Exercised by `tests/test_examples.py`, because
   documentation that no longer runs is a confident wrong answer.
 
+- **`aegisflow stats --since / --run / --agent`.** The ledger is append-only and has no
+  concept of a session; a session is a window of time, so that is what these select.
+  `--since session` covers the last eight hours, and `today`, `2h`, `30m`, `7d`, `1w` all
+  work. A period that cannot be read is an error rather than a silent widening, and an
+  event recorded before timestamps existed is excluded from a period rather than assumed
+  recent.
+- **`doctor` reports whether the hook has actually fired.** Installed is not the same as
+  running: a hook added mid-session does nothing until the next one, and the symptom is
+  identical to it working. This is the only check that tells those apart.
+
 ### Fixed
 
+- **Worker attribution was silently wrong.** A field inserted above `run` in `Who` rebound
+  every label by one column, because `identity()` is splatted into it positionally.
+  Nothing raised and no verdict looked wrong — the attribution was simply false. Field
+  order is now pinned by a test.
 - **The per-turn total was O(events) per read, and therefore O(events²) over a session.**
   Invisible at twenty events, 680 ms per verdict at twenty thousand. Folded incrementally
   from a cached byte offset; flat at ~1 ms regardless of ledger size. The cache is
