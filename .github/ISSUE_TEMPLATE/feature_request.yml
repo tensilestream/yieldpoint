@@ -1,0 +1,69 @@
+name: Feature request
+description: Propose something Yieldpoint should do and does not
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The most useful feature requests start from a change an agent made that
+        should have been caught, or a place the tool got in your way. Start there
+        rather than with the solution — the problem is the part we cannot guess.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened, or failed to
+      description: >
+        The concrete situation. What were you doing, what did Yieldpoint do, and
+        what did you need instead?
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: >
+        Your idea, if you have one. "I do not know how this should work" is a
+        perfectly good answer — the case above is the valuable part.
+    validations: { required: false }
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where it belongs
+      options:
+        - A new rule, or a change to one
+        - The CLI
+        - The editor hook
+        - The MCP server
+        - CI, pre-commit, or the GitHub Action
+        - Metrics, stats, or the report
+        - The LangGraph / agent adapters
+        - Somewhere else, or not sure
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do about it today
+      description: >
+        A workaround, another tool, or nothing. This tells us how much the gap
+        actually costs, which is most of how these get prioritised.
+    validations: { required: false }
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Before you post
+      description: >
+        Not hoops — these are commitments the project has made, and a request
+        that needs one of them broken needs a different shape. See RULES.md.
+      options:
+        - label: This does not require Yieldpoint to make a network call
+        - label: This does not require a model call in the verification path
+        - label: This does not require a runtime dependency in the core
+        - label: >
+            If this is a new rule, I understand it would ship at `repair`
+            severity first, never `block`, until its false-positive rate is
+            measured
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "yieldpoint --version"
+    validations: { required: false }

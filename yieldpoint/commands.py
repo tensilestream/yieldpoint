@@ -30,11 +30,28 @@ EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 EXIT_UNVERIFIED = 3
 
 
-def _exit_for(verdict) -> int:
+def only_maintainability(verdict, policy) -> bool:
+    """True when everything found describes shape rather than a weakening.
+
+    These are worth showing and not worth stopping for. A commit refused
+    because a function is fifty-one lines teaches people to reach for
+    ``--no-verify``, and the habit does not distinguish that finding from the
+    one that says an assertion is gone.
+    """
+    from .core.structure import MAINTAINABILITY_RULES
+
+    if policy.structure.gates or not verdict.findings:
+        return False
+    return all(f.rule in MAINTAINABILITY_RULES for f in verdict.findings)
+
+
+def _exit_for(verdict, policy=None) -> int:
     if verdict.status is Status.PASS:
         return EXIT_OK
     if verdict.status is Status.UNVERIFIED:
         return EXIT_UNVERIFIED
+    if policy is not None and only_maintainability(verdict, policy):
+        return EXIT_OK
     return EXIT_FINDINGS
 
 HOOK_MATCHER = "Edit|MultiEdit|Write"
@@ -85,7 +102,7 @@ def _emit(verdict, args, policy, deletions: tuple = ()) -> int:
         console.print_human(verdict, policy,
                             staged=getattr(args, "staged", False),
                             root=getattr(args, "root", "."))
-    return _exit_for(verdict)
+    return _exit_for(verdict, policy)
 
 
 def _use_cache_for(root) -> None:
@@ -151,7 +168,7 @@ def check_diff(args) -> int:
         console.print_human(verdict, policy,
                             staged=getattr(args, "staged", False),
                             root=getattr(args, "root", "."))
-    return _exit_for(verdict)
+    return _exit_for(verdict, policy)
 
 
 def hook_command(args) -> int:
@@ -163,19 +180,27 @@ def hook_command(args) -> int:
     payload = read_payload(sys.stdin.read())
     with Timer() as timer:
         verdict, change = evaluate(payload, args.policy)
+
+    # Loaded once, and never allowed to fail the hook: a broken config must not
+    # stand between a person and their editor. Defaults are the safe fallback.
+    try:
+        policy = Policy.load(args.policy)
+    except (OSError, ValueError):
+        policy = Policy()
+
     if change.usable:
         _record(
             verdict,
             Run("hook", len(change.before or "") + len(change.after or ""),
                  timer.elapsed_ms),
-            Policy.load(args.policy),
+            policy,
         )
 
     if args.json_decision:
-        print(decision_json(verdict, change))
+        print(decision_json(verdict, change, policy))
         return EXIT_OK
 
-    if args.advisory or not blocks(verdict):
+    if args.advisory or not blocks(verdict, policy):
         print(_allow_notice(verdict, change, args.advisory), file=sys.stderr, end="")
         for note in verdict.skipped:
             print(f"yieldpoint: not evaluated — {note}", file=sys.stderr)
@@ -249,7 +274,7 @@ def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> in
         print(f"  {detail}")
     if utterance.confirmation:
         print(f"\n  {utterance.confirmation.question}")
-    return _exit_for(verdict)
+    return _exit_for(verdict, policy)
 
 
 def scan_command(args) -> int:
@@ -272,7 +297,7 @@ def scan_command(args) -> int:
 
     if args.json:
         print(verdict.to_json(indent=2))
-        return _exit_for(verdict)
+        return _exit_for(verdict, policy)
 
     for note in result.unreadable:
         print(f"unreadable: {note}", file=sys.stderr)

@@ -1,0 +1,108 @@
+"""The stylesheet for the documentation site.
+
+Separate from the prose because a colour is not a sentence, and because a file
+of CSS inside a file of paragraphs makes both harder to find things in.
+"""
+
+from __future__ import annotations
+
+STYLE = """:root{
+  --bg:#f5f6f7; --panel:#fff; --panel-2:#eceff1;
+  --ink:#10171b; --ink-2:#4f5f68; --ink-3:#7a8a93;
+  --line:#d8dee1; --line-2:#bcc6cb;
+  --steel:#3f6d78; --amber:#b4651f; --red:#a8402a;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Helvetica,Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0c1214; --panel:#131a1e; --panel-2:#182126;
+  --ink:#e2e9ec; --ink-2:#9aa9b1; --ink-3:#71818a;
+  --line:#222e34; --line-2:#33444c;
+  --steel:#6fb3bf; --amber:#dd9155; --red:#e0755c;
+}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--sans);font-size:16px;line-height:1.65;-webkit-font-smoothing:antialiased}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:1rem;top:1rem;background:var(--panel);padding:.5rem 1rem;z-index:10}
+
+.top{display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:center;justify-content:space-between;
+  padding:1rem clamp(1rem,5vw,3rem);border-bottom:1px solid var(--line);
+  background:var(--panel);position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:.6rem;font-weight:600;font-size:1.05rem;
+  color:var(--ink);text-decoration:none;letter-spacing:-.01em}
+.brand .mark{font-family:var(--mono);color:var(--amber)}
+.top nav{display:flex;flex-wrap:wrap;gap:.25rem 1.1rem;font-size:.9rem}
+.top nav a{color:var(--ink-2);text-decoration:none;padding:.2rem 0;border-bottom:2px solid transparent}
+.top nav a:hover{color:var(--ink)}
+.top nav a.on{color:var(--ink);border-bottom-color:var(--amber)}
+.top nav a.out{color:var(--ink-3)}
+
+main{max-width:62rem;margin:0 auto;padding:clamp(2rem,5vw,3.5rem) clamp(1rem,5vw,3rem) 5rem}
+h1{font-size:clamp(1.9rem,4vw,2.5rem);line-height:1.15;letter-spacing:-.022em;
+  margin:0 0 .6em;text-wrap:balance}
+h2{font-size:1.35rem;letter-spacing:-.014em;margin:2.4em 0 .7em;padding-top:.6em;
+  border-top:1px solid var(--line);text-wrap:balance}
+h3{font-size:1.02rem;margin:1.6em 0 .4em;letter-spacing:-.006em}
+p{margin:0 0 1.05em;max-width:62ch}
+.lede{font-size:1.12rem;color:var(--ink-2);max-width:58ch}
+.blurb{color:var(--ink-2);max-width:62ch}
+a{color:var(--steel)}
+ul{max-width:62ch}
+li{margin-bottom:.5em}
+
+pre{background:var(--panel);border:1px solid var(--line);border-radius:4px;
+  padding:1rem 1.15rem;overflow-x:auto;margin:1.2em 0}
+code{font-family:var(--mono);font-size:.875em}
+p code,li code,td code{background:var(--panel-2);border:1px solid var(--line);
+  border-radius:3px;padding:.06em .32em}
+pre code{background:none;border:0;padding:0}
+pre .c{color:var(--ink-3)}
+.diff .del{color:var(--red)}
+.diff .add{color:var(--steel)}
+
+table{border-collapse:collapse;width:100%;margin:1.2em 0;font-size:.93rem;
+  display:block;overflow-x:auto}
+th{text-align:left;font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line-2);
+  padding:.55rem .8rem;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:.55rem .8rem;vertical-align:top;color:var(--ink-2)}
+td:first-child{color:var(--ink)}
+
+.hero{margin-bottom:1rem}
+.hero h1{max-width:20ch}
+.cta{display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1.8rem}
+.button{display:inline-block;padding:.6rem 1.15rem;border-radius:4px;text-decoration:none;
+  font-size:.94rem;font-weight:500;background:var(--steel);color:var(--bg);border:1px solid var(--steel)}
+.button.ghost{background:none;color:var(--ink);border-color:var(--line-2)}
+
+.grid3{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));margin:2.5rem 0}
+.grid3 article{background:var(--panel);padding:1.2rem 1.3rem}
+.grid3 h3{margin-top:0}
+.grid3 p{font-size:.93rem;color:var(--ink-2);margin:0}
+
+.rules{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  grid-template-columns:repeat(auto-fit,minmax(19rem,1fr))}
+.rules article{background:var(--panel);padding:1.1rem 1.2rem;scroll-margin-top:5rem}
+.rh{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.45rem}
+.rid{font-size:.82rem;color:var(--ink)}
+.sev{font-family:var(--mono);font-size:.63rem;letter-spacing:.11em;text-transform:uppercase;
+  padding:.16em .5em;border-radius:2px;border:1px solid currentColor;white-space:nowrap}
+.sev-repair{color:var(--amber)}
+.sev-escalate{color:var(--red)}
+.sev-advisory{color:var(--ink-3)}
+.rules h3{margin:0 0 .3em;font-size:.98rem}
+.rules p{font-size:.9rem;color:var(--ink-2);margin:0}
+
+.warn{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--amber);
+  padding:1rem 1.2rem;margin:1.6em 0;border-radius:0 4px 4px 0}
+.warn h3{margin-top:0}
+.warn p{margin-bottom:0;font-size:.95rem;color:var(--ink-2)}
+
+footer{border-top:1px solid var(--line);padding:1.5rem clamp(1rem,5vw,3rem) 3rem;
+  color:var(--ink-3);font-size:.85rem}
+footer p{margin:.25em 0;max-width:70ch}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+"""

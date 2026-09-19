@@ -95,6 +95,16 @@ class Structure:
     max_change_lines: int = 1200
     forbid_utility_modules: bool = True
     duplicate_implementation: Status | None = Status.REPAIR
+
+    gates: bool = False
+    """Whether a maintainability finding on its own fails the run.
+
+    Off, deliberately. "This function is long" and "this assertion no longer
+    holds" are not the same claim, and giving them the same power over a commit
+    is how a gate gets passed ``--no-verify`` out of habit — at which point the
+    rule that mattered is muted too. They are still reported, still counted, and
+    still visible in ``scan``; they simply do not stand between a person and
+    their commit. Set true to make them binding."""
     custom: tuple[CustomRule, ...] = ()
 
 

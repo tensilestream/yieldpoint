@@ -108,9 +108,9 @@ def evaluate(payload: dict[str, Any], policy: Policy | str | None = None) -> tup
     return verdict, change
 
 
-def decision_json(verdict: Verdict, change: Change) -> str:
+def decision_json(verdict: Verdict, change: Change, policy=None) -> str:
     """The structured PreToolUse response."""
-    if not blocks(verdict):
+    if not blocks(verdict, policy):
         allowed: dict = {
             "hookEventName": "PreToolUse",
             "permissionDecision": "allow",
@@ -275,7 +275,7 @@ def immediate(verdict: Verdict) -> tuple[Finding, ...]:
     return tuple(f for f in verdict.findings if f.kind not in DEFERRED_KINDS)
 
 
-def blocks(verdict: Verdict) -> bool:
+def blocks(verdict: Verdict, policy=None) -> bool:
     """Whether this verdict should deny the edit.
 
     In a graph, ``REPAIR`` routes back to generation. A hook has no router — its
@@ -286,9 +286,18 @@ def blocks(verdict: Verdict) -> bool:
     Nothing analysed means nothing to deny on. The verdict still says
     ``unverified`` and the skipped files are still reported, so the fact is not
     hidden — it just does not stand between a person and their editor.
+
+    Neither does a finding that only describes shape. Refusing an edit because
+    the function it produced is long spends the one power this surface has on
+    the one thing it was not built for; ``structure.gates`` turns that back on.
     """
     if verdict.status in _ALLOWED:
         return False
+    if policy is not None:
+        from .commands import only_maintainability
+
+        if only_maintainability(verdict, policy):
+            return False
     return bool(immediate(verdict))
 
 

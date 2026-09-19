@@ -154,6 +154,18 @@ def _headline_colour(verdict: Verdict, paint) -> str:
 def _next_step(verdict: Verdict, policy: Policy, paint, *,
                staged: bool, root: str) -> str:
     """The closing block: what to do, how to escape, where the detail is."""
+    from .commands import only_maintainability
+
+    if only_maintainability(verdict, policy):
+        lines = [f"{paint.steel}→{paint.reset} Reported, not blocking. These describe "
+                 f"shape, not a weakening."]
+        lines.append(f"  {paint.dim}Set structure.gates true in .yieldpoint.json to make "
+                     f"them binding.{paint.reset}")
+        link = report_link(policy, root)
+        if link:
+            lines.append(f"  {paint.dim}Details:{paint.reset} {link}")
+        return "\n".join(lines)
+
     action = _ACTIONS.get(verdict.status, "")
     if not action:
         return ""
@@ -191,7 +203,10 @@ def print_human(verdict: Verdict, policy: Policy, *,
         return
 
     paint = palette()
-    head = _headline_colour(verdict, paint)
+    from .commands import only_maintainability
+
+    head = (paint.dim if only_maintainability(verdict, policy)
+            else _headline_colour(verdict, paint))
     print(f"{head}{verdict.status.value.upper()}{paint.reset}  "
           f"{len(verdict.findings)} finding(s)\n")
     for finding in verdict.findings:

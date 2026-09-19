@@ -2,7 +2,7 @@
 #
 #   repos:
 #     - repo: https://github.com/tensilestream/yieldpoint
-#       rev: v0.1.0
+#       rev: v0.1.1
 #       hooks:
 #         - id: yieldpoint
 #
@@ -12,7 +12,10 @@
 
 - id: yieldpoint
   name: Yieldpoint (verify staged changes)
-  description: Reports whether a staged change weakens what the tests verify. Exits 1 on a finding.
+  description: >-
+    Reports whether a staged change weakens what the tests verify. Fails the
+    commit on a weakening; maintainability findings are reported but do not
+    block. Set structure.gates true in .yieldpoint.json to make them binding.
   entry: yieldpoint review --staged
   language: python
   pass_filenames: false

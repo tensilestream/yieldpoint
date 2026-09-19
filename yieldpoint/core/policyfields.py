@@ -167,6 +167,7 @@ def _structure(raw: dict[str, Any], warnings: list[str]) -> Structure:
     return Structure(
         severity=_status(raw.get("severity"), Status.REPAIR, warnings, "structure.severity"),
         greenfield=bool(raw.get("greenfield", False)),
+        gates=bool(raw.get("gates", False)),
         forbid_utility_modules=bool(raw.get("forbid_utility_modules", True)),
         duplicate_implementation=_status(
             raw.get("duplicate_implementation"), Status.REPAIR, warnings,

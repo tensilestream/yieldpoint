@@ -1,0 +1,62 @@
+name: Docs
+
+# The site is generated, and the generator checks the rules reference against
+# the engine. A rule added without a docs entry fails here as well as in the
+# test suite, so the published page cannot quietly go stale.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/build_docs.py'
+      - 'yieldpoint/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Rebuild rather than trust what was committed: if the two differ, the
+      # commit was made without running the generator and the published page
+      # would not match the code it describes.
+      - name: Build the site
+        run: python3 scripts/build_docs.py
+
+      - name: Fail if the committed pages were stale
+        run: |
+          if ! git diff --quiet -- docs/; then
+            echo "::error::docs/ is out of date. Run: python3 scripts/build_docs.py"
+            git diff --stat -- docs/
+            exit 1
+          fi
+          echo "committed pages match the generator"
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

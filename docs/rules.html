@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rules reference · Yieldpoint</title>
+<meta name="description" content="Deterministic verification for agents that write code.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <a class="brand" href="index.html">
+    <span class="mark" aria-hidden="true">&#9581;&#9679;&#9582;</span>
+    <span>Yieldpoint</span>
+  </a>
+  <nav><a class="" href="index.html">Yieldpoint</a><a class="" href="start.html">Getting started</a><a class="on" href="rules.html">Rules reference</a><a class="" href="config.html">Configuration</a><a class="" href="integrations.html">Integrations</a><a class="" href="limits.html">Status and limits</a><a class="out" href="https://github.com/tensilestream/yieldpoint">GitHub &#8599;</a></nav>
+</header>
+<main id="main">
+<h1>Rules reference</h1>
+<p class='lede'>Every rule the engine can emit. This page is generated from the code: a rule that exists but is undocumented, or documented but removed, fails the build and the test suite.</p>
+<section><h2>What the tests verify</h2><p class='blurb'>The reason this project exists. Each of these is a statement about what a change <em>took away</em>, which is why no tool that grades the end state can report them.</p>
+<div class='rules'>
+<article id='assertion_monotonicity'><div class='rh'><code class='rid'>assertion_monotonicity</code><span class='sev sev-repair'>repair</span></div><h3>Assertion weakened</h3><p>An assertion on some value got weaker: <code>== 42</code> became <code>is not None</code>, a specific exception became a bare <code>Exception</code>, an exact count became a lower bound. The subject is still asserted, so the test still passes and coverage is unchanged.</p></article>
+<article id='disabled_assertion'><div class='rh'><code class='rid'>disabled_assertion</code><span class='sev sev-repair'>repair</span></div><h3>Assertion commented out or neutered</h3><p>An assertion still present in the source but no longer executed — commented out, moved behind a condition that is never true, or swallowed by a bare <code>except</code>.</p></article>
+<article id='empty_test'><div class='rh'><code class='rid'>empty_test</code><span class='sev sev-repair'>repair</span></div><h3>Test with nothing left in it</h3><p>A test function whose body asserts nothing: a <code>pass</code>, a docstring, or setup with no check at the end. It runs, it is counted, it verifies nothing.</p></article>
+<article id='skip_marker'><div class='rh'><code class='rid'>skip_marker</code><span class='sev sev-repair'>repair</span></div><h3>Test newly skipped</h3><p>A <code>@skip</code>, <code>@skipif</code>, <code>@xfail</code> or equivalent added to a test that did not have one. The suite goes green by not asking.</p></article>
+<article id='vacuous_assertion'><div class='rh'><code class='rid'>vacuous_assertion</code><span class='sev sev-repair'>repair</span></div><h3>Assertion that cannot fail</h3><p><code>assert True</code>, <code>assert [1]</code>, <code>assert x or True</code> — an assertion whose truth does not depend on the code under test.</p></article>
+</div></section>
+<section><h2>Moves that did not land</h2><p class='blurb'>A refactor is only correct if everything that pointed at the old thing now points at the new one. These catch the half-finished move.</p>
+<div class='rules'>
+<article id='boundary_violation'><div class='rh'><code class='rid'>boundary_violation</code><span class='sev sev-repair'>repair</span></div><h3>Layer boundary crossed</h3><p>An import that the project's declared zones forbid. Configured in <code>.yieldpoint.json</code>; mature tools exist for this, and it ships here for convenience rather than as a reason to adopt.</p></article>
+<article id='dangling_reference'><div class='rh'><code class='rid'>dangling_reference</code><span class='sev sev-repair'>repair</span></div><h3>Reference to something that moved</h3><p>A name is gone and something still points at it. The classic half-finished rename, where the tests that happen not to exercise that path stay green.</p></article>
+<article id='export_removed'><div class='rh'><code class='rid'>export_removed</code><span class='sev sev-repair'>repair</span></div><h3>Public API removed</h3><p>A name that was part of a module's public surface — in <code>__all__</code>, or imported elsewhere — is no longer there. Callers outside the change set cannot be seen by a diff, so this asks rather than assumes.</p></article>
+</div></section>
+<section><h2>The pipeline itself</h2><p class='blurb'>The cheapest way to make a suite pass is to stop running it. These watch the machinery rather than the code.</p>
+<div class='rules'>
+<article id='ci_check_disabled'><div class='rh'><code class='rid'>ci_check_disabled</code><span class='sev sev-escalate'>escalate</span></div><h3>CI step neutralised</h3><p>A step is still there but can no longer fail: <code>|| true</code>, <code>continue-on-error</code>, <code>if: false</code>. Reported as disabling the same step rather than as a removal plus an addition.</p></article>
+<article id='ci_check_removed'><div class='rh'><code class='rid'>ci_check_removed</code><span class='sev sev-escalate'>escalate</span></div><h3>CI step deleted</h3><p>A step disappeared from a workflow file. Deleting the job that runs the tests is the most effective way to make the tests pass.</p></article>
+</div></section>
+<section><h2>Shape and size</h2><p class='blurb'>Maintainability, not correctness. These are <strong>reported but do not fail a run</strong>: a commit refused because a function is fifty-one lines teaches people to reach for <code>--no-verify</code>, and that habit mutes the rules that matter too. Set <code>structure.gates</code> true to make them binding.</p>
+<div class='rules'>
+<article id='change_too_large'><div class='rh'><code class='rid'>change_too_large</code><span class='sev sev-repair'>repair</span></div><h3>Change too large to review</h3><p>Added lines past the configured ceiling. Aimed at agents, which do not tire and will happily produce a forty-file diff nobody can read.</p></article>
+<article id='complexity_too_high'><div class='rh'><code class='rid'>complexity_too_high</code><span class='sev sev-repair'>repair</span></div><h3>Too many branches</h3><p>Default 10.</p></article>
+<article id='duplicate_implementation'><div class='rh'><code class='rid'>duplicate_implementation</code><span class='sev sev-repair'>repair</span></div><h3>Structurally identical code</h3><p>Two functions with the same shape. Two copies drift apart, and a fix applied to one is a bug left in the other.</p></article>
+<article id='file_too_long'><div class='rh'><code class='rid'>file_too_long</code><span class='sev sev-repair'>repair</span></div><h3>File over the line limit</h3><p>Default 300 lines of code, excluding blanks and comments.</p></article>
+<article id='function_too_long'><div class='rh'><code class='rid'>function_too_long</code><span class='sev sev-repair'>repair</span></div><h3>Function over the line limit</h3><p>Default 50 lines.</p></article>
+<article id='generated_file_edited'><div class='rh'><code class='rid'>generated_file_edited</code><span class='sev sev-repair'>repair</span></div><h3>Generated file edited by hand</h3><p>A file marked as generated was edited directly. The edit is lost on the next regeneration, which is a bug that appears later and somewhere else.</p></article>
+<article id='nesting_too_deep'><div class='rh'><code class='rid'>nesting_too_deep</code><span class='sev sev-repair'>repair</span></div><h3>Nesting too deep</h3><p>Default 4 levels.</p></article>
+<article id='too_many_parameters'><div class='rh'><code class='rid'>too_many_parameters</code><span class='sev sev-repair'>repair</span></div><h3>Too many parameters</h3><p>Default 5.</p></article>
+<article id='utility_module'><div class='rh'><code class='rid'>utility_module</code><span class='sev sev-repair'>repair</span></div><h3>Module with no theme</h3><p>A <code>utils</code>-shaped file: unrelated functions with nothing in common but the fact that nobody knew where else to put them.</p></article>
+</div></section>
+<section><h2>Answering a rule</h2><p class='blurb'>Every rule is sometimes right about the code and wrong about the intent. Say so in the source, with a reason, and the finding is suppressed for that line only &mdash; and counted, so suppression cannot rot quietly.</p><pre><code># yieldpoint: allow assertion_monotonicity - broadened to cover YAML clients
+def test_every_client_resolves_a_path():
+    ...</code></pre><p>One rule per comment, a reason required, and the comment must sit on the line the finding points at or within two lines above it.</p></section>
+</main>
+<footer>
+  <p>Apache-2.0. The name and mark are not licensed with the code &mdash;
+     see <a href="https://github.com/tensilestream/yieldpoint/blob/main/TRADEMARK.md">TRADEMARK.md</a>.</p>
+  <p>This page is generated by <code>scripts/build_docs.py</code>; the rules
+     reference is checked against the engine on every build.</p>
+</footer>
+</body>
+</html>

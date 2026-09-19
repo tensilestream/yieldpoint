@@ -33,6 +33,15 @@ UTILITY_MODULE = "utility_module"
 DUPLICATE_IMPLEMENTATION = "duplicate_implementation"
 CHANGE_TOO_LARGE = "change_too_large"
 
+#: Every rule in this module. These describe the *shape* of code — how long, how
+#: nested, how large a diff — and none of them is a statement that the change
+#: took something away. Naming the set here, beside where they are emitted, is
+#: what lets a caller report them without letting them stop a commit.
+MAINTAINABILITY_RULES = frozenset({
+    FILE_TOO_LONG, FUNCTION_TOO_LONG, TOO_MANY_PARAMETERS, NESTING_TOO_DEEP,
+    COMPLEXITY_TOO_HIGH, UTILITY_MODULE, DUPLICATE_IMPLEMENTATION, CHANGE_TOO_LARGE,
+})
+
 #: Fixture methods that frameworks define as per-class by convention.
 #:
 #: Two classes both writing ``def tearDown(self): self.tmp.cleanup()`` are not

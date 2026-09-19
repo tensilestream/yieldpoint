@@ -42,6 +42,7 @@ langgraph = ["langgraph>=0.2"]
 
 [project.urls]
 Homepage = "https://github.com/tensilestream/yieldpoint"
+Documentation = "https://tensilestream.github.io/yieldpoint/"
 Repository = "https://github.com/tensilestream/yieldpoint"
 Changelog = "https://github.com/tensilestream/yieldpoint/blob/main/CHANGELOG.md"
 Issues = "https://github.com/tensilestream/yieldpoint/issues"

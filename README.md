@@ -53,6 +53,10 @@ REPAIR  1 finding(s)
 
 ## Contents
 
+**[Documentation site](https://tensilestream.github.io/yieldpoint/)** — the same material, navigable, with a
+[rules reference](https://tensilestream.github.io/yieldpoint/rules.html) generated from the engine.
+
+
 - [Install](#install) · [Quick start](#quick-start) — two commands
 - [`yieldpoint review`](#yieldpoint-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [The vision](#the-vision) · [Where it goes in the loop](#where-it-goes-in-the-loop)
@@ -1004,6 +1008,7 @@ Start with [CONTRIBUTING.md](./CONTRIBUTING.md) and [RULES.md](./RULES.md).
 | [RELEASING.md](./RELEASING.md) | How a release is cut |
 | [CHANGELOG.md](./CHANGELOG.md) | Release history |
 | [SECURITY.md](./.github/SECURITY.md) | Threat model and reporting |
+| [Documentation site](https://tensilestream.github.io/yieldpoint/) | Generated from `scripts/build_docs.py` |
 | [TRADEMARK.md](./TRADEMARK.md) | What the licence covers, and what the name does not |
 
 ## License

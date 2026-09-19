@@ -12,6 +12,9 @@ repos:
         # `review --staged` asks git for the staged diff. Do not use
         # `check --diff -` here: pre-commit gives a hook no stdin, so it reads
         # an empty diff and reports `ok` on everything.
+        #
+        # A weakening fails this hook. A maintainability finding is printed and
+        # does not — see structure.gates in .yieldpoint.json.
         verbose: true
 
       - id: tests
