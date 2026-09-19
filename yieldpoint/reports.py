@@ -31,6 +31,7 @@ def report_command(args) -> int:
     from . import ledger, window
     from .htmlreport import Page, render
     from .stats import summarise
+    from .timeline import timeline
 
     try:
         policy = Policy.load(args.policy)
@@ -41,9 +42,12 @@ def report_command(args) -> int:
         return EXIT_ERROR
 
     path = ledger.path_for(policy, args.root)
-    summary = summarise(window.apply(ledger.load(path), chosen))
+    events = window.apply(ledger.load(path), chosen)
+    summary = summarise(events)
     title, heading = _page_names(policy.project_name)
     page = Page(
+        turns=timeline(events),
+        price_per_million=policy.metrics.price_per_million,
         now=_current(args.root, policy),
         title=title,
         heading=heading,
@@ -64,10 +68,65 @@ def report_command(args) -> int:
         print(f"yieldpoint: could not write {target}: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    _wrote(target, summary, chosen, policy, path)
+    return EXIT_OK
+
+
+def _wrote(target, summary, chosen, policy, path) -> None:
+    """Say what was written, and hand any new events to the configured sink.
+
+    The Stop hook already runs ``report`` every turn, so this is where an export
+    belongs: no new wiring, and it cannot run more often than a turn.
+    """
+    from . import ledger, sink
+
+    sent = sink.flush(policy, ledger.load(path), path)
     print(f"wrote {target}  ({summary.verdicts:,} verification(s), {chosen.describe()})")
+    if sent:
+        print(f"  exported {sent:,} new event(s) to {sink.configured()[0]}")
     if not summary.verdicts:
         print("  Nothing recorded in that window; the page says so rather than "
               "showing zeros.")
+
+
+def export_command(args) -> int:
+    """Stream the ledger as JSON Lines, or hand it to the configured sink.
+
+    The export path for people who want the numbers somewhere other than this
+    machine. Yieldpoint writes to stdout or to a command's stdin and never opens
+    a socket; where the bytes go after that is the caller's business.
+    """
+    from . import ledger, sink, window
+    from .timeline import timeline
+
+    try:
+        policy = Policy.load(args.policy)
+        chosen = window.parse(
+            since=getattr(args, "since", "") or "",
+            run=getattr(args, "run", "") or "",
+            agent=getattr(args, "agent", "") or "",
+        )
+    except (OSError, ValueError, window.BadWindow) as exc:
+        print(f"yieldpoint: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    path = ledger.path_for(policy, args.root)
+    events = window.apply(ledger.load(path), chosen)
+
+    if args.sink:
+        argv = sink.configured()
+        if not argv:
+            print(f"yieldpoint: no sink configured; set {sink.ENV_VAR} to a JSON "
+                  "array of argv, e.g. '[\"curl\",\"-sS\",\"-XPOST\","
+                  "\"--data-binary\",\"@-\",\"https://collector/yp\"]'",
+                  file=sys.stderr)
+            return EXIT_ERROR
+        sent = sink.flush(policy, events, path)
+        print(f"sent {sent:,} event(s) to {argv[0]}", file=sys.stderr)
+        return EXIT_OK
+
+    for turn in timeline(events):
+        print(json.dumps(turn.to_dict(), separators=(",", ":")))
     return EXIT_OK
 
 
@@ -165,8 +224,9 @@ def _tick(label: str):
 def stats_command(args) -> int:
     """Report what the ledger holds. Reads only; records nothing."""
     from . import ledger, window
-    from .report import render, to_dict
+    from .report import to_dict
     from .stats import summarise
+    from .timeline import timeline
 
     try:
         policy = Policy.load(args.policy)
@@ -185,18 +245,60 @@ def stats_command(args) -> int:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    if getattr(args, "html", None) is not None:
+        return _as_page(args)
+
     events = window.apply(ledger.load(path), chosen)
     summary = summarise(events)
+    turns = timeline(events)
     if args.json:
-        print(json.dumps(to_dict(summary), indent=2))
+        payload = to_dict(summary)
+        payload["turns"] = [turn.to_dict() for turn in turns]
+        print(json.dumps(payload, indent=2))
     else:
-        print(render(summary))
-        print(f"\n  {chosen.describe()}, from {path}")
-        if not summary.verdicts and not chosen.everything:
-            print("  Nothing in that window. `yieldpoint stats` shows everything.")
+        _stats_text(summary, turns, chosen, path, _price(policy, args))
     return EXIT_OK
+
+
+def _as_page(args):
+    """``stats --html`` is ``report`` with the same window, so it delegates.
+
+    One renderer, not two that drift: whatever the terminal says, the page says.
+    """
+    from argparse import Namespace
+
+    return report_command(Namespace(
+        out=args.html or None,
+        root=args.root,
+        since=getattr(args, "since", "") or "",
+        run=getattr(args, "run", "") or "",
+        agent=getattr(args, "agent", "") or "",
+        policy=args.policy,
+    ))
+
+
+def _price(policy, args) -> float:
+    """``--price`` for one run, otherwise whatever the project configured."""
+    chosen = getattr(args, "price", None)
+    return policy.metrics.price_per_million if chosen is None else chosen
+
+
+def _stats_text(summary, turns, chosen, path, price: float) -> None:
+    """The totals, then the timeline, then where the numbers came from."""
+    from .report import render
+    from .timeline import render as render_turns
+
+    print(render(summary))
+    per_turn = render_turns(turns, price_per_million=price)
+    if per_turn:
+        print()
+        print(per_turn)
+    print(f"\n  {chosen.describe()}, from {path}")
+    if not summary.verdicts and not chosen.everything:
+        print("  Nothing in that window. `yieldpoint stats` shows everything.")
 
 
 __all__ = [
     "doctor_command", "backtest_command", "stats_command", "report_command",
+    "export_command",
 ]

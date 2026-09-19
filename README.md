@@ -19,8 +19,9 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/yieldpoint/"><img alt="PyPI" src="https://img.shields.io/pypi/v/yieldpoint.svg"></a>
-  <a href="https://pypi.org/project/yieldpoint/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/yieldpoint.svg"></a>
+  <!-- Restore both of these the moment 0.1.0 is on PyPI; until the package
+       exists they render as red "package or version not found". -->
+  <img alt="Python versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg">
   <a href="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml/badge.svg"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
@@ -671,6 +672,82 @@ yieldpoint: cannot read the period 'last tuesday'; try 2h, 30m, 7d, or today
 Recording is **local only** — there is no network call anywhere in this package. The file
 lives in `.yieldpoint/`, which ignores itself, so it never shows up in a diff. Turn it off
 with `"metrics": { "enabled": false }` in `.yieldpoint.json`, or `YIELDPOINT_NO_METRICS=1`.
+
+### Per turn, not just in total
+
+`yieldpoint stats` ends with the turn-by-turn table, and the HTML report carries the same
+one. A total tells you whether the tool is worth keeping; the timeline is the only way to
+see a *trend*.
+
+```console
+$ yieldpoint stats --since today
+────────────────────────────────────────────────────────────────
+  SAVED  on this repository, across 139 verification(s)
+
+             139   model calls not made      architectural
+      ~1,194,287   input tokens not read     estimated
+          ~$3.58   at $3.00 per M tokens     your stated rate
+
+  over 27 distinct file set(s); 112 verification(s) re-analysed one already counted
+────────────────────────────────────────────────────────────────
+
+PER TURN  when each verdict happened, and the running total after it
+  when                 surface  status     found     ms  calls   ~tokens  saved so far
+  2026-09-19 15:16:09  review   pass           0     20      1    11,480  138 calls · ~1,192,748 tokens saved
+  2026-09-19 15:16:13  check    pass           0      4      1     1,539  139 calls · ~1,194,287 tokens saved
+
+  calls  — architectural: one judge call per verdict, not made
+  tokens — estimated: analysed characters / 4
+```
+
+The three lines are three different kinds of number and are never added together, for the
+same reason the totals keep them apart.
+
+**The repeat line is not an apology, it is the point.** Verifying the same suite all day
+counts once per verdict, because an LLM-as-judge asked the same question all day would
+read it once per verdict too. But a large number reads as "a lot of different code", and
+on most repositories it is not, so the report says which it is rather than letting you
+assume. **There is no default price**, because a vendor
+rate baked in here would be stale within a quarter and unreproducible the moment it was —
+state your own and the report states it back:
+
+```json
+{ "metrics": { "price_per_million": 3.00 } }
+```
+
+`yieldpoint stats --price 3.00` overrides it for one run, and `yieldpoint stats --html`
+writes the same figures to the HTML page instead of the terminal.
+
+### Getting it off the machine
+
+A number you cannot aggregate across a team is barely better than one nobody checks — but
+shipping an HTTP client in here would retire the guarantee above. So the network is
+**yours**, not this package's: `YIELDPOINT_SINK` names a command, and Yieldpoint writes
+JSON Lines to its standard input.
+
+```sh
+export YIELDPOINT_SINK='["curl","-sS","-XPOST","--data-binary","@-","https://collector/yp"]'
+```
+
+**An environment variable, never `.yieldpoint.json`.** That file is committed, so a key
+there naming a command would mean cloning a repository and running one turn executes it —
+which [SECURITY.md](./.github/SECURITY.md) calls a vulnerability rather than a feature. A
+`metrics.sink` key is ignored and reported as a policy warning.
+
+It runs at the end of every turn, because the Stop hook already runs `yieldpoint report`.
+A watermark beside the ledger records what has gone, so each event is sent once; if the
+command fails the watermark does not move, and the events wait for the next turn. A JSON
+array, passed as argv — nothing is word-split, expanded, or seen by a shell.
+
+```sh
+yieldpoint export                  # every event as JSON Lines, on stdout
+yieldpoint export --since 24h      # a window of them
+yieldpoint export --sink           # run the configured command now
+```
+
+Point it at `curl`, at `tee -a /var/log/yieldpoint.jsonl`, at anything that reads stdin.
+Yieldpoint still never opens a socket, and `tests/test_timeline.py` asserts that no module
+in the package imports an HTTP client, so the claim cannot rot quietly.
 
 ---
 

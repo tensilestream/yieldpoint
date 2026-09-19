@@ -27,7 +27,8 @@ from .commands import (
     scan_command,
 )
 from .reports import (
-    backtest_command, doctor_command, report_command, stats_command,
+    backtest_command, doctor_command, export_command, report_command,
+    stats_command,
 )
 from .install import HOOK_MATCHER, init, install_hook, install_mcp, mcp_command
 
@@ -67,10 +68,19 @@ def _add_reporting_commands(sub) -> None:
     backtest_cmd.set_defaults(handler=backtest_command)
 
     _add_report_command(sub)
+    _add_export_command(sub)
     stats_cmd = sub.add_parser(
         "stats", help="what Yieldpoint has caught, and what it cost")
     stats_cmd.add_argument("--root", default=".", help="project directory")
     stats_cmd.add_argument("--policy", default=None, help="path to .yieldpoint.json")
+    stats_cmd.add_argument(
+        "--price", type=float, default=None, metavar="PER_M",
+        help="input-token price per million, for a cost estimate; "
+             "overrides metrics.price_per_million")
+    stats_cmd.add_argument(
+        "--html", nargs="?", const="", default=None, metavar="PATH",
+        help="write the HTML report instead of printing; "
+             "defaults to .yieldpoint/report.html")
     stats_cmd.add_argument(
         "--since", default="", metavar="PERIOD",
         help="only this period: 2h, 30m, 7d, today, or session (last 8h)")
@@ -78,6 +88,22 @@ def _add_reporting_commands(sub) -> None:
     stats_cmd.add_argument("--agent", default="", help="only this YIELDPOINT_AGENT")
     stats_cmd.add_argument("--json", action="store_true", help="machine-readable output")
     stats_cmd.set_defaults(handler=stats_command)
+
+def _add_export_command(sub) -> None:
+    """Getting the numbers off this machine, without this package doing it."""
+    export_cmd = sub.add_parser(
+        "export", help="stream the ledger as JSON Lines, or run the configured sink")
+    export_cmd.add_argument(
+        "--sink", action="store_true",
+        help="hand new events to metrics.sink instead of writing to stdout")
+    export_cmd.add_argument("--root", default=".", help="project directory")
+    export_cmd.add_argument("--since", default="", metavar="PERIOD",
+                            help="only this period: 2h, 30m, 7d, today, or session")
+    export_cmd.add_argument("--run", default="", help="only this YIELDPOINT_RUN_ID")
+    export_cmd.add_argument("--agent", default="", help="only this YIELDPOINT_AGENT")
+    export_cmd.add_argument("--policy", default=None, help="path to .yieldpoint.json")
+    export_cmd.set_defaults(handler=export_command)
+
 
 def _add_report_command(sub) -> None:
     """The HTML page. Its own function only because the parser it belongs to

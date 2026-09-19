@@ -64,6 +64,14 @@ class Page:
     now: Now = None
     """What needs attention, if the caller looked. ``None`` when it did not."""
 
+    turns: tuple = ()
+    """Per-turn rows, newest last. Empty when the caller did not ask for them."""
+
+    price_per_million: float = 0.0
+    """The reader's own input-token rate. Zero means no cost is shown — there is
+    no default, because a baked-in vendor price would be stale and would be a
+    number nobody could reproduce."""
+
     heading: str = ""
     """What the page says at the top. Defaults to ``title``, but is kept
     separate so the masthead does not print the product name twice: the eyebrow
@@ -88,7 +96,8 @@ def render(page: Page) -> str:
         _section("Architectural", "true by construction, not observed",
                  _architectural(s)),
         _section("Estimated", f"arithmetic on the measured bytes, at "
-                              f"{CHARS_PER_TOKEN} characters per token", _estimated(s)),
+                              f"{CHARS_PER_TOKEN} characters per token",
+                 _estimated(s, page.price_per_million)),
         _section("Not claimed", "stated rather than omitted", _unclaimed()),
     ])
     body = (
@@ -97,6 +106,7 @@ def render(page: Page) -> str:
         + _headline(s)
         + f"<div class='split'><div class='col'>{left}</div>"
           f"<div class='col'>{right}</div></div>"
+        + _timeline(page.turns)
     )
     return _document(page, body)
 
@@ -214,13 +224,20 @@ def _architectural(s: Summary) -> str:
     ])
 
 
-def _estimated(s: Summary) -> str:
-    return _rows("If an LLM-as-judge had produced the same critiques", [
+def _estimated(s: Summary, price_per_million: float = 0.0) -> str:
+    tokens = s.analysed_chars // CHARS_PER_TOKEN
+    rows = [
         ("model calls", f"{s.verdicts:,} (one per verdict, by construction)"),
         ("input tokens",
-         f"~{s.analysed_chars // CHARS_PER_TOKEN:,} "
-         f"({s.analysed_chars:,} characters / {CHARS_PER_TOKEN})"),
-    ])
+         f"~{tokens:,} ({s.analysed_chars:,} characters / {CHARS_PER_TOKEN})"),
+    ]
+    if price_per_million > 0:
+        from .timeline import cost
+
+        rows.append(("at your rate",
+                     f"~${cost(tokens, price_per_million):,.2f} "
+                     f"(${price_per_million:,.2f} per million, as configured)"))
+    return _rows("If an LLM-as-judge had produced the same critiques", rows)
 
 
 def _unclaimed() -> str:
@@ -268,6 +285,47 @@ def _section(name: str, note: str, body: str) -> str:
         f"<h2>{html.escape(name)}</h2>"
         f"<span class='note'>{html.escape(note)}</span></div>{body}</section>"
     )
+
+
+def _timeline(turns) -> str:
+    """Per turn, when it happened and the running total after it.
+
+    The totals above say what this has been worth; this says when, which is the
+    only way to see a trend rather than a number. The two savings columns keep
+    the tiers they have everywhere else: calls are architectural, tokens are an
+    estimate, and the header says so rather than letting a reader assume.
+    """
+    if not turns:
+        return ""
+    shown = turns[-40:]
+    head = ("<tr><th>when</th><th>surface</th><th>status</th>"
+            "<th class='num'>found</th><th class='num'>ms</th>"
+            "<th class='num'>calls</th><th class='num'>~tokens</th>"
+            "<th class='num'>cumulative ~tokens</th></tr>")
+    rows = "".join(
+        f"<tr><td>{html.escape(t.when)}</td>"
+        f"<td>{html.escape(t.surface)}</td>"
+        f"<td>{html.escape(t.status)}</td>"
+        f"<td class='num'>{t.findings:,}</td>"
+        f"<td class='num'>{t.duration_ms:,}</td>"
+        f"<td class='num'>{t.calls_saved:,}</td>"
+        f"<td class='num'>{t.tokens_saved:,}</td>"
+        f"<td class='num'>{t.cum_tokens_saved:,}</td></tr>"
+        for t in shown
+    )
+    from .timeline import repetition
+
+    distinct, repeats = repetition(turns)
+    more = ""
+    if repeats:
+        more = (f"<p class='caveat'>Over {distinct:,} distinct file set(s): "
+                f"{repeats:,} verification(s) re-analysed one already counted. The "
+                "totals count each, because a judge would have read each.</p>")
+    if len(turns) > len(shown):
+        more += (f"<p class='more'>{len(turns) - len(shown):,} earlier turn(s) not "
+                 "shown. <code>yieldpoint export</code> has every one.</p>")
+    table = f"<div class='scroll'><table class='rows'>{head}{rows}</table></div>{more}"
+    return _section("Per turn", "calls are architectural, tokens are estimated", table)
 
 
 def _ms(value: int) -> str:

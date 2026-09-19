@@ -10,6 +10,43 @@ package version is not.
 
 ## [Unreleased]
 
+### Added
+
+- **`yieldpoint export`** — the ledger as JSON Lines on stdout, with per-event and
+  cumulative savings on every row. `--since`, `--run` and `--agent` select a window.
+- **`YIELDPOINT_SINK`** — a command, as a JSON array of argv, that each turn's new events
+  are piped to. Yieldpoint spawns it and writes to its stdin; it never opens a socket, so
+  the no-network guarantee is unchanged. A watermark beside the ledger sends each event
+  once and does not advance when the command fails. Read from the environment and never
+  from `.yieldpoint.json`: that file is committed, and SECURITY.md requires that
+  configuration can never name an executable. A `metrics.sink` key there is ignored and
+  reported as a policy warning.
+- **`yieldpoint stats --html [PATH]`** — write the HTML report instead of printing,
+  through the same renderer `yieldpoint report` uses so the two cannot drift.
+- **`metrics.price_per_million`** and `stats --price` — a cost estimate from a rate you
+  state, printed back beside the result. No default rate: a baked-in vendor price would
+  be stale and unreproducible, which RULES.md section 5 forbids.
+- **Repeat disclosure** on the savings panel and the HTML page: how many distinct file
+  sets the total covers, and how many verifications re-analysed one already counted. The
+  totals still count every verdict — a judge would have read every one — but a large
+  number reads as distinct work, and usually is not.
+- **Per-turn timeline** in `yieldpoint stats` and in the HTML report, by default. Date,
+  time and savings for each verdict, with the running total after it. Calls and tokens
+  stay in their existing tiers — architectural and estimated — and are never blended.
+
+### Fixed
+
+- **Ledger appends were lost under concurrent writers on Windows.** Append there is
+  seek-to-end then write, so two processes resolved the same offset and one overwrote the
+  other. No error was raised, which is why retrying could not fix it and why CI looked
+  flaky. Appends now take a real cross-process lock (`fcntl.flock` / `msvcrt.locking`) on
+  a sidecar file. `tests/test_concurrency.py` asserts mutual exclusion directly, on every
+  platform.
+- **The running total was never printed** by the human reporter: the call sat after a
+  `return` and referenced a name that was not in scope.
+- **`console.__all__` named `allow_notice`**, which the module does not define, so
+  `from yieldpoint.console import *` raised.
+
 Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
 
 ### Added

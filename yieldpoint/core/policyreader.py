@@ -70,6 +70,31 @@ def _closest(key: str) -> str | None:
     return matches[0] if matches else None
 
 
+def _metrics(section: dict, warnings: list[str]) -> Metrics:
+    """Local accounting. Deliberately cannot name a command.
+
+    A ``sink`` key here is ignored and reported. It is not a typo to correct
+    quietly: a committed file that could name an executable would run it on
+    every machine that cloned the repository, which SECURITY.md names as a
+    vulnerability rather than a feature.
+    """
+    if "sink" in section:
+        warnings.append(
+            "metrics.sink in .yieldpoint.json is ignored — configuration may "
+            "never name a command. Set the YIELDPOINT_SINK environment "
+            "variable instead; see SECURITY.md.")
+    try:
+        price = float(section.get("price_per_million") or 0.0)
+    except (TypeError, ValueError):
+        warnings.append("metrics.price_per_million is not a number; no cost is shown")
+        price = 0.0
+    return Metrics(
+        enabled=bool(section.get("enabled", True)),
+        path=str(section.get("path") or Metrics.path),
+        price_per_million=max(0.0, price),
+    )
+
+
 def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     """Normalise a parsed `.yieldpoint.json` document into a :class:`Policy`."""
     warnings: list[str] = []
@@ -149,10 +174,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
         ),
         linters=_linters(linters, warnings),
         routing=_routing(routing, warnings),
-        metrics=Metrics(
-            enabled=bool(metrics.get("enabled", True)),
-            path=str(metrics.get("path") or Metrics.path),
-        ),
+        metrics=_metrics(metrics, warnings),
         voice=Voice(
             severity_floor=_status(
                 voice.get("severity_floor"), Status.ESCALATE, warnings, "voice.severity_floor"),

@@ -263,6 +263,20 @@ class Metrics:
     enabled: bool = True
     path: str = ".yieldpoint/metrics.jsonl"
 
+    price_per_million: float = 0.0
+    """Your input-token price, per million, for the cost estimate.
+
+    Zero means no cost is shown. There is no default rate on purpose: prices
+    differ by vendor, by model and by month, and a figure baked in here would
+    be stale and unreproducible — which RULES.md section 5 forbids. State your
+    own and the report states it back beside the result. Unlike ``sink`` this
+    is safe in a committed file: it is a number, and a number cannot execute."""
+
+    #: Where events are exported is deliberately **not** here. This file is
+    #: committed, and SECURITY.md states that configuration must never be able
+    #: to name an executable: a repository that could would run a command on
+    #: every machine that cloned it. The sink is read from the environment
+    #: instead — see ``yieldpoint/sink.py``.
 
 @dataclass(frozen=True)
 class Policy:
