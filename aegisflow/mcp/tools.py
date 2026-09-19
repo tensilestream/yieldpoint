@@ -90,6 +90,19 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "aegis_stats",
+        "title": "What AegisFlow has caught and what it cost",
+        "description": (
+            "Report the local ledger: how many verifications ran, what they caught, "
+            "and what the critique cost. Figures are separated into measured, "
+            "architectural and estimated, and none is transmitted anywhere."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"root": {"type": "string", "description": "Project directory."}},
+        },
+    },
+    {
         "name": "aegis_policy",
         "title": "Show the active rules",
         "description": (
@@ -147,6 +160,15 @@ def _scan(arguments: dict, policy: Policy):
     result = scan(arguments.get("path") or ".", policy)
     text = _render(result.verdict, header=f"{result.files} file(s) audited")
     return text, result.verdict.to_dict(), False
+
+
+def _stats(arguments: dict, policy: Policy):
+    from .. import ledger
+    from ..stats import render, summarise, to_dict
+
+    root = arguments.get("root") or "."
+    summary = summarise(ledger.load(ledger.path_for(policy, root)))
+    return render(summary), to_dict(summary), False
 
 
 def _policy(arguments: dict, policy: Policy):
@@ -207,5 +229,6 @@ _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
     "aegis_verify_diff": _verify_diff,
     "aegis_review": _review,
     "aegis_scan": _scan,
+    "aegis_stats": _stats,
     "aegis_policy": _policy,
 }

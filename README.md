@@ -41,7 +41,8 @@ REPAIR  1 finding(s)
 - [`aegisflow review`](#aegisflow-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
 - [What it checks](#what-it-checks) · [Configuration](#configuration)
-- [Why deterministic](#why-deterministic) · [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
+- [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--aegisflow-stats)
+- [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
 - [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
 - [Contributing](#contributing) · [License](#license)
 
@@ -322,6 +323,68 @@ It also detects **reward hacking**. If your agent's reward signal is "tests pass
 signal is gameable: the agent can win by weakening the test. If you run an eval harness or
 an RL loop over a coding agent, this is the check that tells you whether it solved the task
 or gamed the benchmark.
+
+## Is it actually helping? — `aegisflow stats`
+
+Every verdict appends one line to a local file. `aegisflow stats` adds them up, and keeps
+three kinds of number strictly apart — because blending them is how tools end up quoting
+savings nobody can reproduce.
+
+```console
+$ aegisflow stats
+MEASURED — counted from what actually ran
+  verifications                  47
+  reported something             12
+  findings                       19
+  time in verification       1.4 s   (median 26 ms per verdict)
+
+  what it caught
+    assertion_monotonicity          7
+    dangling_reference              5
+    complexity_too_high             4
+    empty_test                      3
+
+ARCHITECTURAL — true by construction, not measured
+  model calls made by AegisFlow                   0
+  prescriptions assembled, not generated         19
+  characters of critique produced free        3,904
+  critique is 28.4x smaller than the code it describes
+
+ESTIMATED — arithmetic on the measured bytes above
+  If an LLM-as-judge had produced the same critiques:
+    model calls                                  47   (one per verdict, by construction)
+    input tokens                        ~   184,000   (736,412 chars / 4)
+
+NOT CLAIMED
+  That your agent converges in fewer total model calls. That needs a
+  benchmark against a real model, and it does not exist yet.
+```
+
+**Why three blocks.** *Measured* is counted from what ran. *Architectural* is true by
+construction — AegisFlow makes no model calls, so an LLM-as-judge doing the same job costs
+one per verdict; that is a property of how each is built, not a benchmark result.
+*Estimated* is arithmetic on the measured byte counts with the assumption printed beside
+it. If you only trust the first block you still get a complete picture.
+
+**On prompt compaction.** The honest version of that claim is the ratio above: the
+prescription describes the change in a fraction of the characters, so a repair round feeds
+the model a targeted instruction instead of the files and the reasoning to re-derive it.
+Below about 1.0 the report says the critique is *larger* than the code — which happens on
+tiny changes, and is printed rather than rounded away.
+
+**What is deliberately absent:** any claim that your agent finishes in fewer total model
+calls. That needs a benchmark against a real model, it does not exist, and until it does
+the number will not appear here.
+
+```sh
+aegisflow stats --json      # the same figures, tiered the same way
+```
+
+Recording is **local only** — there is no network call anywhere in this package. The file
+lives in `.aegisflow/`, which ignores itself, so it never shows up in a diff. Turn it off
+with `"metrics": { "enabled": false }` in `.aegisflow.json`, or `AEGISFLOW_NO_METRICS=1`.
+
+---
 
 ## How wrong is it? — run the number yourself
 

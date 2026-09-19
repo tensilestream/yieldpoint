@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .core.policy import Policy
@@ -25,6 +26,31 @@ EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 #: them differently. Only reached when the *whole* change was unanalysable; a
 #: change with one Python file among twenty TypeScript ones still exits OK.
 EXIT_UNVERIFIED = 3
+
+
+@dataclass(frozen=True)
+class _Run:
+    """What a surface knows about a verification that the verdict does not."""
+
+    surface: str
+    analysed: int
+    elapsed: int
+    root: str = "."
+
+
+def _record(verdict, run: _Run, policy) -> None:
+    """Append one ledger line. After the verdict, so it cannot change one."""
+    from . import ledger
+
+    if not ledger.enabled(policy):
+        return
+    ledger.record(
+        ledger.observe(
+            verdict, run.surface,
+            analysed_chars=run.analysed, duration_ms=run.elapsed,
+        ),
+        ledger.path_for(policy, run.root),
+    )
 
 
 def _exit_for(verdict) -> int:
@@ -60,11 +86,22 @@ def check(args) -> int:
         print(f"aegisflow: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    from .ledger import Timer
+
     if args.speak:
         policy = policy.for_voice()
-    verdict = verify_change(before, after, args.path, policy)
-    if args.speak:
-        return _print_spoken(verdict, policy, deletions=() if after is not None else (args.path,))
+    with Timer() as timer:
+        verdict = verify_change(before, after, args.path, policy)
+    _record(verdict, _Run("check", len(before or "") + len(after or ""),
+                          timer.elapsed_ms), policy)
+    return _emit(verdict, args, policy,
+                 deletions=() if after is not None else (args.path,))
+
+
+def _emit(verdict, args, policy, deletions: tuple = ()) -> int:
+    """Print a verdict in whichever form was asked for, and pick the exit code."""
+    if getattr(args, "speak", False):
+        return _print_spoken(verdict, policy, deletions=deletions)
     if args.json:
         print(verdict.to_json(indent=2))
     else:
@@ -94,12 +131,34 @@ def review_command(args) -> int:
         print(f"aegisflow: {diff.reason}", file=sys.stderr)
         return EXIT_OK
 
-    verdict = verify_diff(diff.text, root=diff.root, policy=policy)
+    from .ledger import Timer
+
+    with Timer() as timer:
+        verdict = verify_diff(diff.text, root=diff.root, policy=policy)
+    _record(verdict, _Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
+    return _emit(verdict, args, policy)
+
+
+def stats_command(args) -> int:
+    """Report what the ledger holds. Reads only; records nothing."""
+    from . import ledger
+    from .stats import render, summarise, to_dict
+
+    try:
+        policy = Policy.load(args.policy)
+    except (OSError, ValueError) as exc:
+        print(f"aegisflow: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    path = ledger.path_for(policy, args.root)
+    summary = summarise(ledger.load(path))
     if args.json:
-        print(verdict.to_json(indent=2))
+        print(json.dumps(to_dict(summary), indent=2))
     else:
-        _print_human(verdict, policy)
-    return _exit_for(verdict)
+        print(render(summary))
+        if summary.verdicts:
+            print(f"\n  recorded in {path}")
+    return EXIT_OK
 
 
 def check_diff(args) -> int:
@@ -125,8 +184,18 @@ def check_diff(args) -> int:
 
 
 def hook_command(args) -> int:
+    from .ledger import Timer
+
     payload = read_payload(sys.stdin.read())
-    verdict, change = evaluate(payload, args.policy)
+    with Timer() as timer:
+        verdict, change = evaluate(payload, args.policy)
+    if change.usable:
+        _record(
+            verdict,
+            _Run("hook", len(change.before or "") + len(change.after or ""),
+                 timer.elapsed_ms),
+            Policy.load(args.policy),
+        )
 
     if args.json_decision:
         print(decision_json(verdict, change))

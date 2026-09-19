@@ -797,6 +797,41 @@ in-process: initialize, tools/list and a tools/call all answered, stdout clean.
 
 ---
 
+## Stage 18 — making the value checkable ✅
+
+"Zero-token deterministic critique" was true by construction and invisible in practice,
+which makes it indistinguishable from a slogan. `ledger.py` appends one line per verdict;
+`stats.py` reports it.
+
+**The design constraint is the tiering.** Three kinds of number, never blended:
+
+- *Measured* — verdicts, findings by rule, prescription characters, source characters
+  analysed, elapsed milliseconds.
+- *Architectural* — AegisFlow makes zero model calls, so an LLM-as-judge doing the same
+  job costs one per verdict. A property of how each is built, not an observation.
+- *Estimated* — tokens as characters over a stated constant, labelled everywhere it
+  appears, because pinning a real tokenizer would mean a dependency and a false precision.
+
+And one heading for what is **not** claimed: fewer total model calls to convergence
+remains unbenchmarked (§4.1), so the report says so rather than omitting it silently.
+
+**Prompt compaction, honestly.** Reported as analysed characters per prescription
+character. The first end-to-end run printed "critique is 0x smaller", because on a small
+change the prescription is legitimately *larger* than the code — the ratio is now stated
+in whichever direction is true rather than rounded into a nonsense win.
+
+**Constraints held.** Recording happens after a verdict exists and cannot alter one;
+`observe()` is pure and the clock is read only at the surface, so RULES.md §4 still holds
+for everything in `core`. A failed write is swallowed — bookkeeping must never fail a
+verification. Local only, no network. The ledger directory writes its own `.gitignore`
+rather than editing one the project owns.
+
+**Gate.** 558 tests. Corpus unchanged at 0/0. Self-audit 24 → **23**: two new modules,
+neither adding a finding, and the CLI parser split removed one. Proved end to end with the
+installed binary — hook blocks a weakening, `aegisflow stats` shows it.
+
+---
+
 ## Not scheduled
 
 TypeScript analysis (lexical, cannot block — enforced by `Finding.__post_init__`), MCP

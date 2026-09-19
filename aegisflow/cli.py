@@ -22,6 +22,7 @@ from .commands import (
     check,
     check_diff,
     review_command,
+    stats_command,
     hook_command,
     linters_command,
     scan_command,
@@ -33,6 +34,26 @@ from .install import HOOK_MATCHER, init, install_hook, install_mcp, mcp_command
 __all__ = ["main", "EXIT_OK", "EXIT_FINDINGS", "EXIT_UNVERIFIED", "EXIT_ERROR"]
 
 
+
+
+def _add_reporting_commands(sub) -> None:
+    """Subcommands that answer "what happened?" rather than verify a change."""
+    review_cmd = sub.add_parser(
+        "review", help="verify uncommitted work — no arguments needed")
+    review_cmd.add_argument("--root", default=".", help="repository directory")
+    review_cmd.add_argument("--staged", action="store_true", help="only what is staged")
+    review_cmd.add_argument(
+        "--against", default="", help="compare with a branch or commit instead")
+    review_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
+    review_cmd.add_argument("--json", action="store_true", help="machine-readable output")
+    review_cmd.set_defaults(handler=review_command)
+
+    stats_cmd = sub.add_parser(
+        "stats", help="what AegisFlow has caught, and what it cost")
+    stats_cmd.add_argument("--root", default=".", help="project directory")
+    stats_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
+    stats_cmd.add_argument("--json", action="store_true", help="machine-readable output")
+    stats_cmd.set_defaults(handler=stats_command)
 
 def _add_setup_commands(sub) -> None:
     """Subcommands that wire AegisFlow into something else rather than run it.
@@ -96,15 +117,8 @@ def _parser() -> argparse.ArgumentParser:
                        help="render for a listener, with voice-mode severity")
     check_cmd.set_defaults(handler=check)
 
-    review_cmd = sub.add_parser(
-        "review", help="verify uncommitted work — no arguments needed")
-    review_cmd.add_argument("--root", default=".", help="repository directory")
-    review_cmd.add_argument("--staged", action="store_true", help="only what is staged")
-    review_cmd.add_argument(
-        "--against", default="", help="compare with a branch or commit instead")
-    review_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
-    review_cmd.add_argument("--json", action="store_true", help="machine-readable output")
-    review_cmd.set_defaults(handler=review_command)
+    _add_reporting_commands(sub)
+
 
     hook_cmd = sub.add_parser("hook", help="run as a Claude Code PreToolUse hook (reads stdin)")
     hook_cmd.add_argument("--policy", help="path to .aegisflow.json")

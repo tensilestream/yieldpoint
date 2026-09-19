@@ -211,6 +211,20 @@ class Voice:
 
 
 @dataclass(frozen=True)
+class Metrics:
+    """Local accounting of what AegisFlow did.
+
+    On by default because a value claim nobody can check is worth nothing, and
+    this one costs a line of JSON per verdict. Nothing leaves the machine: there
+    is no network call anywhere in this package. Set ``enabled`` false, or export
+    ``AEGISFLOW_NO_METRICS``, to switch it off.
+    """
+
+    enabled: bool = True
+    path: str = ".aegisflow/metrics.jsonl"
+
+
+@dataclass(frozen=True)
 class Policy:
     version: str = "1.0"
     project_name: str = "unnamed"
@@ -226,6 +240,7 @@ class Policy:
     linters: Linters = field(default_factory=Linters)
     voice: Voice = field(default_factory=Voice)
     generated: GeneratedCode = field(default_factory=GeneratedCode)
+    metrics: Metrics = field(default_factory=Metrics)
     source: str = "defaults"
     warnings: tuple[str, ...] = ()
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from .policy import (
+    Metrics,
     DEFAULT_IGNORE,
     DEFAULT_PROTECTED_PATTERNS,
     Boundaries,
@@ -42,6 +43,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     boundaries = _section(raw, "boundaries", warnings)
     breaker = _section(raw, "loop_breaker", warnings)
     linters = _section(raw, "linters", warnings)
+    metrics = _section(raw, "metrics", warnings)
     voice = _section(raw, "voice", warnings)
     generated = _section(raw, "generated", warnings)
     subjects = _section(raw, "subjects", warnings)
@@ -109,6 +111,10 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
             on_trip=_status(breaker.get("on_trip"), Status.ESCALATE, warnings, "on_trip"),
         ),
         linters=_linters(linters, warnings),
+        metrics=Metrics(
+            enabled=bool(metrics.get("enabled", True)),
+            path=str(metrics.get("path") or Metrics.path),
+        ),
         voice=Voice(
             severity_floor=_status(
                 voice.get("severity_floor"), Status.ESCALATE, warnings, "voice.severity_floor"),

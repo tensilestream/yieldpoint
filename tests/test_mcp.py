@@ -67,7 +67,7 @@ class TestToolListing(unittest.TestCase):
         names = {tool["name"] for tool in request("tools/list")["result"]["tools"]}
         self.assertEqual(names, {
             "aegis_verify_change", "aegis_verify_diff", "aegis_review",
-            "aegis_scan", "aegis_policy"})
+            "aegis_scan", "aegis_stats", "aegis_policy"})
 
     def test_schemas_are_well_formed(self):
         for tool in TOOLS:

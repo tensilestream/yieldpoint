@@ -40,6 +40,17 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   MCP as **`aegis_review`**, the zero-argument tool an agent can call after finishing a
   set of edits.
 - **`python -m aegisflow`** — the full CLI without needing anything on PATH.
+- **`aegisflow stats`** and the **`aegis_stats`** MCP tool — local accounting of what
+  AegisFlow caught and what the critique cost. Figures are reported in three blocks that
+  are never blended: *measured* (counted from what ran), *architectural* (true by
+  construction — zero model calls made, so an LLM-as-judge costs one per verdict), and
+  *estimated* (arithmetic on measured bytes, with the characters-per-token assumption
+  printed beside the result). A "fewer total model calls to convergence" figure is
+  deliberately absent and named as unclaimed, per PLAN_AND_POSITIONING.md §4.1.
+- **`metrics` policy section.** Recording is on by default and entirely local — there is
+  no network call in this package. Disabled with `"metrics": {"enabled": false}` or
+  `AEGISFLOW_NO_METRICS=1`. The ledger directory writes its own `.gitignore`, so it never
+  appears in a diff and AegisFlow never edits a file the project owns.
 
 ### Fixed
 
