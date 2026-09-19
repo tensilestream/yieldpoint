@@ -12,11 +12,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow import ledger
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
-from aegisflow.report import render, to_dict
-from aegisflow.stats import summarise
+from yieldpoint import ledger
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Confidence, Finding, Status, Verdict
+from yieldpoint.report import render, to_dict
+from yieldpoint.stats import summarise
 
 
 def _verdict(rules=("assertion_monotonicity",)):
@@ -83,7 +83,7 @@ class TestSwitchingItOff(unittest.TestCase):
         import os
         from unittest import mock
 
-        with mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1"}):
+        with mock.patch.dict(os.environ, {"YIELDPOINT_METRICS": "1"}):
             # A forced-on switch is about context, not about consent: a project
             # that turned recording off in its committed policy stays off.
             self.assertFalse(
@@ -98,7 +98,7 @@ class TestSwitchingItOff(unittest.TestCase):
         """
         from unittest import mock
 
-        from aegisflow import recording
+        from yieldpoint import recording
 
         with mock.patch.object(recording, "under_test", return_value=False):
             self.assertTrue(ledger.enabled(Policy()))
@@ -107,7 +107,7 @@ class TestSwitchingItOff(unittest.TestCase):
         import os
         from unittest import mock
 
-        with mock.patch.dict(os.environ, {"AEGISFLOW_NO_METRICS": "1"}):
+        with mock.patch.dict(os.environ, {"YIELDPOINT_NO_METRICS": "1"}):
             self.assertFalse(ledger.enabled(Policy()))
 
 
@@ -175,7 +175,7 @@ class TestCompactionWording(unittest.TestCase):
 class TestItDoesNotPolluteTheRepository(unittest.TestCase):
     def test_the_ledger_directory_ignores_itself(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / ".aegisflow" / "metrics.jsonl"
+            path = Path(tmp) / ".yieldpoint" / "metrics.jsonl"
             ledger.record(ledger.observe(_verdict(), "hook"), path)
             marker = path.parent / ".gitignore"
             self.assertTrue(marker.is_file(), "must not need a manual .gitignore entry")
@@ -186,7 +186,7 @@ class TestItDoesNotPolluteTheRepository(unittest.TestCase):
             root = Path(tmp)
             (root / ".gitignore").write_text("__pycache__/\n")
             ledger.record(ledger.observe(_verdict(), "hook"),
-                          root / ".aegisflow" / "metrics.jsonl")
+                          root / ".yieldpoint" / "metrics.jsonl")
             self.assertEqual((root / ".gitignore").read_text(), "__pycache__/\n")
 
 
@@ -227,15 +227,15 @@ class TestATestRunRecordsNothing(unittest.TestCase):
         import os
         from unittest import mock
 
-        with mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1"}):
+        with mock.patch.dict(os.environ, {"YIELDPOINT_METRICS": "1"}):
             self.assertTrue(ledger.enabled(Policy()))
 
     def test_no_metrics_still_wins_over_forcing_it_on(self):
         import os
         from unittest import mock
 
-        with mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1",
-                                          "AEGISFLOW_NO_METRICS": "1"}):
+        with mock.patch.dict(os.environ, {"YIELDPOINT_METRICS": "1",
+                                          "YIELDPOINT_NO_METRICS": "1"}):
             self.assertFalse(ledger.enabled(Policy()))
 
 

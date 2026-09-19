@@ -23,8 +23,8 @@ def pytest_sessionfinish(session, exitstatus):
         return  # already failing; adding a second reason helps nobody
 
     try:
-        from aegisflow.verify import verify_diff
-        from aegisflow.worktree import uncommitted
+        from yieldpoint.verify import verify_diff
+        from yieldpoint.worktree import uncommitted
     except ImportError:
         return
 
@@ -40,7 +40,7 @@ def pytest_sessionfinish(session, exitstatus):
     session.exitstatus = 1
     reporter = session.config.pluginmanager.get_plugin("terminalreporter")
     if reporter:
-        reporter.write_sep("=", "AegisFlow: the suite passed because it was weakened",
+        reporter.write_sep("=", "Yieldpoint: the suite passed because it was weakened",
                            red=True)
         for finding in offences:
             reporter.write_line(f"{finding.location}  {finding.detail}")
@@ -48,8 +48,8 @@ def pytest_sessionfinish(session, exitstatus):
 
 
 @pytest.fixture(scope="session")
-def aegis_policy():
+def yieldpoint_policy():
     """The active policy, for tests that want to assert on their own rules."""
-    from aegisflow.core.policy import Policy
+    from yieldpoint.core.policy import Policy
 
     return Policy.load(None)

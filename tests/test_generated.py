@@ -7,10 +7,10 @@ to close. Misclassifying generated code as authored only wastes a check.
 
 import unittest
 
-from aegisflow.core.generated import detect
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Status
-from aegisflow.verify import GENERATED_FILE_EDITED, verify_change
+from yieldpoint.core.generated import detect
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import GENERATED_FILE_EDITED, verify_change
 
 
 class TestMarkers(unittest.TestCase):

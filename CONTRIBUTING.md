@@ -5,7 +5,7 @@
 ```sh
 python -m unittest discover -s tests -t . -q    # no dependencies required
 ./scripts/release-check.sh                      # full pre-flight
-aegisflow scan aegisflow --policy .aegisflow.json   # AegisFlow on itself
+yieldpoint scan yieldpoint --policy .yieldpoint.json   # Yieldpoint on itself
 ```
 
 The core has no runtime dependencies and the tests use `unittest` from the standard

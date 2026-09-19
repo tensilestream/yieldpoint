@@ -1,4 +1,4 @@
-# AegisFlow Engineering Standards
+# Yieldpoint Engineering Standards
 
 Standards for this codebase. Scope and product rationale live in
 [PLAN_AND_POSITIONING.md](./PLAN_AND_POSITIONING.md).
@@ -26,15 +26,15 @@ Standards for this codebase. Scope and product rationale live in
 - **Dependency Inversion** — the verification core depends on abstract source and diff
   inputs, never directly on the filesystem, a VCS, or a model provider.
 - **DRY** — one engine. Path normalisation, assertion ranking and policy loading exist
-  exactly once, in `aegisflow.core`, and every adapter calls into it. Two implementations
+  exactly once, in `yieldpoint.core`, and every adapter calls into it. Two implementations
   of the same check will drift, and a verifier that drifts is worthless.
 
 ## 3. Language allocation
 
 | Layer | Language | Why |
 |---|---|---|
-| Verification core (`aegisflow/core/`) | **Python**, no runtime dependencies | LangGraph and the target persona's stack are Python-first. The core stays dependency-free so it can be embedded anywhere without version conflicts. |
-| Framework adapters (`aegisflow/langgraph/`, later `adapters/`) | **Python** | Thin translation layers over the verdict API. |
+| Verification core (`yieldpoint/core/`) | **Python**, no runtime dependencies | LangGraph and the target persona's stack are Python-first. The core stays dependency-free so it can be embedded anywhere without version conflicts. |
+| Framework adapters (`yieldpoint/langgraph/`, later `adapters/`) | **Python** | Thin translation layers over the verdict API. |
 | Later surfaces (MCP server, CI action, IDE) | Python, or TS where the host demands it | Every one calls the same core. None reimplements a check. |
 
 **On Rust:** a Rust core with `pyo3`/`napi` bindings is the correct long-term shape, for

@@ -12,5 +12,5 @@ htmlcov/
 .DS_Store
 .codegraph/
 
-# Backups written by `aegisflow init` / `install-mcp` / `install-hook`
-*.aegisflow-backup
+# Backups written by `yieldpoint init` / `install-mcp` / `install-hook`
+*.yieldpoint-backup

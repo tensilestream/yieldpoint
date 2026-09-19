@@ -12,8 +12,8 @@ separately, A is reported as weakening the suite and B as doing nothing. Pool
 the subjects first — the verdict is about the change set, not about one worker.
 
 **Not labelling the workers.** With three hundred of them, "the suite got
-weaker" is a fact nobody can act on. ``AEGISFLOW_RUN_ID`` and
-``AEGISFLOW_AGENT`` make ``aegisflow stats`` report findings per agent, which
+weaker" is a fact nobody can act on. ``YIELDPOINT_RUN_ID`` and
+``YIELDPOINT_AGENT`` make ``yieldpoint stats`` report findings per agent, which
 turns it into "worker 47 keeps doing this".
 """
 
@@ -22,9 +22,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from aegisflow.core.relation import Relation
-from aegisflow.core.verdict import Status, Verdict
-from aegisflow.verify import verify_change
+from yieldpoint.core.relation import Relation
+from yieldpoint.core.verdict import Status, Verdict
+from yieldpoint.verify import verify_change
 
 
 @dataclass(frozen=True)
@@ -44,8 +44,8 @@ def pooled_subjects(edits: list[Edit], policy) -> dict[str, Relation]:
     ``also_covered`` tells each verification that a subject missing *here* may
     still be verified *there*.
     """
-    from aegisflow.core.assertions import extract
-    from aegisflow.core.monotonicity import subject_map
+    from yieldpoint.core.assertions import extract
+    from yieldpoint.core.monotonicity import subject_map
 
     pooled: dict[str, Relation] = {}
     for edit in edits:
@@ -74,8 +74,8 @@ def verify_fanout(edits: list[Edit], policy=None) -> dict[str, Verdict]:
 
 def label_worker(run: str, agent: str) -> None:
     """Call this in each worker before it verifies anything."""
-    os.environ["AEGISFLOW_RUN_ID"] = run
-    os.environ["AEGISFLOW_AGENT"] = agent
+    os.environ["YIELDPOINT_RUN_ID"] = run
+    os.environ["YIELDPOINT_AGENT"] = agent
 
 
 # --------------------------------------------------------------------- graph
@@ -90,7 +90,7 @@ def build_graph(policy=None):
     from langgraph.graph import END, START, StateGraph
     from langgraph.types import Send
 
-    from aegisflow.langgraph import make_router
+    from yieldpoint.langgraph import make_router
 
     def plan(state):
         return {"units": state["units"]}

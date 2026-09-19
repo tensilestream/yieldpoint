@@ -2,15 +2,15 @@
 
 ``python examples/plain_loop.py``
 
-If you are integrating AegisFlow somewhere this repository has no example for,
+If you are integrating Yieldpoint somewhere this repository has no example for,
 this is the shape. Everything else — LangGraph nodes, CrewAI steps, MCP tools,
 the hook — is this loop with someone else's control flow around it.
 """
 
 from __future__ import annotations
 
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change
 
 POLICY = {"protected_tests": ["**/test_*.py"]}
 MAX_REPAIRS = 3

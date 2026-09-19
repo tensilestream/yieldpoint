@@ -3,14 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aegisflow"
+name = "yieldpoint"
 version = "0.1.0"
 description = "Deterministic verification for agents that write code"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-authors = [{ name = "AegisFlow contributors" }]
+authors = [{ name = "Yieldpoint contributors" }]
 keywords = [
   "langgraph", "agents", "verification", "guardrails", "testing",
   "assertions", "code-review", "static-analysis", "ai",
@@ -39,16 +39,17 @@ dependencies = []
 langgraph = ["langgraph>=0.2"]
 
 [project.urls]
-Homepage = "https://github.com/tensilestream/AgeisFlow"
-Repository = "https://github.com/tensilestream/AgeisFlow"
-Changelog = "https://github.com/tensilestream/AgeisFlow/blob/main/CHANGELOG.md"
-Issues = "https://github.com/tensilestream/AgeisFlow/issues"
+Homepage = "https://github.com/tensilestream/yieldpoint"
+Repository = "https://github.com/tensilestream/yieldpoint"
+Changelog = "https://github.com/tensilestream/yieldpoint/blob/main/CHANGELOG.md"
+Issues = "https://github.com/tensilestream/yieldpoint/issues"
 
 [project.scripts]
-aegisflow = "aegisflow.cli:main"
+yieldpoint = "yieldpoint.cli:main"
+yp = "yieldpoint.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["aegisflow*"]
+include = ["yieldpoint*"]
 
 [tool.setuptools.package-data]
-aegisflow = ["py.typed"]
+yieldpoint = ["py.typed"]

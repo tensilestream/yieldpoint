@@ -38,20 +38,20 @@ jobs:
       # but do not fail the build; see IMPLEMENTATION_STAGES.md Stage 11.
       - name: Audit our own source
         run: |
-          aegisflow scan aegisflow --policy .aegisflow.json \
+          yieldpoint scan yieldpoint --policy .yieldpoint.json \
             --rule dangling_reference --rule boundary_violation \
             --rule export_removed --rule duplicate_implementation \
             --rule file_too_long --rule utility_module
       - name: Report maintainability findings
         continue-on-error: true
-        run: aegisflow scan aegisflow --policy .aegisflow.json
+        run: yieldpoint scan yieldpoint --policy .yieldpoint.json
 
       # Verify this pull request the way a user would verify theirs.
       - name: Verify the diff
         if: github.event_name == 'pull_request'
         run: |
           git diff "origin/${{ github.base_ref }}...HEAD" \
-            | aegisflow check --diff - --json
+            | yieldpoint check --diff - --json
 
   release-check:
     runs-on: ubuntu-latest

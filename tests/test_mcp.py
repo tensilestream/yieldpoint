@@ -14,15 +14,15 @@ import subprocess
 from unittest import mock
 import unittest
 
-from aegisflow.core.verdict import SCHEMA_VERSION
+from yieldpoint.core.verdict import SCHEMA_VERSION
 from pathlib import Path
 
-from aegisflow.core.policy import Policy
-from aegisflow.mcp.clients import (
+from yieldpoint.core.policy import Policy
+from yieldpoint.mcp.clients import (
     BY_KEY, CLIENTS, UnwritableFormat, command_argv, config_path, install, snippet,
 )
-from aegisflow.mcp.server import METHOD_NOT_FOUND, PARSE_ERROR, handle, serve
-from aegisflow.mcp.tools import TOOLS, call
+from yieldpoint.mcp.server import METHOD_NOT_FOUND, PARSE_ERROR, handle, serve
+from yieldpoint.mcp.tools import TOOLS, call
 
 POLICY = Policy()
 
@@ -45,7 +45,7 @@ def request(method, params=None, identifier=1):
 class TestHandshake(unittest.TestCase):
     def test_initialize_reports_the_server(self):
         result = request("initialize", {"protocolVersion": "2024-11-05"})["result"]
-        self.assertEqual(result["serverInfo"]["name"], "aegisflow")
+        self.assertEqual(result["serverInfo"]["name"], "yieldpoint")
         self.assertIn("tools", result["capabilities"])
 
     def test_the_clients_protocol_version_is_echoed(self):
@@ -58,7 +58,7 @@ class TestHandshake(unittest.TestCase):
 
     def test_instructions_tell_the_agent_when_to_call(self):
         result = request("initialize", {})["result"]
-        self.assertIn("aegis_verify_change", result["instructions"])
+        self.assertIn("yieldpoint_verify_change", result["instructions"])
 
     def test_ping(self):
         self.assertEqual(request("ping")["result"], {})
@@ -68,8 +68,8 @@ class TestToolListing(unittest.TestCase):
     def test_every_tool_is_offered(self):
         names = {tool["name"] for tool in request("tools/list")["result"]["tools"]}
         self.assertEqual(names, {
-            "aegis_verify_change", "aegis_verify_diff", "aegis_review",
-            "aegis_scan", "aegis_assess", "aegis_stats", "aegis_policy"})
+            "yieldpoint_verify_change", "yieldpoint_verify_diff", "yieldpoint_review",
+            "yieldpoint_scan", "yieldpoint_assess", "yieldpoint_stats", "yieldpoint_policy"})
 
     def test_schemas_are_well_formed(self):
         for tool in TOOLS:
@@ -84,17 +84,17 @@ class TestToolCalls(unittest.TestCase):
         return request("tools/call", {"name": name, "arguments": arguments})["result"]
 
     def test_verify_change_reports_a_weakening(self):
-        result = self.call("aegis_verify_change", WEAKENED)
+        result = self.call("yieldpoint_verify_change", WEAKENED)
         self.assertFalse(result["isError"])
         self.assertIn("assertion_monotonicity", result["content"][0]["text"])
         self.assertEqual(result["structuredContent"]["status"], "repair")
 
     def test_structured_content_is_the_versioned_verdict(self):
-        result = self.call("aegis_verify_change", WEAKENED)
+        result = self.call("yieldpoint_verify_change", WEAKENED)
         self.assertEqual(result["structuredContent"]["schema_version"], SCHEMA_VERSION)
 
     def test_a_clean_change_passes(self):
-        result = self.call("aegis_verify_change",
+        result = self.call("yieldpoint_verify_change",
                            {"path": "tests/t.py", "before": WEAKENED["before"],
                             "after": WEAKENED["before"]})
         self.assertEqual(result["structuredContent"]["status"], "pass")
@@ -103,23 +103,23 @@ class TestToolCalls(unittest.TestCase):
         diff = ("--- a/tests/t.py\n+++ b/tests/t.py\n@@ -1,2 +1,2 @@\n"
                 " def test_total(inv):\n-    assert inv.total == 42\n"
                 "+    assert inv.total is not None\n")
-        result = self.call("aegis_verify_diff", {"diff": diff, "root": "/nonexistent"})
+        result = self.call("yieldpoint_verify_diff", {"diff": diff, "root": "/nonexistent"})
         self.assertFalse(result["isError"])
 
     def test_policy_lists_the_rules_in_force(self):
-        result = self.call("aegis_policy", {})
+        result = self.call("yieldpoint_policy", {})
         self.assertIn("assertion_monotonicity", result["structuredContent"]["rules"])
 
     def test_scan_audits_a_directory(self):
-        result = self.call("aegis_scan", {"path": "aegisflow"})
+        result = self.call("yieldpoint_scan", {"path": "yieldpoint"})
         self.assertIn("file(s) audited", result["content"][0]["text"])
 
     def test_an_unknown_tool_is_an_error_not_a_crash(self):
-        result = self.call("aegis_nonsense", {})
+        result = self.call("yieldpoint_nonsense", {})
         self.assertTrue(result["isError"])
 
     def test_a_failing_tool_returns_an_error_result(self):
-        text, _, is_error = call("aegis_verify_change", {"after": None, "path": None}, POLICY)
+        text, _, is_error = call("yieldpoint_verify_change", {"after": None, "path": None}, POLICY)
         self.assertTrue(is_error or text)
 
 
@@ -159,7 +159,7 @@ class TestResilience(unittest.TestCase):
         """A stray print corrupts the stream and disconnects the client."""
         out = io.StringIO()
         message = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                              "params": {"name": "aegis_verify_change", "arguments": WEAKENED}})
+                              "params": {"name": "yieldpoint_verify_change", "arguments": WEAKENED}})
         serve(io.StringIO(message + "\n"), out, POLICY)
         for line in out.getvalue().splitlines():
             json.loads(line)  # raises if anything non-protocol was written
@@ -179,13 +179,13 @@ class TestClients(unittest.TestCase):
     def test_vscode_uses_its_own_shape(self):
         parsed = json.loads(snippet(BY_KEY["vscode"]))
         self.assertIn("servers", parsed)
-        self.assertEqual(parsed["servers"]["aegisflow"]["type"], "stdio")
+        self.assertEqual(parsed["servers"]["yieldpoint"]["type"], "stdio")
 
     def test_zed_nests_the_command(self):
         parsed = json.loads(snippet(BY_KEY["zed"]))
         command, args = command_argv("mcp")
-        self.assertEqual(parsed["context_servers"]["aegisflow"]["command"]["path"], command)
-        self.assertEqual(parsed["context_servers"]["aegisflow"]["command"]["args"], args)
+        self.assertEqual(parsed["context_servers"]["yieldpoint"]["command"]["path"], command)
+        self.assertEqual(parsed["context_servers"]["yieldpoint"]["command"]["args"], args)
 
     def test_the_common_shape_is_mcp_servers(self):
         for key in ("claude-code", "claude-desktop", "cursor", "windsurf"):
@@ -207,7 +207,7 @@ class TestInstalling(unittest.TestCase):
         path, backup = install(BY_KEY["claude-code"], self.root)
         self.assertIsNone(backup)
         written = json.loads(path.read_text())
-        self.assertEqual(written["mcpServers"]["aegisflow"]["command"], command_argv("mcp")[0])
+        self.assertEqual(written["mcpServers"]["yieldpoint"]["command"], command_argv("mcp")[0])
 
     def test_existing_configuration_is_preserved_and_backed_up(self):
         path = self.root / ".mcp.json"
@@ -229,7 +229,7 @@ class TestInstalling(unittest.TestCase):
         path.write_text("{ not json")
         _, backup = install(BY_KEY["claude-code"], self.root)
         self.assertEqual(backup.read_text(), "{ not json")
-        self.assertIn("aegisflow", json.loads(path.read_text())["mcpServers"])
+        self.assertIn("yieldpoint", json.loads(path.read_text())["mcpServers"])
 
 
 if __name__ == "__main__":
@@ -245,42 +245,42 @@ class TestCommandResolution(unittest.TestCase):
     """
 
     def test_the_console_script_is_preferred_when_on_path(self):
-        with mock.patch("aegisflow.mcp.clients.shutil.which", return_value="/usr/bin/aegisflow"):
-            self.assertEqual(command_argv("mcp"), ("aegisflow", ["mcp"]))
+        with mock.patch("yieldpoint.mcp.clients.shutil.which", return_value="/usr/bin/yieldpoint"):
+            self.assertEqual(command_argv("mcp"), ("yieldpoint", ["mcp"]))
 
     def test_the_console_script_is_registered_bare_not_absolute(self):
         """``.mcp.json`` is committed; an absolute path works on one machine."""
-        with mock.patch("aegisflow.mcp.clients.shutil.which", return_value="/usr/bin/aegisflow"):
+        with mock.patch("yieldpoint.mcp.clients.shutil.which", return_value="/usr/bin/yieldpoint"):
             command, _args = command_argv("mcp")
         self.assertNotIn("/", command)
 
     def test_it_falls_back_to_this_interpreter(self):
-        with mock.patch("aegisflow.mcp.clients.shutil.which", return_value=None):
+        with mock.patch("yieldpoint.mcp.clients.shutil.which", return_value=None):
             command, args = command_argv("mcp")
         self.assertEqual(command, sys.executable)
-        self.assertEqual(args, ["-m", "aegisflow", "mcp"])
+        self.assertEqual(args, ["-m", "yieldpoint", "mcp"])
 
     def test_the_fallback_is_runnable(self):
-        """``python -m aegisflow`` must exist, or the fallback is a broken promise."""
+        """``python -m yieldpoint`` must exist, or the fallback is a broken promise."""
         completed = subprocess.run(
-            [sys.executable, "-m", "aegisflow", "--version"],
+            [sys.executable, "-m", "yieldpoint", "--version"],
             capture_output=True, text=True, timeout=60,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertIn("aegisflow", completed.stdout)
+        self.assertIn("yieldpoint", completed.stdout)
 
 
 class TestReviewTool(unittest.TestCase):
-    """``aegis_review`` is the zero-argument entry point, so it must tolerate
+    """``yieldpoint_review`` is the zero-argument entry point, so it must tolerate
     being called anywhere — including outside a git repository."""
 
     def test_it_takes_no_required_arguments(self):
-        schema = next(t for t in TOOLS if t["name"] == "aegis_review")["inputSchema"]
+        schema = next(t for t in TOOLS if t["name"] == "yieldpoint_review")["inputSchema"]
         self.assertEqual(schema.get("required", []), [])
 
     def test_outside_a_repository_it_explains_rather_than_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
-            text, structured, is_error = call("aegis_review", {"root": tmp}, Policy())
+            text, structured, is_error = call("yieldpoint_review", {"root": tmp}, Policy())
         self.assertFalse(is_error, "a non-repository must not read as a tool failure")
         self.assertEqual(structured.get("status"), "unverified")
         self.assertIn("git repository", text)
@@ -297,7 +297,7 @@ class TestTheClientTable(unittest.TestCase):
         for client in CLIENTS:
             with self.subTest(client.key):
                 text = snippet(client)
-                self.assertIn("aegisflow", text)
+                self.assertIn("yieldpoint", text)
                 self.assertIn(client.section, text)
 
     def test_json_snippets_parse(self):
@@ -306,7 +306,7 @@ class TestTheClientTable(unittest.TestCase):
                 continue
             with self.subTest(client.key):
                 parsed = json.loads(snippet(client))
-                self.assertIn("aegisflow", parsed[client.section])
+                self.assertIn("yieldpoint", parsed[client.section])
 
     def test_non_json_clients_refuse_to_be_written(self):
         """Better to print the snippet than to corrupt a file we cannot read."""
@@ -324,7 +324,7 @@ class TestTheClientTable(unittest.TestCase):
             written, _backup = install(BY_KEY["cursor"], path=target)
             self.assertEqual(written, target)
             parsed = json.loads(target.read_text())
-            self.assertIn("aegisflow", parsed["mcpServers"])
+            self.assertIn("yieldpoint", parsed["mcpServers"])
 
     def test_existing_servers_are_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -333,4 +333,4 @@ class TestTheClientTable(unittest.TestCase):
             install(BY_KEY["cursor"], path=target)
             parsed = json.loads(target.read_text())
             self.assertIn("other", parsed["mcpServers"])
-            self.assertIn("aegisflow", parsed["mcpServers"])
+            self.assertIn("yieldpoint", parsed["mcpServers"])

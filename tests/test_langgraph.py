@@ -7,9 +7,9 @@ exercises the same code inside a real compiled graph.
 
 import unittest
 
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Status, Verdict
-from aegisflow.langgraph import (
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Status, Verdict
+from yieldpoint.langgraph import (
     ATTEMPTS_KEY,
     BLOCK,
     ESCALATE,
@@ -81,8 +81,8 @@ class TestNode(unittest.TestCase):
         self.assertEqual(update["verdict"]["status"], REPAIR)
 
     def test_verdict_key_is_configurable(self):
-        node = verify_node(policy=Policy(), verdict_key="aegis")
-        self.assertIn("aegis", node(change_state()))
+        node = verify_node(policy=Policy(), verdict_key="yieldpoint")
+        self.assertIn("yieldpoint", node(change_state()))
 
 
 class TestReadChange(unittest.TestCase):
@@ -198,7 +198,7 @@ class TestVerdictFrom(unittest.TestCase):
 def _verdict(status: Status) -> Verdict:
     if status is Status.PASS:
         return Verdict.of([])
-    from aegisflow.core.verdict import Finding
+    from yieldpoint.core.verdict import Finding
 
     return Verdict.of([Finding(
         rule="assertion_monotonicity", status=status, file="tests/t.py", line=1,

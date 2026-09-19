@@ -1,8 +1,8 @@
 """One repository, one place for state.
 
 Without a shared answer to "which repository is this?", each command stores its
-state wherever it was pointed, and a project accumulates several ``.aegisflow``
-directories holding partial views of the same work. That is how `scan aegisflow`
+state wherever it was pointed, and a project accumulates several ``.yieldpoint``
+directories holding partial views of the same work. That is how `scan yieldpoint`
 came to leave a cache inside the package it had just looked at.
 """
 
@@ -12,16 +12,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow import ledger
-from aegisflow.core.locate import repository
-from aegisflow.core.policy import Policy
+from yieldpoint import ledger
+from yieldpoint.core.locate import repository
+from yieldpoint.core.policy import Policy
 
 
 class TestRepositoryRoot(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name).resolve()
-        (self.root / ".aegisflow.json").write_text("{}")
+        (self.root / ".yieldpoint.json").write_text("{}")
         self.nested = self.root / "package" / "deep"
         self.nested.mkdir(parents=True)
 
@@ -58,13 +58,13 @@ class TestRepositoryRoot(unittest.TestCase):
 
     def test_scanning_a_subdirectory_leaves_no_state_inside_it(self):
         """The bug this exists to prevent."""
-        from aegisflow.scan import scan
+        from yieldpoint.scan import scan
 
         package = self.root / "package"
         (package / "module.py").write_text("def f():\n    return 1\n")
         scan(package, jobs=1)
         self.assertFalse(
-            (package / ".aegisflow").exists(),
+            (package / ".yieldpoint").exists(),
             "state must not be written inside the directory being scanned",
         )
 

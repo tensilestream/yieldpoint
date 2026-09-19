@@ -6,12 +6,12 @@ import os
 import tempfile
 import unittest
 
-from aegisflow.core.verdict import SCHEMA_VERSION
+from yieldpoint.core.verdict import SCHEMA_VERSION
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from aegisflow.mcp.clients import command_line
-from aegisflow.cli import EXIT_UNVERIFIED, EXIT_ERROR, EXIT_FINDINGS, EXIT_OK, main
+from yieldpoint.mcp.clients import command_line
+from yieldpoint.cli import EXIT_UNVERIFIED, EXIT_ERROR, EXIT_FINDINGS, EXIT_OK, main
 
 BEFORE = 'def test_total():\n    assert inv.total == 42\n'
 WEAKER = 'def test_total():\n    assert inv.total is not None\n'
@@ -81,7 +81,7 @@ class TestCheck(CliCase):
         code, _, err = run(
             ["check", "--path", "tests/t.py", "--before", "absent.py", "--after", "weaker.py"])
         self.assertEqual(code, EXIT_ERROR)
-        self.assertIn("aegisflow:", err)
+        self.assertIn("yieldpoint:", err)
 
     def test_skipped_files_are_reported_on_stderr(self):
         code, _, err = run(
@@ -106,7 +106,7 @@ class TestHookCommand(CliCase):
     def test_weakening_edit_exits_two_with_reason_on_stderr(self):
         code, _, err = run(["hook"], stdin_text=self.payload("== 42", "is not None"))
         self.assertEqual(code, EXIT_ERROR)
-        self.assertIn("AegisFlow blocked", err)
+        self.assertIn("Yieldpoint blocked", err)
 
     def test_clean_edit_exits_zero_silently(self):
         code, _, err = run(["hook"], stdin_text=self.payload("== 42", "== 43"))
@@ -116,7 +116,7 @@ class TestHookCommand(CliCase):
     def test_advisory_mode_reports_but_never_denies(self):
         code, _, err = run(["hook", "--advisory"], stdin_text=self.payload("== 42", "is not None"))
         self.assertEqual(code, EXIT_OK)
-        self.assertIn("AegisFlow blocked", err)
+        self.assertIn("Yieldpoint blocked", err)
 
     def test_json_decision_mode_always_exits_zero(self):
         code, out, _ = run(
@@ -154,7 +154,7 @@ class TestInstallHook(CliCase):
         settings = json.loads(path.read_text())
         self.assertEqual(settings["model"], "opus")
         self.assertEqual(len(settings["hooks"]["PreToolUse"]), 2)
-        self.assertTrue(path.with_suffix(".json.aegisflow-backup").is_file())
+        self.assertTrue(path.with_suffix(".json.yieldpoint-backup").is_file())
 
     def test_reinstalling_does_not_duplicate_the_entry(self):
         run(["install-hook"])
@@ -184,7 +184,7 @@ class TestInit(CliCase):
         root = self._repo()
         code, out, _ = run(["init", "--root", str(root)])
         self.assertEqual(code, EXIT_OK)
-        self.assertTrue((root / ".aegisflow.json").is_file())
+        self.assertTrue((root / ".yieldpoint.json").is_file())
         self.assertTrue((root / ".mcp.json").is_file())
         self.assertTrue((root / ".claude" / "settings.json").is_file())
         self.assertIn("advisory", out)
@@ -205,9 +205,9 @@ class TestInit(CliCase):
 
     def test_an_existing_config_is_not_overwritten(self):
         root = self._repo()
-        (root / ".aegisflow.json").write_text('{"version": 1, "project": "mine"}')
+        (root / ".yieldpoint.json").write_text('{"version": 1, "project": "mine"}')
         run(["init", "--root", str(root)])
-        self.assertIn("mine", (root / ".aegisflow.json").read_text())
+        self.assertIn("mine", (root / ".yieldpoint.json").read_text())
 
     def test_running_it_twice_does_not_duplicate_the_hook(self):
         root = self._repo()
@@ -263,11 +263,11 @@ class TestTurnEndReport(CliCase):
 
     def test_the_report_defaults_into_the_ignored_state_directory(self):
         root = self._repo()
-        (root / ".aegisflow.json").write_text("{}")
+        (root / ".yieldpoint.json").write_text("{}")
         (root / "a.py").write_text("x = 1\n")
         code, out, _ = run(["report", "--root", str(root)])
         self.assertEqual(code, EXIT_OK)
-        self.assertTrue((root / ".aegisflow" / "report.html").is_file())
+        self.assertTrue((root / ".yieldpoint" / "report.html").is_file())
         self.assertFalse(
             list(root.glob("*.html")),
             "nothing may be written to the repository root",

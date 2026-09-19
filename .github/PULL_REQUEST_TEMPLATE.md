@@ -26,7 +26,7 @@
 
 ### If this changes the verdict JSON
 
-- [ ] `SCHEMA_VERSION` bumped in `aegisflow/core/verdict.py` — it is the cross-language
+- [ ] `SCHEMA_VERSION` bumped in `yieldpoint/core/verdict.py` — it is the cross-language
       API, and a binding written against schema 1 must not silently receive schema 2
 
 ## False positives

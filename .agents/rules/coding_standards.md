@@ -1,4 +1,4 @@
-# AegisFlow Coding Standards
+# Yieldpoint Coding Standards
 
 Condensed from [RULES.md](../../RULES.md). Read that for the reasoning.
 
@@ -11,7 +11,7 @@ dumping grounds.
 
 ## Rule 3: SOLID & DRY
 One engine. Path normalisation, assertion ranking and policy loading exist exactly once in
-`aegisflow.core`; every adapter calls into it. Duplicated checks drift, and a verifier that
+`yieldpoint.core`; every adapter calls into it. Duplicated checks drift, and a verifier that
 drifts is worthless.
 
 ## Rule 4: Language allocation

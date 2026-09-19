@@ -5,13 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core.policy import Policy
+from yieldpoint.core.policy import Policy
 
 # These fixtures are diff hunks whose line numbers must match the files on disk,
 # so they omit imports. Refactor rules are scoped out; test_refactor.py covers them.
 STRUCTURE_OFF = {"refactor": {"dangling_reference": "off", "export_removed": "off"}}
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_diff
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_diff
 
 WEAKEN = """diff --git a/tests/test_invoice.py b/tests/test_invoice.py
 --- a/tests/test_invoice.py

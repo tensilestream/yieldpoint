@@ -2,9 +2,9 @@
 
 import unittest
 
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Status
-from aegisflow.verify import ASSERTION_MONOTONICITY, verify_change
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import ASSERTION_MONOTONICITY, verify_change
 
 BEFORE = """
 from decimal import Decimal
@@ -117,7 +117,7 @@ class TestDeduplication(unittest.TestCase):
 
 class TestCrossFile(unittest.TestCase):
     def test_subject_covered_elsewhere_is_not_a_loss(self):
-        from aegisflow.core.relation import Relation
+        from yieldpoint.core.relation import Relation
 
         after = "def test_invoice_total(inv):\n    assert inv.currency == 'USD'\n"
         verdict = verify_change(

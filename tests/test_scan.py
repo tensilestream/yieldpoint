@@ -12,10 +12,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.commands import EXIT_FINDINGS, EXIT_OK
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import SCHEMA_VERSION, Status
-from aegisflow.scan import ScanResult, scan, walk
+from yieldpoint.commands import EXIT_FINDINGS, EXIT_OK
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import SCHEMA_VERSION, Status
+from yieldpoint.scan import ScanResult, scan, walk
 from tests.test_cli import run
 
 LONG_MODULE = "\n".join(f"def f{i}():\n    return {i}" for i in range(200)) + "\n"
@@ -41,13 +41,13 @@ class ScanCase(unittest.TestCase):
 
 class TestWalking(unittest.TestCase):
     def test_order_is_stable_so_two_scans_agree(self):
-        first = [str(p) for p in walk(Path("aegisflow"), Policy())]
-        second = [str(p) for p in walk(Path("aegisflow"), Policy())]
+        first = [str(p) for p in walk(Path("yieldpoint"), Policy())]
+        second = [str(p) for p in walk(Path("yieldpoint"), Policy())]
         self.assertEqual(first, second)
         self.assertEqual(first, sorted(first))
 
     def test_only_analysable_files_are_yielded(self):
-        self.assertTrue(all(str(p).endswith(".py") for p in walk(Path("aegisflow"), Policy())))
+        self.assertTrue(all(str(p).endswith(".py") for p in walk(Path("yieldpoint"), Policy())))
 
 
 class TestIgnoring(ScanCase):
@@ -157,7 +157,7 @@ class TestThisRepository(unittest.TestCase):
     def test_the_real_tree_has_no_correctness_findings(self):
         """Maintainability limits are advisory here; correctness rules must be clean."""
         root = Path(__file__).resolve().parent.parent
-        result = scan(root / "aegisflow", root / ".aegisflow.json")
+        result = scan(root / "yieldpoint", root / ".yieldpoint.json")
         for rule in ("dangling_reference", "boundary_violation", "export_removed",
                      "duplicate_implementation", "file_too_long", "utility_module"):
             self.assertNotIn(rule, result.by_rule(), rule)

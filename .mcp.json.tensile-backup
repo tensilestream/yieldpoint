@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "tensile": {
+      "command": "tensile",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

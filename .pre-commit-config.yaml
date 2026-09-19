@@ -2,13 +2,13 @@
 repos:
   - repo: local
     hooks:
-      - id: aegisflow
-        name: AegisFlow (verify staged changes)
-        entry: aegisflow check --diff -
+      - id: yieldpoint
+        name: Yieldpoint (verify staged changes)
+        entry: yieldpoint check --diff -
         language: system
         pass_filenames: false
         stages: [pre-commit]
-        # `aegisflow check --diff -` reads the staged diff on stdin.
+        # `yieldpoint check --diff -` reads the staged diff on stdin.
         verbose: true
 
       - id: tests

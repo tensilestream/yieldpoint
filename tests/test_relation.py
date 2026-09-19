@@ -2,7 +2,7 @@
 
 import unittest
 
-from aegisflow.core.relation import Relation as R
+from yieldpoint.core.relation import Relation as R
 
 
 class TestOrdering(unittest.TestCase):

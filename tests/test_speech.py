@@ -2,10 +2,10 @@
 
 import unittest
 
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Finding, Status, Verdict
-from aegisflow.speech import _WORDS, speak
-from aegisflow.verify import verify_change
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Finding, Status, Verdict
+from yieldpoint.speech import _WORDS, speak
+from yieldpoint.verify import verify_change
 
 BEFORE = (
     'def test_total():\n    inv = build()\n'

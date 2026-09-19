@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core.relation import Relation
-from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
-from aegisflow.hook import (
+from yieldpoint.core.relation import Relation
+from yieldpoint.core.verdict import Confidence, Finding, Status, Verdict
+from yieldpoint.hook import (
     Change, blocks, build_change, decision_json, deferred, evaluate, immediate,
     read_payload, render,
 )
@@ -20,7 +20,7 @@ ORIGINAL = (
 
 
 class HookCase(unittest.TestCase):
-    """Each test runs in a throwaway repo with AegisFlow's own default policy."""
+    """Each test runs in a throwaway repo with Yieldpoint's own default policy."""
 
     def setUp(self):
         self._previous = Path.cwd()
@@ -238,7 +238,7 @@ class TestDeferredRemovals(unittest.TestCase):
     POLICY = {"protected_tests": ["**/test_*.py"]}
 
     def _verdict(self, after):
-        from aegisflow.verify import verify_change
+        from yieldpoint.verify import verify_change
 
         return verify_change(self.BEFORE, after, "tests/test_invoice.py", self.POLICY)
 
@@ -274,12 +274,12 @@ class TestDeferredRemovals(unittest.TestCase):
         self.assertIn("deferred", output["permissionDecisionReason"])
 
     def test_the_allow_message_does_not_claim_it_blocked(self):
-        from aegisflow.hook import render_deferred
+        from yieldpoint.hook import render_deferred
 
         message = render_deferred(self._verdict(self.MOVED_OUT))
         self.assertIn("allowed this edit", message)
         self.assertNotIn("blocked", message)
-        self.assertIn("aegisflow review", message)
+        self.assertIn("yieldpoint review", message)
 
     def test_a_deletion_that_is_never_a_move_is_still_caught_later(self):
         """The whole deferral rests on this: nothing is lost, only postponed.
@@ -287,7 +287,7 @@ class TestDeferredRemovals(unittest.TestCase):
         The change-set check sees both sides of a move and can tell them apart,
         which is exactly the information one edit does not have.
         """
-        from aegisflow.verify import verify_change
+        from yieldpoint.verify import verify_change
 
         verdict = verify_change(
             self.BEFORE, self.MOVED_OUT, "tests/test_invoice.py", self.POLICY

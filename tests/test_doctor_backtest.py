@@ -17,7 +17,7 @@ import unittest
 from unittest import mock
 from pathlib import Path
 
-from aegisflow import backtest, doctor
+from yieldpoint import backtest, doctor
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -38,7 +38,7 @@ class TestDoctorFindsSilentFailures(unittest.TestCase):
         self.tmp.cleanup()
 
     def _config(self, data):
-        (self.root / ".aegisflow.json").write_text(json.dumps(data))
+        (self.root / ".yieldpoint.json").write_text(json.dumps(data))
 
     def _check(self, name):
         return next(c for c in doctor.run(self.root) if c.name == name)
@@ -78,7 +78,7 @@ class TestDoctorFindsSilentFailures(unittest.TestCase):
         settings.mkdir()
         (settings / "settings.json").write_text(json.dumps({
             "hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [
-                {"type": "command", "command": "/nonexistent/aegisflow hook"}]}]}
+                {"type": "command", "command": "/nonexistent/yieldpoint hook"}]}]}
         }))
         check = self._check("hook")
         self.assertEqual(check.state, doctor.FAIL)
@@ -101,7 +101,7 @@ class TestBacktest(unittest.TestCase):
         _git(["init", "-q", "."], self.root)
         _git(["config", "user.email", "t@example.com"], self.root)
         _git(["config", "user.name", "t"], self.root)
-        (self.root / ".aegisflow.json").write_text(json.dumps(
+        (self.root / ".yieldpoint.json").write_text(json.dumps(
             {"test_contract": {"protected_patterns": ["**/test_*.py"]}}))
         self.test = self.root / "test_invoice.py"
         self.test.write_text(
@@ -187,19 +187,19 @@ class TestHookFiredCheck(unittest.TestCase):
     def setUp(self):
         # This check reads the ledger, and a test run does not record by
         # design. Force it on for these, pointed at a temporary tree.
-        self._env = mock.patch.dict(os.environ, {"AEGISFLOW_METRICS": "1"})
+        self._env = mock.patch.dict(os.environ, {"YIELDPOINT_METRICS": "1"})
         self._env.start()
 
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         (self.root / "test_a.py").write_text("def test_x():\n    assert a == 1\n")
-        (self.root / ".aegisflow.json").write_text(json.dumps(
+        (self.root / ".yieldpoint.json").write_text(json.dumps(
             {"test_contract": {"protected_patterns": ["**/test_*.py"]}}))
         settings = self.root / ".claude"
         settings.mkdir()
         (settings / "settings.json").write_text(json.dumps({
             "hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [
-                {"type": "command", "command": "aegisflow hook --advisory"}]}]}
+                {"type": "command", "command": "yieldpoint hook --advisory"}]}]}
         }))
 
     def tearDown(self):
@@ -210,13 +210,13 @@ class TestHookFiredCheck(unittest.TestCase):
         return next(c for c in doctor.run(self.root) if c.name == "hook")
 
     def _record_surface(self, surface):
-        from aegisflow import ledger
-        from aegisflow.core.policy import Policy
-        from aegisflow.core.verdict import Verdict
+        from yieldpoint import ledger
+        from yieldpoint.core.policy import Policy
+        from yieldpoint.core.verdict import Verdict
 
         ledger.record(
             ledger.observe(Verdict.of([], checked=["test_a.py"]), surface),
-            ledger.path_for(Policy.load(self.root / ".aegisflow.json"), self.root),
+            ledger.path_for(Policy.load(self.root / ".yieldpoint.json"), self.root),
         )
 
     def test_installed_but_never_fired_is_a_warning(self):
@@ -242,15 +242,15 @@ class TestHtmlReport(unittest.TestCase):
     """The page is the one surface a non-engineer will look at."""
 
     def _page(self, events=()):
-        from aegisflow.htmlreport import Page, render
-        from aegisflow.stats import summarise
+        from yieldpoint.htmlreport import Page, render
+        from yieldpoint.stats import summarise
 
-        return render(Page("AegisFlow Report", summarise(list(events)),
+        return render(Page("Yieldpoint Report", summarise(list(events)),
                            heading="Verification Report", source="x.jsonl"))
 
     def _with_findings(self):
-        from aegisflow import ledger
-        from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
+        from yieldpoint import ledger
+        from yieldpoint.core.verdict import Confidence, Finding, Status, Verdict
 
         verdict = Verdict.of([
             Finding(rule="assertion_monotonicity", status=Status.REPAIR,
@@ -301,8 +301,8 @@ class TestHtmlReport(unittest.TestCase):
         self.assertNotIn("tier-measured", page)
 
     def test_content_is_escaped(self):
-        from aegisflow.htmlreport import Page, render
-        from aegisflow.stats import Summary
+        from yieldpoint.htmlreport import Page, render
+        from yieldpoint.stats import Summary
 
         page = render(Page("<script>x</script>", Summary(verdicts=1),
                            scope="<b>s</b>"))

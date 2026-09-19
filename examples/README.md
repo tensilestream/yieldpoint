@@ -11,7 +11,7 @@ is why adding a framework is a short file rather than a fork.
 | [`harness_middleware.py`](./harness_middleware.py) | Any agent loop | **Routing + gating** — pick the model by measured risk, refuse a bad edit before it runs |
 | [`long_running_session.py`](./long_running_session.py) | Any | **Hours-long session** — incremental totals, budget guard, loop detection |
 | [`crewai_guard.py`](./crewai_guard.py) | CrewAI | A verification step between task and commit |
-| [`openai_agents_tool.py`](./openai_agents_tool.py) | OpenAI Agents SDK | AegisFlow as a function tool |
+| [`openai_agents_tool.py`](./openai_agents_tool.py) | OpenAI Agents SDK | Yieldpoint as a function tool |
 | [`claude_agent_sdk_hook.py`](./claude_agent_sdk_hook.py) | Claude Agent SDK | `PreToolUse` gate — enforcement, not advice |
 | [`plain_loop.py`](./plain_loop.py) | No framework | The whole pattern in 30 lines |
 | [`eval_harness.py`](./eval_harness.py) | Any eval runner | **Anti-reward-hacking**: did the agent game the benchmark? |
@@ -38,5 +38,5 @@ Each sees half the change, and each reports a loss that did not happen. Verify t
 `langgraph_fanout.py`. Verifying per worker in isolation is the mistake.
 
 **Attribution.** With three hundred workers, "the suite got weaker" is not actionable.
-Set `AEGISFLOW_RUN_ID` and `AEGISFLOW_AGENT` per worker and `aegisflow stats` reports
+Set `YIELDPOINT_RUN_ID` and `YIELDPOINT_AGENT` per worker and `yieldpoint stats` reports
 findings per agent, so the one worker with a bad prompt is visible.

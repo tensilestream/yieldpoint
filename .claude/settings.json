@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "aegisflow hook --advisory"
+            "command": "yieldpoint hook --advisory"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "aegisflow report"
+            "command": "yieldpoint report"
           }
         ]
       }

@@ -9,11 +9,11 @@ as much to keep the rule wired up as to check its logic.
 import unittest
 from pathlib import Path
 
-from aegisflow.core import boundaries
-from aegisflow.core.boundaries import BOUNDARY_VIOLATION, imports_of
-from aegisflow.core.policy import Boundaries, Policy, Zone
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change
+from yieldpoint.core import boundaries
+from yieldpoint.core.boundaries import BOUNDARY_VIOLATION, imports_of
+from yieldpoint.core.policy import Boundaries, Policy, Zone
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change
 
 CORE_ZONE = Boundaries(zones=(
     Zone(name="core", path="app/core/**",
@@ -34,21 +34,21 @@ class TestImportResolution(unittest.TestCase):
         self.assertEqual({i.module for i in found}, {"os", "sys"})
 
     def test_single_level_relative(self):
-        found = imports_of("from . import glob\n", "aegisflow/core/x.py")
-        self.assertEqual(found[0].module, "aegisflow.core")
+        found = imports_of("from . import glob\n", "yieldpoint/core/x.py")
+        self.assertEqual(found[0].module, "yieldpoint.core")
 
     def test_two_level_relative(self):
-        found = imports_of("from ..langgraph import node\n", "aegisflow/core/x.py")
-        self.assertEqual(found[0].module, "aegisflow.langgraph")
+        found = imports_of("from ..langgraph import node\n", "yieldpoint/core/x.py")
+        self.assertEqual(found[0].module, "yieldpoint.langgraph")
 
     def test_relative_with_submodule(self):
-        found = imports_of("from .verdict import Finding\n", "aegisflow/core/x.py")
-        self.assertEqual(found[0].module, "aegisflow.core.verdict")
+        found = imports_of("from .verdict import Finding\n", "yieldpoint/core/x.py")
+        self.assertEqual(found[0].module, "yieldpoint.core.verdict")
 
     def test_package_init_resolves_to_the_package_it_defines(self):
         """Inside `a/b/__init__.py`, `.` is `a.b` — not its parent."""
-        found = imports_of("from . import x\n", "aegisflow/core/__init__.py")
-        self.assertEqual(found[0].module, "aegisflow.core")
+        found = imports_of("from . import x\n", "yieldpoint/core/__init__.py")
+        self.assertEqual(found[0].module, "yieldpoint.core")
 
     def test_line_numbers_are_reported(self):
         found = imports_of("x = 1\nimport os\n", "app/core/x.py")
@@ -116,10 +116,10 @@ class TestDifferential(unittest.TestCase):
 
 
 class TestThisRepository(unittest.TestCase):
-    """The zones in this repo's own .aegisflow.json must actually be enforced."""
+    """The zones in this repo's own .yieldpoint.json must actually be enforced."""
 
     def setUp(self):
-        self.policy = Policy.load(Path(__file__).resolve().parent.parent / ".aegisflow.json")
+        self.policy = Policy.load(Path(__file__).resolve().parent.parent / ".yieldpoint.json")
 
     def violations(self, source, path):
         verdict = verify_change(None, source, path, self.policy)
@@ -127,30 +127,30 @@ class TestThisRepository(unittest.TestCase):
 
     def test_the_core_may_not_import_an_adapter(self):
         self.assertTrue(self.violations(
-            "from aegisflow.langgraph.node import verify_node\n", "aegisflow/core/x.py"))
+            "from yieldpoint.langgraph.node import verify_node\n", "yieldpoint/core/x.py"))
 
     def test_the_core_may_not_reach_the_network(self):
-        self.assertTrue(self.violations("import httpx\n", "aegisflow/core/x.py"))
+        self.assertTrue(self.violations("import httpx\n", "yieldpoint/core/x.py"))
 
     def test_the_core_may_not_import_langgraph(self):
-        self.assertTrue(self.violations("import langgraph\n", "aegisflow/core/x.py"))
+        self.assertTrue(self.violations("import langgraph\n", "yieldpoint/core/x.py"))
 
     def test_an_adapter_may_not_use_core_internals(self):
         self.assertTrue(self.violations(
-            "from aegisflow.core.diff import parse\n", "aegisflow/langgraph/x.py"))
+            "from yieldpoint.core.diff import parse\n", "yieldpoint/langgraph/x.py"))
 
     def test_an_adapter_may_use_the_verdict_api(self):
         self.assertEqual(self.violations(
-            "from aegisflow.core.verdict import Verdict\n", "aegisflow/langgraph/x.py"), [])
+            "from yieldpoint.core.verdict import Verdict\n", "yieldpoint/langgraph/x.py"), [])
 
     def test_the_core_may_import_itself(self):
         self.assertEqual(self.violations(
-            "from .verdict import Finding\n", "aegisflow/core/x.py"), [])
+            "from .verdict import Finding\n", "yieldpoint/core/x.py"), [])
 
     def test_the_real_source_tree_has_no_violations(self):
         config = self.policy.boundaries
         root = Path(__file__).resolve().parent.parent
-        for path in sorted((root / "aegisflow").rglob("*.py")):
+        for path in sorted((root / "yieldpoint").rglob("*.py")):
             relative = str(path.relative_to(root))
             findings, _ = boundaries.check(None, path.read_text(), relative, config)
             self.assertEqual(findings, [], f"{relative}: {[f.detail for f in findings]}")

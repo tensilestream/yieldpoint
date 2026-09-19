@@ -12,10 +12,10 @@ the checker got confused is worse than not checking.
 
 from __future__ import annotations
 
-from aegisflow.hook import blocks, build_change, evaluate, render
+from yieldpoint.hook import blocks, build_change, evaluate, render
 
 
-async def aegis_pretooluse(input_data, tool_use_id, context):
+async def yieldpoint_pretooluse(input_data, tool_use_id, context):
     """Register for ``PreToolUse`` on Edit|MultiEdit|Write.
 
     Returns the SDK's permission-decision shape: deny carries the prescription,
@@ -43,7 +43,7 @@ def options():
     return ClaudeAgentOptions(
         hooks={
             "PreToolUse": [
-                HookMatcher(matcher="Edit|MultiEdit|Write", hooks=[aegis_pretooluse])
+                HookMatcher(matcher="Edit|MultiEdit|Write", hooks=[yieldpoint_pretooluse])
             ]
         }
     )
@@ -52,7 +52,7 @@ def options():
 def without_the_sdk() -> None:
     """The same gate with no SDK at all: a subprocess reading stdin.
 
-        aegisflow install-hook        # writes .claude/settings.json
+        yieldpoint install-hook        # writes .claude/settings.json
 
     Exit 0 allows, exit 2 denies and feeds stderr back to the agent.
     """

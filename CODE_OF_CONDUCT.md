@@ -21,5 +21,5 @@ those productive:
 ## Enforcement
 
 Report unacceptable behaviour through
-[GitHub](https://github.com/tensilestream/AgeisFlow/issues) or privately to the
+[GitHub](https://github.com/tensilestream/yieldpoint/issues) or privately to the
 maintainers. Reports are reviewed and responded to; reporters' privacy is respected.

@@ -17,11 +17,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from aegisflow import ledger                                    # noqa: E402
-from aegisflow.harness import Change, tier                      # noqa: E402
-from aegisflow.scan import scan                                 # noqa: E402
-from aegisflow.totals import totals                             # noqa: E402
-from aegisflow.verify import verify_change                      # noqa: E402
+from yieldpoint import ledger                                    # noqa: E402
+from yieldpoint.harness import Change, tier                      # noqa: E402
+from yieldpoint.scan import scan                                 # noqa: E402
+from yieldpoint.totals import totals                             # noqa: E402
+from yieldpoint.verify import verify_change                      # noqa: E402
 
 POLICY = {"protected_tests": ["**/test_*.py"]}
 
@@ -89,7 +89,7 @@ def cache_effect() -> None:
     that has never existed cannot have been cached. No amount of indexing
     changes that half.
     """
-    from aegisflow.core import parsecache
+    from yieldpoint.core import parsecache
 
     root = Path(tempfile.mkdtemp())
     package = root / "pkg"
@@ -151,7 +151,7 @@ def scan_throughput() -> None:
 
 
 def main() -> None:
-    print("AegisFlow benchmark — numbers are for this machine, shapes are the point.")
+    print("Yieldpoint benchmark — numbers are for this machine, shapes are the point.")
     verdict_latency()
     routing_latency()
     ledger_latency()

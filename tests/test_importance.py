@@ -17,10 +17,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core.importcache import cached, fingerprint, forget, load_or_build
-from aegisflow.core.importgraph import build
-from aegisflow.harness import Change, risk, tier
-from aegisflow.scan import unmatched_patterns
+from yieldpoint.core.importcache import cached, fingerprint, forget, load_or_build
+from yieldpoint.core.importgraph import build
+from yieldpoint.harness import Change, risk, tier
+from yieldpoint.scan import unmatched_patterns
 
 PLAIN = "def f(a):\n    \"\"\"one\"\"\"\n    return a\n"
 EDIT = "def f(a):\n    \"\"\"two\"\"\"\n    return a\n"
@@ -108,7 +108,7 @@ class TestRiskUsesIt(unittest.TestCase):
         )
 
     def test_it_can_be_switched_off_entirely(self):
-        from aegisflow.harness import middleware
+        from yieldpoint.harness import middleware
 
         mw = middleware({"routing": {"use_import_graph": False}}, root=str(self.root))
         self.assertIsNone(mw._graph())
@@ -142,12 +142,12 @@ class TestCache(unittest.TestCase):
 
     def test_a_corrupt_cache_is_rebuilt(self):
         load_or_build(self.root)
-        (self.root / ".aegisflow" / "importgraph.json").write_text("{not json")
+        (self.root / ".yieldpoint" / "importgraph.json").write_text("{not json")
         self.assertEqual(load_or_build(self.root).depends_on_me("hub.py"), 5)
 
     def test_the_cache_directory_ignores_itself(self):
         load_or_build(self.root)
-        marker = self.root / ".aegisflow" / ".gitignore"
+        marker = self.root / ".yieldpoint" / ".gitignore"
         self.assertTrue(marker.is_file())
 
     def test_refresh_rereads_the_tree(self):

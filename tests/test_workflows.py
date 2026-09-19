@@ -7,15 +7,15 @@ blocking — that guarantee is asserted here, not assumed.
 
 import unittest
 
-from aegisflow.core.policy import ContinuousIntegration, Policy
-from aegisflow.core.verdict import Confidence, Status
-from aegisflow.core.workflows import (
+from yieldpoint.core.policy import ContinuousIntegration, Policy
+from yieldpoint.core.verdict import Confidence, Status
+from yieldpoint.core.workflows import (
     CI_CHECK_DISABLED,
     CI_CHECK_REMOVED,
     check,
     steps_of,
 )
-from aegisflow.verify import verify_change
+from yieldpoint.verify import verify_change
 
 WORKFLOW = """name: CI
 on: [push]

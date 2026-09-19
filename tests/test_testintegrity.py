@@ -2,8 +2,8 @@
 
 import unittest
 
-from aegisflow.core.assertions import extract
-from aegisflow.core.testintegrity import (
+from yieldpoint.core.assertions import extract
+from yieldpoint.core.testintegrity import (
     DISABLED_ASSERTION,
     EMPTY_TEST,
     SKIP_MARKER,

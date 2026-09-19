@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change
 
 from . import LEGITIMATE, TAMPERING
 from .case import HOLDOUT, TUNED

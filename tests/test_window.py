@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import unittest
 
-from aegisflow import window
-from aegisflow.ledger import Event
+from yieldpoint import window
+from yieldpoint.ledger import Event
 
 NOW = 1_700_000_000
 

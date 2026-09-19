@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import unittest
 
-from aegisflow.core.lexical import extract, reads
-from aegisflow.core.verdict import Confidence, Status
-from aegisflow.verify import verify_change
+from yieldpoint.core.lexical import extract, reads
+from yieldpoint.core.verdict import Confidence, Status
+from yieldpoint.verify import verify_change
 
 POLICY = {"test_contract": {"protected_patterns": [
     "**/*.test.ts", "**/*.test.js", "**/*.spec.ts",

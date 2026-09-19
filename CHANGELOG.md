@@ -18,7 +18,7 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   `pass`. Returned only when the *whole* change was unanalysable; a change with one
   analysed file among many unsupported ones stays `pass` with the gap recorded in
   `skipped`. `bool(verdict)` is `False` for it.
-- **Exit code `3`** from `aegisflow check`, distinct from `1` (findings) and `0` (clean),
+- **Exit code `3`** from `yieldpoint check`, distinct from `1` (findings) and `0` (clean),
   so CI can tell "I found a problem" from "I could not look".
 - **`on_unverified`** on `make_router`, defaulting to its own unmapped `"unverified"`
   edge: a graph that never considered the case raises rather than quietly applying an
@@ -32,16 +32,16 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   `tests/test_corpus.py`. This is the measured false-positive rate that
   PLAN_AND_POSITIONING.md §7 requires before any rule may block.
 
-- **`aegisflow init`** — one command that writes `.aegisflow.json`, registers the MCP
+- **`yieldpoint init`** — one command that writes `.yieldpoint.json`, registers the MCP
   server and installs the hook. Advisory by default; `--enforce` to block, `--no-hook` for
   MCP only. Idempotent, and backs up anything it touches.
-- **`aegisflow review`** — verify uncommitted work with no arguments, reading the diff
+- **`yieldpoint review`** — verify uncommitted work with no arguments, reading the diff
   from git. `--staged`, `--against <ref>` and `--json` for the other shapes. Exposed over
-  MCP as **`aegis_review`**, the zero-argument tool an agent can call after finishing a
+  MCP as **`yieldpoint_review`**, the zero-argument tool an agent can call after finishing a
   set of edits.
-- **`python -m aegisflow`** — the full CLI without needing anything on PATH.
-- **`aegisflow stats`** and the **`aegis_stats`** MCP tool — local accounting of what
-  AegisFlow caught and what the critique cost. Figures are reported in three blocks that
+- **`python -m yieldpoint`** — the full CLI without needing anything on PATH.
+- **`yieldpoint stats`** and the **`yieldpoint_stats`** MCP tool — local accounting of what
+  Yieldpoint caught and what the critique cost. Figures are reported in three blocks that
   are never blended: *measured* (counted from what ran), *architectural* (true by
   construction — zero model calls made, so an LLM-as-judge costs one per verdict), and
   *estimated* (arithmetic on measured bytes, with the characters-per-token assumption
@@ -49,24 +49,24 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   deliberately absent and named as unclaimed, per PLAN_AND_POSITIONING.md §4.1.
 - **`metrics` policy section.** Recording is on by default and entirely local — there is
   no network call in this package. Disabled with `"metrics": {"enabled": false}` or
-  `AEGISFLOW_NO_METRICS=1`. The ledger directory writes its own `.gitignore`, so it never
-  appears in a diff and AegisFlow never edits a file the project owns.
+  `YIELDPOINT_NO_METRICS=1`. The ledger directory writes its own `.gitignore`, so it never
+  appears in a diff and Yieldpoint never edits a file the project owns.
 
 **Fan-out and long-running sessions**
 
-- **Per-agent attribution.** `AEGISFLOW_RUN_ID` and `AEGISFLOW_AGENT` label each worker,
-  and `aegisflow stats` reports findings per agent and distinct runs. With a fan-out of
+- **Per-agent attribution.** `YIELDPOINT_RUN_ID` and `YIELDPOINT_AGENT` label each worker,
+  and `yieldpoint stats` reports findings per agent and distinct runs. With a fan-out of
   three hundred, "the suite got weaker" is not actionable; "worker 47 keeps doing this" is.
-- **Acknowledgements in source.** `# aegisflow: allow <rule> - <reason>` answers a finding
+- **Acknowledgements in source.** `# yieldpoint: allow <rule> - <reason>` answers a finding
   the author meant. It names one rule, requires a reason, and is counted on the verdict and
-  in `aegisflow stats`, so suppression stays visible instead of quietly accumulating.
+  in `yieldpoint stats`, so suppression stays visible instead of quietly accumulating.
   Verdict `schema_version` **3**.
 - **Ten integration examples** under `examples/`, covering LangGraph (single and fan-out),
   CrewAI, the OpenAI Agents SDK, the Claude Agent SDK, pytest, GitHub Actions, GitLab CI,
   an eval harness, and no framework at all. Exercised by `tests/test_examples.py`, because
   documentation that no longer runs is a confident wrong answer.
 
-- **`aegisflow stats --since / --run / --agent`.** The ledger is append-only and has no
+- **`yieldpoint stats --since / --run / --agent`.** The ledger is append-only and has no
   concept of a session; a session is a window of time, so that is what these select.
   `--since session` covers the last eight hours, and `today`, `2h`, `30m`, `7d`, `1w` all
   work. A period that cannot be read is an error rather than a silent widening, and an
@@ -91,15 +91,15 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   atomic-append size and written with a single append; rotation is an atomic rename behind
   an exclusive lock. The previous trim read the file and wrote it back, which discards
   whatever other agents appended in between.
-- **`UNVERIFIED` was not exported** from `aegisflow.langgraph`, so a graph could not map
+- **`UNVERIFIED` was not exported** from `yieldpoint.langgraph`, so a graph could not map
   the edge the router returns.
 - **A confirmation-token test named four words literally**, and passed only while the
   derived token happened not to be one of them.
-- **MCP and hook commands are resolved rather than assumed.** A bare `aegisflow` that is
+- **MCP and hook commands are resolved rather than assumed.** A bare `yieldpoint` that is
   not on the client's PATH surfaces as "server failed to start", not as a missing install.
   The console script is registered by bare name when it resolves — `.mcp.json` is
   committed, so an absolute path would work on exactly one machine — and falls back to
-  `<interpreter> -m aegisflow`, which cannot fail to resolve.
+  `<interpreter> -m yieldpoint`, which cannot fail to resolve.
 - **A change consisting only of new files reported "nothing to check."** `git diff` omits
   untracked files, and emptiness was judged before they were added — so the most
   interesting thing an agent produces was the one case not checked.
@@ -151,19 +151,19 @@ First release. Verdict `schema_version` 1.
 
 **Surfaces**
 
-- `aegisflow check` — verify a file transition or a unified diff. Exit `0`/`1`/`2`.
-- `aegisflow scan` — audit a repository as it stands.
+- `yieldpoint check` — verify a file transition or a unified diff. Exit `0`/`1`/`2`.
+- `yieldpoint scan` — audit a repository as it stands.
 - Repository scaffolding: issue templates for false positives and missed detections, a
   pull-request checklist derived from RULES.md, CODEOWNERS, Dependabot, a security policy,
-  and a `.pre-commit-config.yaml` that runs AegisFlow on staged changes.
-- `aegisflow hook` / `install-hook` — Claude Code `PreToolUse` gate.
-- `aegisflow linters` — 24 curated external tools, opt-in, advisory only.
-- `aegisflow mcp` — Model Context Protocol server over stdio, no dependencies. Tools:
-  `aegis_verify_change`, `aegis_verify_diff`, `aegis_scan`, `aegis_policy`.
-- `aegisflow install-mcp` — registers the server with Claude Code, Claude Desktop, Cursor,
+  and a `.pre-commit-config.yaml` that runs Yieldpoint on staged changes.
+- `yieldpoint hook` / `install-hook` — Claude Code `PreToolUse` gate.
+- `yieldpoint linters` — 24 curated external tools, opt-in, advisory only.
+- `yieldpoint mcp` — Model Context Protocol server over stdio, no dependencies. Tools:
+  `yieldpoint_verify_change`, `yieldpoint_verify_diff`, `yieldpoint_scan`, `yieldpoint_policy`.
+- `yieldpoint install-mcp` — registers the server with Claude Code, Claude Desktop, Cursor,
   Windsurf, VS Code or Zed, or prints the snippet with `--show`.
-- `aegisflow.langgraph` — verification node, verdict router, semantic loop breaker.
-- `aegisflow.speech` — spoken verdicts and confirmation tokens for voice-driven agents.
+- `yieldpoint.langgraph` — verification node, verdict router, semantic loop breaker.
+- `yieldpoint.speech` — spoken verdicts and confirmation tokens for voice-driven agents.
 
 ### Design decisions worth knowing
 
@@ -172,7 +172,7 @@ First release. Verdict `schema_version` 1.
   structurally prevented from blocking, enforced in `Finding.__post_init__`.
 - **The hook fails open.** Unreadable payloads, timeouts and verifier errors allow the edit.
 - **Linter config cannot name a command.** Only curated adapters may be enabled, because
-  `.aegisflow.json` is repo-committed.
+  `.yieldpoint.json` is repo-committed.
 
 ### Known limits
 
@@ -180,5 +180,5 @@ First release. Verdict `schema_version` 1.
 - Subject aliasing (`inv` renamed to `invoice`) is a false positive, pinned as a test.
 - The repair-loop cost claim is not benchmarked against a real model.
 
-[Unreleased]: https://github.com/tensilestream/AgeisFlow/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/tensilestream/AgeisFlow/releases/tag/v0.1.0
+[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/tensilestream/yieldpoint/releases/tag/v0.1.0

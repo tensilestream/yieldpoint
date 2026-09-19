@@ -1,4 +1,4 @@
-"""``aegisflow review`` and ``aegis_review``: the zero-argument entry point.
+"""``yieldpoint review`` and ``yieldpoint_review``: the zero-argument entry point.
 
 The value of this surface is entirely that it takes no arguments, so the things
 worth pinning are the ways it can be called wrongly and must not blow up.
@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.worktree import uncommitted
+from yieldpoint.worktree import uncommitted
 
 
 def _git(args, cwd):
@@ -69,7 +69,7 @@ class TestInARepository(unittest.TestCase):
     def test_the_cli_reports_the_weakening(self):
         (self.root / "test_a.py").write_text("def test_x():\n    assert total\n")
         completed = subprocess.run(
-            [sys.executable, "-m", "aegisflow", "review", "--root", str(self.root)],
+            [sys.executable, "-m", "yieldpoint", "review", "--root", str(self.root)],
             capture_output=True, text=True, timeout=120,
             cwd=str(Path(__file__).resolve().parent.parent),
         )

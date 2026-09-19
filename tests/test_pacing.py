@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import unittest
 
-from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
-from aegisflow.harness.pacing import COMMIT_AT, PACE, bar, pace
+from yieldpoint.core.verdict import Confidence, Finding, Status, Verdict
+from yieldpoint.harness.pacing import COMMIT_AT, PACE, bar, pace
 
 LIMIT = 1_000
 
@@ -67,7 +67,7 @@ class TestItNeverSaysStopWhereYouAre(unittest.TestCase):
 
     def test_it_is_a_choice_not_a_gate(self):
         """A Gate can deny; a Choice cannot. The type carries the guarantee."""
-        from aegisflow.harness.decisions import Choice, Gate
+        from yieldpoint.harness.decisions import Choice, Gate
 
         decision = pace(_verdict(), LIMIT * 4, 50, LIMIT)
         self.assertIsInstance(decision, Choice)
@@ -75,7 +75,7 @@ class TestItNeverSaysStopWhereYouAre(unittest.TestCase):
 
     def test_pacing_does_not_change_the_exit_code(self):
         """Being over budget must never fail a command."""
-        from aegisflow.commands import _exit_for
+        from yieldpoint.commands import _exit_for
 
         clean = _verdict()
         self.assertEqual(pace(clean, LIMIT * 9, 90, LIMIT).value, "overdue")
@@ -134,17 +134,17 @@ class TestItReachesTheSurfaces(unittest.TestCase):
     """Advice nobody sees is advice nobody takes."""
 
     def test_the_mcp_review_tool_carries_it(self):
-        from aegisflow.core.policy import Policy
-        from aegisflow.mcp.tools import call
+        from yieldpoint.core.policy import Policy
+        from yieldpoint.mcp.tools import call
 
-        _text, structured, is_error = call("aegis_review", {}, Policy.load(None))
+        _text, structured, is_error = call("yieldpoint_review", {}, Policy.load(None))
         self.assertFalse(is_error)
         if "pace" in structured:      # a clean tree has nothing to pace
             self.assertIn(structured["pace"]["value"], PACE)
 
     def test_the_html_report_shows_the_gauge_without_demanding_a_stop(self):
-        from aegisflow.htmlreport import Now, Page, render
-        from aegisflow.stats import Summary
+        from yieldpoint.htmlreport import Now, Page, render
+        from yieldpoint.stats import Summary
 
         decision = pace(_verdict(), LIMIT * 3, 40, LIMIT)
         page = render(Page("t", Summary(verdicts=1), now=Now(pace=decision)))

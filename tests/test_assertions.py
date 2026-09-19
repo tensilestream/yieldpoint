@@ -2,8 +2,8 @@
 
 import unittest
 
-from aegisflow.core.assertions import extract
-from aegisflow.core.relation import Relation as R
+from yieldpoint.core.assertions import extract
+from yieldpoint.core.relation import Relation as R
 
 
 def single(body: str):

@@ -3,7 +3,7 @@
 import json
 import unittest
 
-from aegisflow.core.verdict import (
+from yieldpoint.core.verdict import (
     SCHEMA_VERSION,
     Confidence,
     Finding,

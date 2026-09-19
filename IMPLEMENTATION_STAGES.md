@@ -26,7 +26,7 @@ build lands at Stage 5 instead of after the CI path.
 
 `verdict.py`, `glob.py`, `policy.py`, `pyproject.toml`.
 
-**Gate:** tests pass; AegisFlow's own `.aegisflow.json` loads warning-free. ✅
+**Gate:** tests pass; Yieldpoint's own `.yieldpoint.json` loads warning-free. ✅
 
 ---
 
@@ -71,7 +71,7 @@ severities and recording `checked`/`skipped`.
 
 ## Stage 4 — CLI ✅
 
-`cli.py` — `aegisflow check --path P --before A --after B [--json]`, exit code 0 on pass
+`cli.py` — `yieldpoint check --path P --before A --after B [--json]`, exit code 0 on pass
 and 1 on findings.
 
 **Gate:** runnable from a shell by any language; `--json` emits the versioned verdict schema.
@@ -82,7 +82,7 @@ and 1 on findings.
 
 `hook.py` — reads a `PreToolUse` payload on stdin, reconstructs before/after for `Edit`,
 `MultiEdit` and `Write`, and returns a deny decision with the prescription attached.
-`aegisflow install-hook` writes the settings entry.
+`yieldpoint install-hook` writes the settings entry.
 
 **Gate — the one that matters:** in a live Claude Code session, an agent attempting to
 weaken an assertion in a protected test file is **denied**, and is told which subject was
@@ -95,10 +95,10 @@ for it.
 
 ```sh
 pip install -e .              # or: export PYTHONPATH=$PWD
-aegisflow install-hook        # add --advisory to report without denying
+yieldpoint install-hook        # add --advisory to report without denying
 ```
 
-Then start a new Claude Code session. `aegisflow install-hook` backs up any existing
+Then start a new Claude Code session. `yieldpoint install-hook` backs up any existing
 `.claude/settings.json` before writing, and re-running it replaces rather than duplicates
 the entry.
 
@@ -115,8 +115,8 @@ strengthening edit, a non-test file, and a `Bash` call all exit 0. 170 tests pas
 clean diff exits zero. Enables pre-commit and CI. ✅
 
 ```sh
-git diff --cached | aegisflow check --diff -        # pre-commit
-git diff origin/main... | aegisflow check --diff - --json   # CI
+git diff --cached | yieldpoint check --diff -        # pre-commit
+git diff origin/main... | yieldpoint check --diff - --json   # CI
 ```
 
 A unified diff carries only hunks, not whole files — so the after-state is read from
@@ -140,7 +140,7 @@ judged per-file, which does report it.
 in state, and converges. ✅
 
 **The adapter imports nothing from LangGraph.** A node is a callable `(state) -> dict` and
-a conditional edge is a callable `(state) -> str`, so `aegisflow.langgraph` is
+a conditional edge is a callable `(state) -> str`, so `yieldpoint.langgraph` is
 framework-shaped but framework-free: fully unit-testable with nothing installed, and usable
 by any graph library sharing that convention.
 
@@ -172,10 +172,10 @@ stand in for a benchmark.
 explicit assent before apply. ✅
 
 ```sh
-aegisflow check --path tests/test_invoice.py --before old.py --after new.py --speak
+yieldpoint check --path tests/test_invoice.py --before old.py --after new.py --speak
 ```
 
-Implemented in `aegisflow/speech.py` as a free function rather than the `Verdict.speak()`
+Implemented in `yieldpoint/speech.py` as a free function rather than the `Verdict.speak()`
 method section 9.6 sketched: rendering for a listener is a separate responsibility from the
 verdict contract (RULES.md section 2), and a method would have made `verdict.py` import the
 speech layer that imports it back.
@@ -240,7 +240,7 @@ Where generation genuinely bites:
 
 ### 9.3. Built: language-general detection ✅
 
-`aegisflow/core/generated.py` detects generated files with **no parser and no build**,
+`yieldpoint/core/generated.py` detects generated files with **no parser and no build**,
 because generated files announce themselves. Two signals:
 
 - **Header markers**, and the conventions are shared across ecosystems: Go specifies
@@ -270,7 +270,7 @@ composed; the diff path leaves it off, so committed regenerated output stays sil
 
 ### 9.4. Built: accessor equivalence ✅
 
-`aegisflow/core/accessor.py` normalises a property and its accessor to one subject:
+`yieldpoint/core/accessor.py` normalises a property and its accessor to one subject:
 `invoice.total`, `invoice.getTotal()`, `invoice.get_total()` and `invoice.total()` all
 reduce to `invoice.total`, and chains reduce throughout
 (`order.getInvoice().getTotal()` → `order.invoice.total`). Covers the JVM, .NET properties,
@@ -342,7 +342,7 @@ else — is still caught.
   breaks the core's zero-runtime-dependency property. That is a deliberate decision to make
   when a language is scheduled, not to drift into.
 
-### 9.7. AegisFlow exposes the MCP; it does not consume others
+### 9.7. Yieldpoint exposes the MCP; it does not consume others
 
 The MCP surface is worth building, inverted from the obvious direction. Its value is not
 "verify this edit" — it is **resolution**:
@@ -454,28 +454,28 @@ two three-line accessors being identical is a coincidence, not duplication.
 
 ### 11.4. New rules come from config, new rule *kinds* from installed packages
 
-Teams extend the rule set declaratively in `.aegisflow.json`:
+Teams extend the rule set declaratively in `.yieldpoint.json`:
 
 ```json
 "custom": [
-  {"name": "no_network_in_core", "path": "aegisflow/core/**",
+  {"name": "no_network_in_core", "path": "yieldpoint/core/**",
    "forbid_import": "requests",
    "message": "The core must never reach the network. See RULES.md section 4."}
 ]
 ```
 
 `forbid_call`, `forbid_import` and `require_name_pattern`, each scopable by path glob and
-carrying its own severity. **Declarative on purpose:** `.aegisflow.json` is repo-committed,
+carrying its own severity. **Declarative on purpose:** `.yieldpoint.json` is repo-committed,
 so a rule that could name code to run would mean cloning a repository executes it. New rule
 *instances* come from configuration; new rule *kinds* come from installed packages, which
 is an explicit act.
 
-This repository now enforces its own architecture rule this way — `aegisflow/core/**` may
+This repository now enforces its own architecture rule this way — `yieldpoint/core/**` may
 not import `requests`, and the adapters are out of scope.
 
 ### 11.5. Dogfooding, reported honestly
 
-Run in greenfield mode over AegisFlow's own source, the rules produce **21 findings**:
+Run in greenfield mode over Yieldpoint's own source, the rules produce **21 findings**:
 
 | Rule | Count |
 |---|---|
@@ -495,7 +495,7 @@ noise.
 ## Stage 12 — Architectural boundaries ✅
 
 Found by auditing rather than by planning: `policy.boundaries.zones` had existed since
-Stage 0, this repository's own `.aegisflow.json` declared two zones, and **nothing
+Stage 0, this repository's own `.yieldpoint.json` declared two zones, and **nothing
 evaluated them**. A policy section that looks enforced and is not is precisely the defect
 this project was created to prevent — it is the same shape as the `audit` command that
 printed "Clean" without reading a file, which was deleted on day one.
@@ -506,7 +506,7 @@ leave unwired, and only running them against a real repository surfaces it.
 ### 12.1. Honest positioning
 
 `import-linter`, `dependency-cruiser` and ArchUnit do this well and are more mature.
-AegisFlow does not claim to better them. It is here because the policy already declares
+Yieldpoint does not claim to better them. It is here because the policy already declares
 zones, and because a rule an agent is **told about in the same verdict** is worth more than
 one it discovers later from a separate tool failing.
 
@@ -514,7 +514,7 @@ one it discovers later from a separate tool failing.
 
 `from ..langgraph import node` compared literally matches no pattern, so a zone rule would
 silently protect nothing. Imports are resolved against the file's own package —
-`aegisflow/core/x.py` + `from ..langgraph import node` → `aegisflow.langgraph` — with
+`yieldpoint/core/x.py` + `from ..langgraph import node` → `yieldpoint.langgraph` — with
 `__init__.py` resolving to the package it defines rather than its parent.
 
 Patterns accept both spellings found in the wild: module paths (`app.adapters.*`,
@@ -523,7 +523,7 @@ it, and `a.b.*` also forbids importing `a.b` itself — matching only submodules
 the package import as a hole in a rule that looks closed.
 
 Precision is checked in both directions: `requests` does not match `requests_mock`, and
-`aegisflow.core.diff` does not match `aegisflow.core.difftool`.
+`yieldpoint.core.diff` does not match `yieldpoint.core.difftool`.
 
 ### 12.3. Differential, like every other rule
 
@@ -532,8 +532,8 @@ switched on in an existing repository without blaming inherited coupling.
 
 ### 12.4. This repository now enforces its own architecture
 
-The two zones in `.aegisflow.json` are live: `aegisflow/core/**` may not import an adapter,
-`langgraph`, or the network; `aegisflow/langgraph/**` may not reach into core internals and
+The two zones in `.yieldpoint.json` are live: `yieldpoint/core/**` may not import an adapter,
+`langgraph`, or the network; `yieldpoint/langgraph/**` may not reach into core internals and
 must depend only on the verdict API. **Zero violations across the real source tree**, with
 a test that fails if that changes — and tests that fail if the wiring is ever removed again.
 
@@ -542,8 +542,8 @@ a test that fails if that changes — and tests that fail if the wiring is ever 
 ## Stage 13 — Repository audit ✅
 
 ```sh
-aegisflow scan                       # audit the working tree
-aegisflow scan --rule dangling_reference --json
+yieldpoint scan                       # audit the working tree
+yieldpoint scan --rule dangling_reference --json
 ```
 
 Another gap found by asking what someone does first: every existing surface verifies a
@@ -553,7 +553,7 @@ it checked nothing — but nothing replaced it.
 
 ### 13.1. Absolute, not differential — and the distinction is load-bearing
 
-Most rules are differential so that adopting AegisFlow does not blame inherited debt on the
+Most rules are differential so that adopting Yieldpoint does not blame inherited debt on the
 next edit. A scan has no "before", so every rule runs absolutely and reports everything it
 finds. Structure limits are forced into `greenfield` mode for the same reason.
 
@@ -569,7 +569,7 @@ two scans of the same tree produce byte-identical output.
 
 ### 13.2. Dogfooded
 
-Against AegisFlow's own 37 files: **zero** findings for `dangling_reference`,
+Against Yieldpoint's own 37 files: **zero** findings for `dangling_reference`,
 `boundary_violation`, `export_removed`, `duplicate_implementation`, `file_too_long` and
 `utility_module`, with a test that fails if any of those appear. The 23 remaining findings
 are all in the stricter maintainability limits chosen as defaults in Stage 11
@@ -579,7 +579,7 @@ adopted, not noise.
 ### 13.3. The split that proved the Stage 10 rules
 
 `cli.py` crossed 250 lines and was split into the argument surface and the command
-implementations. Running AegisFlow's own `dangling_reference` check on the result **before
+implementations. Running Yieldpoint's own `dangling_reference` check on the result **before
 the test suite** reported four missing imports in `cli.py` and a stray `main` reference in
 `commands.py` — the same class of mistake as Stage 10, caught in seconds instead of by 106
 failing tests.
@@ -603,7 +603,7 @@ them:
 > **the agent made CI pass by weakening CI.**
 
 Found by asking what an agent can still do once assertions are protected. The answer is
-everything in `.github/` — and AegisFlow verified none of it. Worse, it reported workflow
+everything in `.github/` — and Yieldpoint verified none of it. Worse, it reported workflow
 files as `checked`, claiming a verification it had never performed.
 
 ### 14.1. Two rules
@@ -636,7 +636,7 @@ which is why rules are tested for the count they produce, not merely that they f
 `.github/` now carries a pull-request checklist derived from `RULES.md` (differential
 findings, uncertainty cannot block, no claim without a benchmark, `SCHEMA_VERSION` on
 verdict changes), CODEOWNERS covering the three files that decide what a verdict says,
-Dependabot, a security policy, and `.pre-commit-config.yaml` running `aegisflow check
+Dependabot, a security policy, and `.pre-commit-config.yaml` running `yieldpoint check
 --diff -` on staged changes.
 
 The two lead issue templates are **false positive** and **missed detection** rather than a
@@ -655,13 +655,13 @@ file*; a file no rule applies to is neither checked nor skipped.
 ## Stage 15 — MCP server and open-source front door ✅
 
 ```sh
-aegisflow install-mcp --list
-aegisflow install-mcp --client cursor
-aegisflow install-mcp --client zed --show     # print, do not write
+yieldpoint install-mcp --list
+yieldpoint install-mcp --client cursor
+yieldpoint install-mcp --client zed --show     # print, do not write
 ```
 
 The MCP server was listed as "not scheduled" through fourteen stages. It is the surface
-that reaches editors AegisFlow has no other door into — Cursor, Windsurf, VS Code, Zed —
+that reaches editors Yieldpoint has no other door into — Cursor, Windsurf, VS Code, Zed —
 and it needs no dependency, because MCP's stdio transport *is* newline-delimited JSON-RPC.
 
 ### 15.1. MCP explains; it does not enforce
@@ -692,7 +692,7 @@ against a live client.
 `type: stdio` for VS Code, `context_servers` with a nested command for Zed. Vendors move
 these between releases, so `--show` prints the snippet for anyone who would rather wire it
 by hand, and the docs say plainly that the writer may go out of date while
-`aegisflow mcp` will not.
+`yieldpoint mcp` will not.
 
 Existing configuration is backed up before it is touched — including when it is unparseable,
 which is exactly when a user most wants the original back.
@@ -758,13 +758,13 @@ The objection that decides adoption turned out not to be about the checks at all
 was three commands, every entry point demanded that the caller describe the change, and
 two of the registered commands could fail silently.
 
-**17.1 `aegisflow review`.** The zero-argument entry point: it reads the uncommitted diff
+**17.1 `yieldpoint review`.** The zero-argument entry point: it reads the uncommitted diff
 from git and verifies it. Every other surface asks *what changed*; the person running this
 has already made the change and wants to know what it broke. Exposed over MCP as
-`aegis_review`, the tool an agent calls after finishing a set of edits.
+`yieldpoint_review`, the tool an agent calls after finishing a set of edits.
 
 Running git is a **surface** concern, not a check — the same shape as the existing
-`git diff | aegisflow check --diff -`. The verdict is still computed by the pure engine
+`git diff | yieldpoint check --diff -`. The verdict is still computed by the pure engine
 from the diff text, so RULES.md §4 holds: given the diff, the answer does not depend on
 git being present.
 
@@ -772,18 +772,18 @@ One bug found by its own test: `git diff` omits untracked files, and emptiness w
 before they were added, so a change consisting only of **new files** reported "nothing to
 check" — the most interesting thing an agent produces was the one case not checked.
 
-**17.2 `aegisflow init`.** Config, MCP registration and hook in one idempotent command.
+**17.2 `yieldpoint init`.** Config, MCP registration and hook in one idempotent command.
 Advisory by default, because a gate that blocks on its first run in an unfamiliar
 repository gets uninstalled rather than tuned. Three separate commands was three chances
 to stop halfway, and the half usually skipped was the hook — the only one that enforces.
 
 **17.3 Commands that actually resolve.** Both the MCP server and the hook were registered
-as a bare `aegisflow`. When that is not on the client's PATH — conda, virtualenvs, an
+as a bare `yieldpoint`. When that is not on the client's PATH — conda, virtualenvs, an
 editor launched from a desktop icon — the failure surfaces as *"server failed to start"*
 rather than *"not on PATH"*. Now resolved at install time: the bare console-script name
 when it exists, since `.mcp.json` is committed and an absolute path works on one machine,
-falling back to `<interpreter> -m aegisflow`, which cannot fail to resolve. That fallback
-needed `aegisflow/__main__.py`, which did not exist.
+falling back to `<interpreter> -m yieldpoint`, which cannot fail to resolve. That fallback
+needed `yieldpoint/__main__.py`, which did not exist.
 
 **17.4 Instructions over MCP.** The server sends MCP `instructions` naming when to call
 each tool. MCP still explains rather than enforces — an agent that does not want a verdict
@@ -807,7 +807,7 @@ which makes it indistinguishable from a slogan. `ledger.py` appends one line per
 
 - *Measured* — verdicts, findings by rule, prescription characters, source characters
   analysed, elapsed milliseconds.
-- *Architectural* — AegisFlow makes zero model calls, so an LLM-as-judge doing the same
+- *Architectural* — Yieldpoint makes zero model calls, so an LLM-as-judge doing the same
   job costs one per verdict. A property of how each is built, not an observation.
 - *Estimated* — tokens as characters over a stated constant, labelled everywhere it
   appears, because pinning a real tokenizer would mean a dependency and a false precision.
@@ -828,7 +828,7 @@ rather than editing one the project owns.
 
 **Gate.** 558 tests. Corpus unchanged at 0/0. Self-audit 24 → **23**: two new modules,
 neither adding a finding, and the CLI parser split removed one. Proved end to end with the
-installed binary — hook blocks a weakening, `aegisflow stats` shows it.
+installed binary — hook blocks a weakening, `yieldpoint stats` shows it.
 
 ---
 
@@ -854,8 +854,8 @@ worker B's reads as a deletion to A and a no-op to B. Both wrong, and neither wo
 see it. `also_covered` already existed; `examples/langgraph_fanout.py` shows the same edits
 scored both ways and is asserted on in `tests/test_examples.py`.
 
-**Also.** Per-agent attribution through `AEGISFLOW_RUN_ID`/`AEGISFLOW_AGENT`; source-level
-acknowledgements (`# aegisflow: allow <rule> - <reason>`, one rule, reason required,
+**Also.** Per-agent attribution through `YIELDPOINT_RUN_ID`/`YIELDPOINT_AGENT`; source-level
+acknowledgements (`# yieldpoint: allow <rule> - <reason>`, one rule, reason required,
 counted in stats) so an intentional change is answerable without switching the rule off;
 `UNVERIFIED` exported from the LangGraph package, which it never was.
 

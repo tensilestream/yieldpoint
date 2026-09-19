@@ -1,5 +1,5 @@
 name: False positive
-description: AegisFlow flagged something that is actually fine
+description: Yieldpoint flagged something that is actually fine
 labels: ["false-positive"]
 body:
   - type: markdown
@@ -35,5 +35,5 @@ body:
     id: version
     attributes:
       label: Version
-      placeholder: "aegisflow --version"
+      placeholder: "yieldpoint --version"
     validations: { required: true }

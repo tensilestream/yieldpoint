@@ -7,10 +7,10 @@ callback that receives the task output rather than in the agent's own prompt.
 
 from __future__ import annotations
 
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_diff
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_diff
 
-POLICY = ".aegisflow.json"
+POLICY = ".yieldpoint.json"
 
 
 def guard(task_output, root: str = "."):
@@ -27,10 +27,10 @@ def guard(task_output, root: str = "."):
         return task_output
     if verdict.status is Status.UNVERIFIED:
         raise ValueError(
-            "AegisFlow could not analyse this change, so it is not approved:\n"
+            "Yieldpoint could not analyse this change, so it is not approved:\n"
             + "\n".join(verdict.skipped)
         )
-    raise ValueError(f"AegisFlow rejected this change:\n\n{verdict.prescription}")
+    raise ValueError(f"Yieldpoint rejected this change:\n\n{verdict.prescription}")
 
 
 def build_task(agent, description: str, root: str = "."):
@@ -50,7 +50,7 @@ def crew_wide_review(root: str = ".") -> str:
     Per-agent verification misses a test moved from one agent's file to
     another's — each sees half the change. See langgraph_fanout.py.
     """
-    from aegisflow.worktree import uncommitted
+    from yieldpoint.worktree import uncommitted
 
     diff = uncommitted(root)
     if not diff.ok:

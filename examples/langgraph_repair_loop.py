@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from langgraph.graph import END, START, StateGraph  # noqa: E402
 
-from aegisflow.langgraph import (  # noqa: E402
+from yieldpoint.langgraph import (  # noqa: E402
     BLOCK, ESCALATE, PASS, REPAIR, make_router, repair_context, verify_node,
 )
 
@@ -50,9 +50,9 @@ class State(TypedDict, total=False):
     changes: list
     verdict: dict
     prescription: str
-    aegis_history: list
-    aegis_attempts: int
-    aegis_loop_tripped: bool
+    yieldpoint_history: list
+    yieldpoint_attempts: int
+    yieldpoint_loop_tripped: bool
     outcome: str
     log: Annotated[list[str], operator.add]
 
@@ -119,7 +119,7 @@ def main() -> int:
         print(f"  {entry}")
 
     print(f"\nOutcome         : {final['outcome']}")
-    print(f"Verify attempts : {final.get('aegis_attempts')}")
+    print(f"Verify attempts : {final.get('yieldpoint_attempts')}")
     print(f"Model calls     : {model_calls}")
     print(
         "Prescription    : produced deterministically, 0 model calls\n"

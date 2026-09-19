@@ -2,7 +2,7 @@
 
 import unittest
 
-from aegisflow.core import glob
+from yieldpoint.core import glob
 
 
 class TestNormalize(unittest.TestCase):

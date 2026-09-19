@@ -4,12 +4,12 @@
 
 # The verdict contract is the cross-language API: a change here breaks bindings
 # in other languages that this repository cannot see.
-/aegisflow/core/verdict.py      @tensilestream
+/yieldpoint/core/verdict.py      @tensilestream
 
 # Rule severity defaults decide whether an upgrade starts failing someone's
 # pipeline overnight.
-/aegisflow/core/policy.py       @tensilestream
-/.aegisflow.json                @tensilestream
+/yieldpoint/core/policy.py       @tensilestream
+/.yieldpoint.json                @tensilestream
 
 # The checks that run the checks.
 /.github/workflows/             @tensilestream

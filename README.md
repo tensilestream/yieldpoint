@@ -1,13 +1,27 @@
-<h1 align="center">AegisFlow</h1>
+<h1 align="center">Yieldpoint</h1>
+
+<p align="center">
+<code>
+   ╭●╮<br>
+ ╱&nbsp;&nbsp;&nbsp;&nbsp;╲<br>
+╱&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;╳
+</code>
+</p>
 
 <p align="center">
   <strong>Proves an AI-authored change didn't pass by weakening the tests.</strong>
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/aegisflow/"><img alt="PyPI" src="https://img.shields.io/pypi/v/aegisflow.svg"></a>
-  <a href="https://pypi.org/project/aegisflow/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/aegisflow.svg"></a>
-  <a href="https://github.com/tensilestream/AgeisFlow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tensilestream/AgeisFlow/actions/workflows/ci.yml/badge.svg"></a>
+  <em>The <strong>yield point</strong> is where a material stops springing back and
+  deforms for good &mdash; the moment it quietly stops being as strong as it was.<br>
+  A test suite does the same under an agent's edits. This finds that moment.</em>
+</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/yieldpoint/"><img alt="PyPI" src="https://img.shields.io/pypi/v/yieldpoint.svg"></a>
+  <a href="https://pypi.org/project/yieldpoint/"><img alt="Python versions" src="https://img.shields.io/pypi/pyversions/yieldpoint.svg"></a>
+  <a href="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml/badge.svg"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
@@ -23,11 +37,11 @@ The suite is green. Coverage is unchanged — the weaker assertion executes the 
 The linter is silent. Nothing in a normal toolchain reports this, because every tool in it
 grades the code *as it now stands*, and this is a statement about what was **taken away**.
 
-AegisFlow grades the **transition**. Deterministically, with no model call, and with the
+Yieldpoint grades the **transition**. Deterministically, with no model call, and with the
 same answer on every machine.
 
 ```console
-$ aegisflow check --path tests/test_invoice.py --before old.py --after new.py
+$ yieldpoint check --path tests/test_invoice.py --before old.py --after new.py
 REPAIR  1 finding(s)
 
   tests/test_invoice.py:3 in test_total  [assertion_monotonicity]
@@ -42,7 +56,7 @@ Agents that write code are now fast enough that nobody reads everything they pro
 missing piece is not a smarter reviewer — it is a **layer of decisions that software can
 act on**, computed rather than asked for.
 
-AegisFlow answers three kinds of question about a change, all without a model call:
+Yieldpoint answers three kinds of question about a change, all without a model call:
 
 ```text
                                     ┌─────────────────────────────┐
@@ -72,9 +86,9 @@ Compose them the way you would any predicate — ask each factor separately, com
 own code:
 
 ```python
-from aegisflow.harness import middleware, Change
+from yieldpoint.harness import middleware, Change
 
-mw = middleware(policy=".aegisflow.json")
+mw = middleware(policy=".yieldpoint.json")
 facts = mw.assess(Change(path, before, after))       # one parse, all three answers
 
 if facts["risk"]["value"] == "critical":
@@ -99,7 +113,7 @@ Three insertion points, saving three different things:
        ▼
   ╔═══════════════════════╗  tier: human
   ║ 1. BEFORE THE MODEL   ║──────────────────────▶ Ask a person
-  ║    aegisflow.harness  ║
+  ║    yieldpoint.harness  ║
   ║    how much model     ║──────────────────────┐ tier: none
   ║    does this need?    ║                      │ (no model call)
   ╚═══════════════════════╝                      │
@@ -143,14 +157,14 @@ chooses whether to call a tool, and an agent about to weaken a test does not ask
 
 - [The vision](#the-vision) · [Where it goes in the loop](#where-it-goes-in-the-loop)
 - [Install](#install) · [Quick start](#quick-start) — two commands
-- [`aegisflow review`](#aegisflow-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
+- [`yieldpoint review`](#yieldpoint-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
 - [What it checks](#what-it-checks) · [Configuration](#configuration)
 - [Routing and gating](#routing-and-gating--decisions-instead-of-round-trips) · [Fan-out and long sessions](#fan-out-and-long-running-sessions)
 - [Examples](./examples/)
 - [Running it in an organisation](#running-it-in-an-organisation) · [Speed](#speed-a-content-addressed-index)
 - [Performance](#performance--run-the-benchmark-dont-trust-the-readme)
-- [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--aegisflow-stats)
+- [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--yieldpoint-stats)
 - [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
 - [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
 - [Contributing](#contributing) · [License](#license)
@@ -160,8 +174,8 @@ chooses whether to call a tool, and an agent about to weaken a test does not ask
 ## Install
 
 ```sh
-pip install aegisflow                 # the engine and CLI, zero dependencies
-pip install "aegisflow[langgraph]"    # plus the LangGraph example's requirements
+pip install yieldpoint                 # the engine and CLI, zero dependencies
+pip install "yieldpoint[langgraph]"    # plus the LangGraph example's requirements
 ```
 
 Requires Python 3.10 or newer. Nothing else — the verification core has no runtime
@@ -171,9 +185,9 @@ dependencies, makes no network calls, and never invokes a model.
 <summary>Other install methods</summary>
 
 ```sh
-pipx install aegisflow                            # isolated CLI
-uv tool install aegisflow                         # same, via uv
-pip install git+https://github.com/tensilestream/AgeisFlow    # from source
+pipx install yieldpoint                            # isolated CLI
+uv tool install yieldpoint                         # same, via uv
+pip install git+https://github.com/tensilestream/yieldpoint    # from source
 ```
 </details>
 
@@ -182,34 +196,34 @@ pip install git+https://github.com/tensilestream/AgeisFlow    # from source
 Two commands. The first sets everything up; the second tells you what you already broke.
 
 ```sh
-aegisflow init         # config + MCP server + editor hook, in one go
-aegisflow review       # check everything you have changed but not committed
+yieldpoint init         # config + MCP server + editor hook, in one go
+yieldpoint review       # check everything you have changed but not committed
 ```
 
 > **Restart your editor after `init`.** Hooks and MCP servers are read when a session
 > starts, so nothing you install is active in the session you install it from — and that
-> looks exactly like it working: no output, no error, every edit allowed. `aegisflow doctor`
+> looks exactly like it working: no output, no error, every edit allowed. `yieldpoint doctor`
 > reports whether the hook has actually seen an edit, which is the only way to tell those
-> two states apart. `aegisflow review` works immediately, with no restart.
+> two states apart. `yieldpoint review` works immediately, with no restart.
 
 `init` writes three files and backs up anything it touches:
 
 | File | What it does |
 |---|---|
-| `.aegisflow.json` | The rules. Committed, so the team shares one definition. |
+| `.yieldpoint.json` | The rules. Committed, so the team shares one definition. |
 | `.mcp.json` | Registers the MCP server, so your agent can *ask* what a rule means. |
 | `.claude/settings.json` | Registers the hook, which is the part that actually *enforces*. |
 
-The hook starts **advisory** — it reports and never blocks. Run `aegisflow init --enforce`
+The hook starts **advisory** — it reports and never blocks. Run `yieldpoint init --enforce`
 once you are happy with what it reports. Restart your editor so it picks both up.
 
-### `aegisflow review` — the whole product in one command
+### `yieldpoint review` — the whole product in one command
 
 No arguments. It reads your uncommitted diff from git, including files you have not staged
 yet, and tells you whether anything you changed weakens what the tests verify.
 
 ```console
-$ aegisflow review
+$ yieldpoint review
 REPAIR  1 finding(s)
 
   tests/test_invoice.py:14 in test_total  [assertion_monotonicity]
@@ -221,38 +235,38 @@ REPAIR  1 finding(s)
 That verdict cost zero model calls and is byte-identical on every machine.
 
 ```sh
-aegisflow review --staged             # only what is staged
-aegisflow review --against main       # a whole branch
-aegisflow review --json               # for CI
+yieldpoint review --staged             # only what is staged
+yieldpoint review --against main       # a whole branch
+yieldpoint review --json               # for CI
 ```
 
 ### Prefer to do it a piece at a time?
 
 ```sh
-aegisflow scan                        # audit the repo as it stands
-aegisflow install-mcp --client cursor # MCP only, any editor
-aegisflow install-hook --advisory     # the enforcing half, on its own
-aegisflow check --path tests/test_invoice.py --before old.py --after new.py
-git diff --cached | aegisflow check --diff -
+yieldpoint scan                        # audit the repo as it stands
+yieldpoint install-mcp --client cursor # MCP only, any editor
+yieldpoint install-hook --advisory     # the enforcing half, on its own
+yieldpoint check --path tests/test_invoice.py --before old.py --after new.py
+git diff --cached | yieldpoint check --diff -
 ```
 
 Everything also runs without anything on your `PATH`:
 
 ```sh
-python -m aegisflow review
+python -m yieldpoint review
 ```
 
 ---
 
 ## Editor setup (MCP)
 
-AegisFlow ships an [MCP](https://modelcontextprotocol.io) server, so any MCP-speaking
+Yieldpoint ships an [MCP](https://modelcontextprotocol.io) server, so any MCP-speaking
 editor or agent can ask it for a verdict.
 
 ```sh
-aegisflow install-mcp --list                    # what can be configured
-aegisflow install-mcp --client cursor           # write the config
-aegisflow install-mcp --client zed --show       # print it instead, to paste yourself
+yieldpoint install-mcp --list                    # what can be configured
+yieldpoint install-mcp --client cursor           # write the config
+yieldpoint install-mcp --client zed --show       # print it instead, to paste yourself
 ```
 
 | Client | Scope | Configuration file |
@@ -269,14 +283,14 @@ Most clients take this shape:
 ```json
 {
   "mcpServers": {
-    "aegisflow": { "command": "aegisflow", "args": ["mcp"] }
+    "yieldpoint": { "command": "yieldpoint", "args": ["mcp"] }
   }
 }
 ```
 
-If `aegisflow` is not on the PATH your editor sees — common with conda, virtualenvs, and
+If `yieldpoint` is not on the PATH your editor sees — common with conda, virtualenvs, and
 editors launched from a desktop icon rather than a shell — the installer writes
-`"command": "<your python>", "args": ["-m", "aegisflow", "mcp"]` instead, which always
+`"command": "<your python>", "args": ["-m", "yieldpoint", "mcp"]` instead, which always
 resolves. This matters because a client that cannot find the command reports *"server
 failed to start"*, not *"not on PATH"*, and you lose an hour on the wrong problem.
 
@@ -285,12 +299,12 @@ failed to start"*, not *"not on PATH"*, and you lose an hour on the wrong proble
 
 ```json
 // .vscode/mcp.json
-{ "servers": { "aegisflow": { "type": "stdio", "command": "aegisflow", "args": ["mcp"] } } }
+{ "servers": { "yieldpoint": { "type": "stdio", "command": "yieldpoint", "args": ["mcp"] } } }
 ```
 
 ```json
 // ~/.config/zed/settings.json
-{ "context_servers": { "aegisflow": { "command": { "path": "aegisflow", "args": ["mcp"] } } } }
+{ "context_servers": { "yieldpoint": { "command": { "path": "yieldpoint", "args": ["mcp"] } } } }
 ```
 </details>
 
@@ -298,11 +312,11 @@ Tools offered:
 
 | Tool | Arguments | Use |
 |---|---|---|
-| **`aegis_review`** | **none** | Check everything uncommitted. The one to call after finishing a set of edits. |
-| `aegis_verify_change` | path, before, after | Check one edit before writing it. |
-| `aegis_verify_diff` | a unified diff | Check a change set you already have. |
-| `aegis_scan` | path | Audit a repository as it stands. |
-| `aegis_policy` | none | List the rules in force, before planning work. |
+| **`yieldpoint_review`** | **none** | Check everything uncommitted. The one to call after finishing a set of edits. |
+| `yieldpoint_verify_change` | path, before, after | Check one edit before writing it. |
+| `yieldpoint_verify_diff` | a unified diff | Check a change set you already have. |
+| `yieldpoint_scan` | path | Audit a repository as it stands. |
+| `yieldpoint_policy` | none | List the rules in force, before planning work. |
 
 The server also sends MCP `instructions` at startup, so a connected agent is told when to
 call these rather than having to be asked each time.
@@ -313,7 +327,7 @@ call these rather than having to be asked each time.
 > LangGraph node for anything that must actually hold.
 
 Vendors move these paths and formats between releases. `--show` prints the snippet if the
-writer is out of date; `aegisflow mcp` is the part that matters and can always be wired up
+writer is out of date; `yieldpoint mcp` is the part that matters and can always be wired up
 by hand.
 
 ---
@@ -321,9 +335,9 @@ by hand.
 ## Use it in your agent's graph
 
 ```python
-from aegisflow.langgraph import verify_node, make_router, PASS, REPAIR, ESCALATE, BLOCK
+from yieldpoint.langgraph import verify_node, make_router, PASS, REPAIR, ESCALATE, BLOCK
 
-builder.add_node("verify", verify_node(policy=".aegisflow.json"))
+builder.add_node("verify", verify_node(policy=".yieldpoint.json"))
 builder.add_edge("generate", "verify")
 builder.add_conditional_edges("verify", make_router(max_repairs=3), {
     PASS:     "apply_patch",
@@ -345,8 +359,8 @@ graph library using the same convention. Runnable example:
 ## Gate CI and commits
 
 ```sh
-git diff --cached       | aegisflow check --diff -           # pre-commit
-git diff origin/main... | aegisflow check --diff - --json    # CI
+git diff --cached       | yieldpoint check --diff -           # pre-commit
+git diff origin/main... | yieldpoint check --diff - --json    # CI
 ```
 
 A ready-made [`.pre-commit-config.yaml`](./.pre-commit-config.yaml) is included.
@@ -357,7 +371,7 @@ Exit codes, so a pipeline can tell the three outcomes apart:
 |---|---|
 | `0` | Something was checked and it was clean. |
 | `1` | Findings. The change weakens the suite, breaks a boundary, or trips a rule. |
-| `2` | AegisFlow itself failed — bad arguments, unreadable input. |
+| `2` | Yieldpoint itself failed — bad arguments, unreadable input. |
 | `3` | **Nothing in the change could be analysed.** No result to trust, and not the same as passing. Only returned when the *whole* change was unanalysable; one Python file among twenty TypeScript ones still exits `0`. |
 
 Code `3` is the reason the CLI can be trusted in CI at all: the alternative is exiting `0`
@@ -392,7 +406,7 @@ Hamcrest matchers. Migrating between them is not a weakening.
 ### Two properties that shape all of it
 
 **Findings are differential.** A problem that existed before your change is not attributed
-to it, so you can switch AegisFlow on in an existing repository without a wall of findings
+to it, so you can switch Yieldpoint on in an existing repository without a wall of findings
 nobody caused. `"greenfield": true` makes the limits absolute for a new project.
 
 **Uncertainty never blocks.** Analysis that could be wrong — a third-party linter, a
@@ -403,7 +417,7 @@ it got confused is one you would disable within a day.
 
 ## Configuration
 
-Rules live in a repo-committed `.aegisflow.json`, so every engineer's agent inherits the
+Rules live in a repo-committed `.yieldpoint.json`, so every engineer's agent inherits the
 same policy. Teams add their own rules declaratively:
 
 ```json
@@ -429,7 +443,7 @@ The standard way to correct an agent is another model — an LLM-as-judge — or
 own trial-and-error loop. Both cost tokens per round, take seconds, and return verdicts
 that differ between runs.
 
-AegisFlow returns the same verdict for the same input, every time, with no inference. That
+Yieldpoint returns the same verdict for the same input, every time, with no inference. That
 is what makes it usable as a **blocking gate**: you cannot gate a pipeline on a judge that
 flakes. It is also why the repair prescription is free — it is assembled from the verdict,
 not generated.
@@ -446,9 +460,9 @@ of those steps ask a model questions that are not language questions, and both c
 computed instead.
 
 ```python
-from aegisflow.harness import middleware, Change
+from yieldpoint.harness import middleware, Change
 
-mw = middleware(policy=".aegisflow.json",
+mw = middleware(policy=".yieldpoint.json",
                 tiers={"small": "haiku", "standard": "sonnet", "capable": "opus"},
                 escalate_to="human-review")
 
@@ -485,7 +499,7 @@ on cheapness — it says when the expensive model is unnecessary, never that a c
 unimportant. And a question it cannot answer returns `unknown` rather than a plausible
 default, so a harness can fall back to a model instead of acting on a guess.
 
-Also available in-session as the `aegis_assess` MCP tool.
+Also available in-session as the `yieldpoint_assess` MCP tool.
 
 ---
 
@@ -493,7 +507,7 @@ Also available in-session as the `aegis_assess` MCP tool.
 
 `change_too_large` is a true finding that arrives too late to act on: by the time it
 fires, splitting means unpicking thousands of lines. An agent working for hours needs the
-same judgement one turn at a time, so `aegisflow review` and `aegis_review` end with:
+same judgement one turn at a time, so `yieldpoint review` and `yieldpoint_review` end with:
 
 ```console
 WRAP-UP    [################........] 820/1,200 lines
@@ -531,7 +545,7 @@ A verifier for people building agents has to survive how agents are actually run
 workers on one repository, for hours.
 
 ```python
-from aegisflow.verify import verify_change
+from yieldpoint.verify import verify_change
 from examples.langgraph_fanout import pooled_subjects   # 20 lines, copy it
 
 covered = pooled_subjects(edits, policy)          # every subject in the change set
@@ -548,8 +562,8 @@ both wrong. `also_covered` tells each verification that a subject missing *here*
 verified *there*. [`examples/langgraph_fanout.py`](./examples/langgraph_fanout.py) shows
 the same edits scored both ways.
 
-**Label the workers.** Set `AEGISFLOW_RUN_ID` and `AEGISFLOW_AGENT` per worker and
-`aegisflow stats` reports findings per agent — so "the suite got weaker" becomes "worker 47
+**Label the workers.** Set `YIELDPOINT_RUN_ID` and `YIELDPOINT_AGENT` per worker and
+`yieldpoint stats` reports findings per agent — so "the suite got weaker" becomes "worker 47
 keeps doing this".
 
 **What holds under load**, pinned by [`tests/test_concurrency.py`](./tests/test_concurrency.py):
@@ -566,14 +580,14 @@ failure modes over 600 verdicts.
 
 ---
 
-## Is it actually helping? — `aegisflow stats`
+## Is it actually helping? — `yieldpoint stats`
 
-Every verdict appends one line to a local file. `aegisflow stats` adds them up, and keeps
+Every verdict appends one line to a local file. `yieldpoint stats` adds them up, and keeps
 three kinds of number strictly apart — because blending them is how tools end up quoting
 savings nobody can reproduce.
 
 ```console
-$ aegisflow stats
+$ yieldpoint stats
 MEASURED — counted from what actually ran
   verifications                  47
   reported something             12
@@ -587,7 +601,7 @@ MEASURED — counted from what actually ran
     empty_test                      3
 
 ARCHITECTURAL — true by construction, not measured
-  model calls made by AegisFlow                   0
+  model calls made by Yieldpoint                   0
   prescriptions assembled, not generated         19
   characters of critique produced free        3,904
   critique is 28.4x smaller than the code it describes
@@ -603,7 +617,7 @@ NOT CLAIMED
 ```
 
 **Why three blocks.** *Measured* is counted from what ran. *Architectural* is true by
-construction — AegisFlow makes no model calls, so an LLM-as-judge doing the same job costs
+construction — Yieldpoint makes no model calls, so an LLM-as-judge doing the same job costs
 one per verdict; that is a property of how each is built, not a benchmark result.
 *Estimated* is arithmetic on the measured byte counts with the assumption printed beside
 it. If you only trust the first block you still get a complete picture.
@@ -619,12 +633,12 @@ calls. That needs a benchmark against a real model, it does not exist, and until
 the number will not appear here.
 
 ```sh
-aegisflow stats --since session   # the last 8 hours — what this sitting produced
-aegisflow stats --since today
-aegisflow stats --since 2h        # also 30m, 7d, 1w
-aegisflow stats --run job-42      # one orchestrated run
-aegisflow stats --agent worker-7  # one worker in a fan-out
-aegisflow stats --json            # the same figures, tiered the same way
+yieldpoint stats --since session   # the last 8 hours — what this sitting produced
+yieldpoint stats --since today
+yieldpoint stats --since 2h        # also 30m, 7d, 1w
+yieldpoint stats --run job-42      # one orchestrated run
+yieldpoint stats --agent worker-7  # one worker in a fan-out
+yieldpoint stats --json            # the same figures, tiered the same way
 ```
 
 The ledger is append-only and has no concept of a session, which is right for the file and
@@ -635,19 +649,19 @@ recent — assuming would fold old work into today's numbers.
 A period it cannot read is an error, not a silent widening:
 
 ```console
-$ aegisflow stats --since "last tuesday"
-aegisflow: cannot read the period 'last tuesday'; try 2h, 30m, 7d, or today
+$ yieldpoint stats --since "last tuesday"
+yieldpoint: cannot read the period 'last tuesday'; try 2h, 30m, 7d, or today
 ```
 
 Recording is **local only** — there is no network call anywhere in this package. The file
-lives in `.aegisflow/`, which ignores itself, so it never shows up in a diff. Turn it off
-with `"metrics": { "enabled": false }` in `.aegisflow.json`, or `AEGISFLOW_NO_METRICS=1`.
+lives in `.yieldpoint/`, which ignores itself, so it never shows up in a diff. Turn it off
+with `"metrics": { "enabled": false }` in `.yieldpoint.json`, or `YIELDPOINT_NO_METRICS=1`.
 
 ---
 
 ## Running it in an organisation
 
-Everything that decides anything is configurable in the committed `.aegisflow.json`, so a
+Everything that decides anything is configurable in the committed `.yieldpoint.json`, so a
 team tunes it in review rather than forking it.
 
 ### Importance is derived, not declared
@@ -657,14 +671,14 @@ it on day one, a directory is renamed in month four, and the list silently stops
 the worst failure a safety control can have, because it goes on reporting success.
 
 Most of what that list is trying to say is already in the code. **A module that forty
-others import is load-bearing; one nothing imports is not.** AegisFlow builds the import
+others import is load-bearing; one nothing imports is not.** Yieldpoint builds the import
 graph and ranks each file by how much of the repository depends on it, so the same edit
 gets a different answer depending on where it lands:
 
 ```console
 $ # identical one-line docstring edit, no configuration whatsoever
-  aegisflow/core/verdict.py    risk=high      tier=capable   44 modules import this one
-  aegisflow/speech.py          risk=trivial   tier=small     2 modules import this one
+  yieldpoint/core/verdict.py    risk=high      tier=capable   44 modules import this one
+  yieldpoint/speech.py          risk=trivial   tier=small     2 modules import this one
 ```
 
 ```text
@@ -728,16 +742,16 @@ policy warning: routing.escalate_paths pattern 'src/payments/**' matches no file
 |---|---|
 | **Reproducible** | No model, clock, network or environment read in any check. Same input, same bytes out, asserted in tests. |
 | **Tunable without a fork** | Every threshold, severity and tier name is policy. Contradictory thresholds are rejected with a warning, not silently applied. |
-| **Auditable** | Every verdict and decision carries the signals it came from. `aegisflow stats` reports per rule, per agent, per run. |
+| **Auditable** | Every verdict and decision carries the signals it came from. `yieldpoint stats` reports per rule, per agent, per run. |
 | **Versioned** | `schema_version` on the verdict and on decisions, moving independently. Pinned by a test, so a bump is deliberate. |
 | **Fails predictably** | The gate fails **open** by default — an unverifiable change is allowed and reported. `fail_closed=True` inverts it where that is the right trade. |
-| **Attributable** | `AEGISFLOW_RUN_ID` / `AEGISFLOW_AGENT` label each worker in a fan-out. |
+| **Attributable** | `YIELDPOINT_RUN_ID` / `YIELDPOINT_AGENT` label each worker in a fan-out. |
 | **Offline** | Zero runtime dependencies. No network call exists anywhere in the package. |
 | **Bounded** | The ledger self-rotates and ignores itself in git; events are capped below the atomic-append size. |
 
 ```sh
-aegisflow init --enforce        # hook blocks rather than reports
-AEGISFLOW_NO_METRICS=1          # no local recording at all
+yieldpoint init --enforce        # hook blocks rather than reports
+YIELDPOINT_NO_METRICS=1          # no local recording at all
 ```
 
 ## Speed: a content-addressed index
@@ -801,7 +815,7 @@ No figure anywhere in this repository may exceed what that prints. Shapes on any
 The claim this project *does* make without measurement is architectural, not empirical:
 a prescription is assembled from a verdict rather than generated, so producing it costs
 **zero model calls**. An LLM-as-judge costs one per verdict by construction. That holds
-regardless of hardware — see [`aegisflow stats`](#is-it-actually-helping--aegisflow-stats)
+regardless of hardware — see [`yieldpoint stats`](#is-it-actually-helping--yieldpoint-stats)
 for how the two are reported separately.
 
 ## How wrong is it? — run the number yourself
@@ -829,7 +843,7 @@ blended number on trust. The corpus is also a CI gate ([`tests/test_corpus.py`](
 so the rate cannot drift quietly.
 
 Thirty-seven hand-written cases are a floor, not a false-positive rate for your
-repository. If AegisFlow flags a refactor you know is sound, that is a bug —
+repository. If Yieldpoint flags a refactor you know is sound, that is a bug —
 [file it](./.github/ISSUE_TEMPLATE/false_positive.yml) and it becomes a corpus case.
 
 ## Status and limits
@@ -849,7 +863,7 @@ and repository audit all work and are covered by 520 tests. Read this before ado
   imported from another module is not expanded and its assertions are not counted.
 - **Decomposing a dict comparison into per-field assertions is deliberately allowed**, even
   though it drops the implicit "and no other keys" check. That trade and its reasoning are
-  written out in [`core/decomposition.py`](./aegisflow/core/decomposition.py).
+  written out in [`core/decomposition.py`](./yieldpoint/core/decomposition.py).
 - **The cost claim is unmeasured.** That the prescription costs zero model calls is a
   property of the architecture and holds. That repair loops therefore converge in fewer
   *total* calls against a real model has not been benchmarked, and is not claimed.
@@ -858,15 +872,15 @@ and repository audit all work and are covered by 520 tests. Read this before ado
 
 ## "Why not just use something that exists?"
 
-Fair question, and for two of the three things AegisFlow does the answer is *you should*.
+Fair question, and for two of the three things Yieldpoint does the answer is *you should*.
 
 | You already have | Does it catch an agent weakening a test? |
 |---|---|
 | **Coverage** | No — and it is worse than neutral. Delete an assertion and coverage is unchanged; delete a whole failing test and it goes *up*. |
 | **Linters** (ruff, ESLint, Spotless) | No. `assert x == 42` and `assert x` are both clean code. Nothing in a linter reads the previous version of the file. |
-| **Mutation testing** | Yes, in principle — it is the rigorous answer. It also needs minutes to hours per run, so it cannot sit on the edge between `generate` and `apply`. AegisFlow is milliseconds and no model calls; use both, at different points. |
+| **Mutation testing** | Yes, in principle — it is the rigorous answer. It also needs minutes to hours per run, so it cannot sit on the edge between `generate` and `apply`. Yieldpoint is milliseconds and no model calls; use both, at different points. |
 | **Code review** | Sometimes. Not reliably, in a forty-file agent diff, on the fourth one that day. |
-| **`dependency-cruiser`, import-linter, ArchUnit** | For layer boundaries — yes, and they are mature. AegisFlow ships `boundary_violation` for convenience, not as a reason to adopt it. |
+| **`dependency-cruiser`, import-linter, ArchUnit** | For layer boundaries — yes, and they are mature. Yieldpoint ships `boundary_violation` for convenience, not as a reason to adopt it. |
 | **LLM-as-judge** | Sometimes, at one extra model call per round, 5–15s of latency, and a verdict that changes between runs. You cannot gate a pipeline on a judge that flakes. |
 
 The narrow claim: **every one of those evaluates code as it now stands.** "The agent

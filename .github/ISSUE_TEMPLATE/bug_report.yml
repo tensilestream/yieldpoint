@@ -23,5 +23,5 @@ body:
     id: version
     attributes:
       label: Version and Python
-      placeholder: "aegisflow 0.1.0, Python 3.12, macOS"
+      placeholder: "yieldpoint 0.1.0, Python 3.12, macOS"
     validations: { required: true }

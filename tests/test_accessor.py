@@ -2,10 +2,10 @@
 
 import unittest
 
-from aegisflow.core.accessor import normalize, property_name
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change
+from yieldpoint.core.accessor import normalize, property_name
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change
 
 
 class TestPropertyName(unittest.TestCase):

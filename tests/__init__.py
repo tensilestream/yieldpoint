@@ -7,5 +7,5 @@ as well would hide whether that detection works.
 
 Tests that need recording write to a temporary path with ``ledger.record``
 directly, which is the layer below the switch. Tests that need a surface to
-record set ``AEGISFLOW_METRICS=1``.
+record set ``YIELDPOINT_METRICS=1``.
 """

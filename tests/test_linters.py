@@ -10,11 +10,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core.linters import registry, runner
-from aegisflow.core.linters.adapter import FAST, SLOW, Adapter, LintFinding
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Confidence, Finding, Status
-from aegisflow.verify import verify_change
+from yieldpoint.core.linters import registry, runner
+from yieldpoint.core.linters.adapter import FAST, SLOW, Adapter, LintFinding
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Confidence, Finding, Status
+from yieldpoint.verify import verify_change
 
 
 class TestParsers(unittest.TestCase):
@@ -194,7 +194,7 @@ class TestVerifyIntegration(unittest.TestCase):
 
     def test_rule_name_does_not_repeat_the_tool(self):
         item = LintFinding(tool="ruff-format", code="ruff-format.format", message="m")
-        from aegisflow.core.linters.report import rule_for
+        from yieldpoint.core.linters.report import rule_for
 
         self.assertEqual(rule_for(item), "lint.ruff-format.format")
 

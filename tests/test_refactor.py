@@ -9,11 +9,11 @@ after running them. This catches it before the edit is applied.
 
 import unittest
 
-from aegisflow.core.policy import Policy
-from aegisflow.core.refactor import DANGLING_REFERENCE, EXPORT_REMOVED, check
-from aegisflow.core.symbols import scan
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change, verify_diff
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.refactor import DANGLING_REFERENCE, EXPORT_REMOVED, check
+from yieldpoint.core.symbols import scan
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change, verify_diff
 
 
 def rules(before, after, path="src/module.py", **kwargs):
@@ -141,7 +141,7 @@ class TestNoFalsePositives(unittest.TestCase):
         """Any hit here is a false positive on production code."""
         from pathlib import Path
 
-        for path in sorted(Path("aegisflow").rglob("*.py")):
+        for path in sorted(Path("yieldpoint").rglob("*.py")):
             self.assertEqual(scan(path.read_text(), filename=str(path)).dangling(), (), str(path))
 
 

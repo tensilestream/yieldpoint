@@ -17,7 +17,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core import metrics, parsecache, symbols
+from yieldpoint.core import metrics, parsecache, symbols
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -31,7 +31,7 @@ SOURCES = [
 WRITER = """
 import sys
 sys.path.insert(0, ROOT_PATH)
-from aegisflow.core import metrics, parsecache
+from yieldpoint.core import metrics, parsecache
 parsecache.configure(sys.argv[1])
 for i in range(40):
     metrics.measure("def f_" + str(i) + "():\\n    return " + str(i) + "\\n",

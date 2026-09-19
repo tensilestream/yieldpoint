@@ -22,17 +22,17 @@ import time
 import unittest
 from pathlib import Path
 
-from aegisflow import ledger
-from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
-from aegisflow.totals import totals
+from yieldpoint import ledger
+from yieldpoint.core.verdict import Confidence, Finding, Status, Verdict
+from yieldpoint.totals import totals
 
 ROOT = Path(__file__).resolve().parent.parent
 
 WRITER = """
 import sys
 sys.path.insert(0, %r)
-from aegisflow import ledger
-from aegisflow.core.verdict import Verdict, Finding, Status, Confidence
+from yieldpoint import ledger
+from yieldpoint.core.verdict import Verdict, Finding, Status, Confidence
 path, agent, rounds = sys.argv[1], sys.argv[2], int(sys.argv[3])
 v = Verdict.of(
     [Finding(rule="assertion_monotonicity", status=Status.REPAIR, file="t.py",
@@ -181,7 +181,7 @@ class TestAgentCorrelation(unittest.TestCase):
                     ledger.observe(_verdict(), "review",
                                    who=ledger.Who("job-1", worker)), path
                 )
-            from aegisflow.stats import summarise
+            from yieldpoint.stats import summarise
 
             summary = summarise(ledger.load(path))
             self.assertEqual(dict(summary.agents), {"w1": 2, "w2": 1})
@@ -208,8 +208,8 @@ class TestAttributionIsNotSilentlyRebound(unittest.TestCase):
         import os
         from unittest import mock
 
-        with mock.patch.dict(os.environ, {"AEGISFLOW_RUN_ID": "R",
-                                          "AEGISFLOW_AGENT": "A"}):
+        with mock.patch.dict(os.environ, {"YIELDPOINT_RUN_ID": "R",
+                                          "YIELDPOINT_AGENT": "A"}):
             event = ledger.observe(_verdict(), "review")
         self.assertEqual((event.run, event.agent), ("R", "A"))
 

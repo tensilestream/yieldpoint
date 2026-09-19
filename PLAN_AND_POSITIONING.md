@@ -1,4 +1,4 @@
-# AegisFlow — State Audit, Positioning, and Build Plan
+# Yieldpoint — State Audit, Positioning, and Build Plan
 
 > Written before writing more code. §2 argues for cutting ~70% of the current scope;
 > §3 changes what the product *is*. Read those two first.
@@ -10,16 +10,16 @@
 
 ## 1. What is actually in the repo today
 
-I read every file. **AegisFlow is currently a specification plus a mock. No check in this
+I read every file. **Yieldpoint is currently a specification plus a mock. No check in this
 repository checks anything.**
 
 | Surface | Claim | Reality |
 |---|---|---|
 | `packages/cli` `audit` | "Scan for test tampering and boundary drift" | Prints `✓ 0 layer violations detected` unconditionally. Reads no files. |
-| `packages/cli` `install-mcp` | Registers with Cursor / Claude Desktop | Writes `npx -y aegisflow daemon` — no `daemon` command exists, package unpublished. Cursor's real path is `~/.cursor/mcp.json`. Overwrites user config with no backup. |
+| `packages/cli` `install-mcp` | Registers with Cursor / Claude Desktop | Writes `npx -y yieldpoint daemon` — no `daemon` command exists, package unpublished. Cursor's real path is `~/.cursor/mcp.json`. Overwrites user config with no backup. |
 | `packages/cli/package.json` | deps on chalk, commander, glob, prompts | None are imported anywhere. `main` points at a nonexistent `dist/`. `build: tsc` with no tsconfig and no TS sources. |
 | `packages/vscode-extension` | Live FinOps HUD | Status bar hardcoded to `$0.42 / $2.50`. Ignores both settings it contributes. |
-| `packages/vscode-extension` | Boundary rules from `.aegisflow.json` | Never reads it. Rules are hardcoded `/components/` substring matches — POSIX-only, so they silently no-op on Windows. |
+| `packages/vscode-extension` | Boundary rules from `.yieldpoint.json` | Never reads it. Rules are hardcoded `/components/` substring matches — POSIX-only, so they silently no-op on Windows. |
 | `packages/vscode-extension` | builds | **No `tsconfig.json`.** `npm run compile` fails. Cannot be built or loaded. |
 | `packages/browser-extension` | GitHub PR shield | Manifest references icons that do not exist → Chrome refuses to load it. |
 | `packages/browser-extension/content.js` | Detects test tampering | Flags any filename containing `test`/`spec`/`fixture` (`latest.ts`, `testimonial.tsx` false-positive), else renders green **"Verified: Zero Drift — PASSED"** having analysed nothing. |
@@ -28,7 +28,7 @@ repository checks anything.**
 
 **The worst defect is not a missing feature — it is the green banner.** A guardrail that
 renders false assurance is worse than no guardrail. If one engineer ships one bad change
-because AegisFlow said PASSED, the product is dead in that org permanently. Every surface
+because Yieldpoint said PASSED, the product is dead in that org permanently. Every surface
 that asserts safety must say "not evaluated" until it genuinely evaluates.
 
 ---
@@ -85,15 +85,15 @@ These destroy credibility with the exact technical buyer we need:
 
 ---
 
-## 3. What AegisFlow is — the repositioning
+## 3. What Yieldpoint is — the repositioning
 
-**AegisFlow is not an agent, and it does not compete with coding agents.**
+**Yieldpoint is not an agent, and it does not compete with coding agents.**
 
 Competing with Cursor, Claude Code, Devin and Copilot Workspace is a knife fight with
-well-funded incumbents, and the IDE-plugin position makes AegisFlow a feature they can
+well-funded incumbents, and the IDE-plugin position makes Yieldpoint a feature they can
 absorb in a sprint. The correct position is one layer down:
 
-> **AegisFlow is the deterministic verification layer that code-writing agents are built
+> **Yieldpoint is the deterministic verification layer that code-writing agents are built
 > on top of — consumed natively by LangGraph and equivalent orchestration frameworks.**
 
 Not a competitor to agents. A **dependency** of the people building them.
@@ -102,7 +102,7 @@ Not a competitor to agents. A **dependency** of the people building them.
 
 An earlier draft of this plan made the MCP server the primary surface. That has a fatal
 flaw: **an MCP tool is advisory.** The agent chooses whether to call it, and an agent about
-to weaken a test will not spontaneously call `aegis_check_if_i_am_cheating`. Guardrails
+to weaken a test will not spontaneously call `yieldpoint_check_if_i_am_cheating`. Guardrails
 that depend on the guarded party opting in are not guardrails.
 
 The framework position dissolves this. A verification node placed on the edge between
@@ -130,7 +130,7 @@ and a defensible one.
 
 **One sentence:**
 
-> **AegisFlow is the deterministic verification node in your agent's graph: it tells the
+> **Yieldpoint is the deterministic verification node in your agent's graph: it tells the
 > agent, in zero tokens and with a reproducible verdict, exactly which rule its generated
 > code breaks and what to do instead.**
 
@@ -143,7 +143,7 @@ back → regenerate. **Every cycle is a full model call.** The alternative corre
 is an LLM-as-judge: 5–15s of latency, a doubled token bill, and a verdict that is not
 reproducible run to run.
 
-AegisFlow returns a structured prescription in microseconds, for free, and returns the
+Yieldpoint returns a structured prescription in microseconds, for free, and returns the
 *same* verdict every time.
 
 **Status of this claim, split into what is proven and what is not** (RULES.md section 5):
@@ -197,7 +197,7 @@ Every linter, SAST tool and architecture checker evaluates code as it now stands
 agent cheated" is a statement about what was *taken away*. Only a diff-native verifier can
 express it.
 
-**Positioning line:** *Coverage tells you the tests ran. AegisFlow tells you they still mean something.*
+**Positioning line:** *Coverage tells you the tests ran. Yieldpoint tells you they still mean something.*
 
 **Explicitly not:** an agent, an agent framework, a linter, a SAST tool, a dependency
 scanner, a secrets vault, or an LLM proxy.
@@ -272,13 +272,13 @@ wasted.
 
 - Delete the green "Verified / PASSED" banner from the browser extension.
 - Delete the hardcoded `$0.42` from the VS Code status bar; show `—` when unknown.
-- `aegisflow audit` exits non-zero with "not implemented" rather than printing "Clean".
+- `yieldpoint audit` exits non-zero with "not implemented" rather than printing "Clean".
 - Add the missing `tsconfig.json` so the VS Code extension can build at all.
 - Add the missing browser-extension icons so Chrome will load it.
 - `install-mcp` stops registering a `daemon` command that does not exist.
 - Mark the JS packages clearly as backstops pending the Python core.
 
-### Phase 1 — `aegisflow.core` (Python) + the LangGraph SDK
+### Phase 1 — `yieldpoint.core` (Python) + the LangGraph SDK
 
 Zero runtime dependencies in the core. Each module one responsibility, under the 300-line
 limit in `RULES.md`.
@@ -286,7 +286,7 @@ limit in `RULES.md`.
 | Module | Responsibility |
 |---|---|
 | `core/glob.py` | Bounded glob → anchored regex, POSIX-normalised (port of verified JS) |
-| `core/policy.py` | Canonical policy dataclasses + `.aegisflow.json` normalisation (port) |
+| `core/policy.py` | Canonical policy dataclasses + `.yieldpoint.json` normalisation (port) |
 | `core/aegislang.py` | Parser for `policy.aegis` → the *same* shape, making the DSL real |
 | `core/diff.py` | Unified-diff parser: hunks, added/removed lines per file |
 | **`core/assertions.py`** | **The wedge: assertion extraction + strength lattice** |
@@ -300,9 +300,9 @@ limit in `RULES.md`.
 The LangGraph surface, shipped in the same phase:
 
 ```python
-from aegisflow.langgraph import verify_node, route_on_verdict, LoopBreaker
+from yieldpoint.langgraph import verify_node, route_on_verdict, LoopBreaker
 
-builder.add_node("verify", verify_node(policy=".aegisflow.json"))
+builder.add_node("verify", verify_node(policy=".yieldpoint.json"))
 builder.add_edge("generate", "verify")
 builder.add_conditional_edges("verify", route_on_verdict, {
     "pass":     "apply_patch",
@@ -333,7 +333,7 @@ gate is never allowed to `block` before this number exists.
 
 ### Phase 3 — More doors, one engine
 
-MCP server (`aegisflow mcp`) for Claude Code / Cursor; adapters for CrewAI, OpenAI Agents
+MCP server (`yieldpoint mcp`) for Claude Code / Cursor; adapters for CrewAI, OpenAI Agents
 SDK, Mastra; `pre-commit` hook; GitHub Action. Each is thin because the core is
 framework-neutral.
 
@@ -393,7 +393,7 @@ no diff, no screen, no glance.** The review step does not exist.
 That inverts the product's importance. With a screen, deterministic verification is a
 convenience layered on top of human review. In voice it *replaces* human review — it is the
 only thing between a spoken instruction and applied code. Voice is therefore the modality
-where AegisFlow is load-bearing rather than optional.
+where Yieldpoint is load-bearing rather than optional.
 
 Stated honestly: dictating refactors to a production repository is not yet a common
 workflow, and this plan does not assume it becomes one. The defensible claim is narrower
@@ -403,7 +403,7 @@ Phase 1.5 tests exactly that for about a week of work, before any larger bet is 
 
 ### 9.2. What voice requires from the engine
 
-- **`aegisflow.speech.speak(verdict)`** — a one-sentence spoken summary with a drill-down
+- **`yieldpoint.speech.speak(verdict)`** — a one-sentence spoken summary with a drill-down
   tree behind it (a free function, not a `Verdict` method: see IMPLEMENTATION_STAGES.md
   Stage 8):
   *"Three files changed. Assertions held. One boundary warning in `checkout`."* This is a
@@ -514,7 +514,7 @@ not a claim about anyone's repository.
   now answered honestly (`unverified`) rather than wrongly (`pass`), which is a smaller
   thing than solving it.
 - **The convergence claim is still unmeasured**, exactly as §4.1 says.
-- **Mutation testing is the rigorous version of this check.** The argument for AegisFlow
+- **Mutation testing is the rigorous version of this check.** The argument for Yieldpoint
   over it is placement, not rigour: milliseconds and zero model calls means it can sit on
   the edge between `generate` and `apply`, where a minutes-to-hours tool cannot.
 
@@ -526,7 +526,7 @@ caller describe the change they had just made.
 
 That is a real adoption objection and it outranks most of §10. A verifier nobody finishes
 installing verifies nothing, and "it silently failed to start" is indistinguishable from
-"it does not work". Stage 17 answers it: `aegisflow init` for setup, `aegisflow review`
+"it does not work". Stage 17 answers it: `yieldpoint init` for setup, `yieldpoint review`
 for the zero-argument check, resolved commands so neither surface can fail silently.
 
 Worth stating plainly, because it cuts against the instinct to keep adding checks: the

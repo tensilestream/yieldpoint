@@ -1,5 +1,5 @@
 name: Missed detection
-description: An agent weakened verification and AegisFlow did not notice
+description: An agent weakened verification and Yieldpoint did not notice
 labels: ["missed-detection"]
 body:
   - type: textarea

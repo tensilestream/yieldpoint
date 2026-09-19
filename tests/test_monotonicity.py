@@ -7,9 +7,9 @@ A false positive here costs trust, and a tool people mute verifies nothing.
 
 import unittest
 
-from aegisflow.core.assertions import extract
-from aegisflow.core.monotonicity import DISABLED, DOWNGRADED, REMOVED, compare, pair_tests
-from aegisflow.core.relation import Relation
+from yieldpoint.core.assertions import extract
+from yieldpoint.core.monotonicity import DISABLED, DOWNGRADED, REMOVED, compare, pair_tests
+from yieldpoint.core.relation import Relation
 
 
 def weakenings(before: str, after: str, **kwargs):

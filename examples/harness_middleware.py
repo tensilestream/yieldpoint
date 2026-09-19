@@ -14,7 +14,7 @@ front replaces all of that with one sentence saying what to restore.
 
 The token figures below are the *measured* character counts of what the loop
 would have carried, converted at a stated ratio. They are arithmetic on real
-sizes, not a benchmark of anyone's agent — see `aegisflow stats` for the same
+sizes, not a benchmark of anyone's agent — see `yieldpoint stats` for the same
 distinction.
 """
 
@@ -24,7 +24,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from aegisflow.harness import Change, middleware
+from yieldpoint.harness import Change, middleware
 
 CHARS_PER_TOKEN = 4
 

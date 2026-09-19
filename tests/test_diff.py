@@ -2,7 +2,7 @@
 
 import unittest
 
-from aegisflow.core.diff import PatchError, parse, reverse_apply
+from yieldpoint.core.diff import PatchError, parse, reverse_apply
 
 MODIFY = """diff --git a/tests/test_invoice.py b/tests/test_invoice.py
 index 1111111..2222222 100644

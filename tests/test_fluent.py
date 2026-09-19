@@ -8,11 +8,11 @@ exists to prevent.
 
 import unittest
 
-from aegisflow.core.assertions import extract
-from aegisflow.core.policy import Policy
-from aegisflow.core.relation import Relation as R
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change
+from yieldpoint.core.assertions import extract
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.relation import Relation as R
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change
 
 
 def only(body: str):

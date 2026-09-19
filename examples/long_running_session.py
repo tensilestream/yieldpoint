@@ -22,12 +22,12 @@ from __future__ import annotations
 
 import time
 
-from aegisflow import ledger
-from aegisflow.langgraph import observe as observe_loop, signature
-from aegisflow.report import render, running_line
-from aegisflow.stats import summarise
-from aegisflow.totals import totals
-from aegisflow.verify import verify_change
+from yieldpoint import ledger
+from yieldpoint.langgraph import observe as observe_loop, signature
+from yieldpoint.report import render, running_line
+from yieldpoint.stats import summarise
+from yieldpoint.totals import totals
+from yieldpoint.verify import verify_change
 
 POLICY = {"protected_tests": ["**/test_*.py"]}
 

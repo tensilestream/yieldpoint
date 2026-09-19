@@ -12,10 +12,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.harness import (
+from yieldpoint.harness import (
     RISK_LEVELS, TIERS, Change, Gate, Score, measure, middleware, risk, tier,
 )
-from aegisflow.harness.decisions import UNKNOWN, unknown
+from yieldpoint.harness.decisions import UNKNOWN, unknown
 
 PROTECTED = {"protected_tests": ["**/test_*.py"]}
 
@@ -197,7 +197,7 @@ class TestPolicyDrivenRouting(unittest.TestCase):
         self.assertEqual(tier(change, escalated).value, "human")
 
     def test_contradictory_thresholds_are_rejected_not_applied(self):
-        from aegisflow.core.policy import Policy
+        from yieldpoint.core.policy import Policy
 
         policy = Policy.load({"routing": {"small_churn": 100, "moderate_churn": 5}})
         self.assertEqual(policy.routing.small_churn, 12, "defaults must stand")
@@ -222,7 +222,7 @@ class TestFailurePolicy(unittest.TestCase):
 
 class TestDecisionSchema(unittest.TestCase):
     def test_every_decision_carries_a_version_and_a_certainty(self):
-        from aegisflow.harness.decisions import DECISION_SCHEMA_VERSION
+        from yieldpoint.harness.decisions import DECISION_SCHEMA_VERSION
 
         payload = tier(Change("src/x.py", PLAIN, DOCSTRING_ONLY)).to_dict()
         self.assertEqual(payload["schema_version"], DECISION_SCHEMA_VERSION)
@@ -230,6 +230,6 @@ class TestDecisionSchema(unittest.TestCase):
 
     def test_the_decision_version_is_pinned(self):
         """Bumping it is a deliberate act with consumers to update."""
-        from aegisflow.harness.decisions import DECISION_SCHEMA_VERSION
+        from yieldpoint.harness.decisions import DECISION_SCHEMA_VERSION
 
         self.assertEqual(DECISION_SCHEMA_VERSION, 1)

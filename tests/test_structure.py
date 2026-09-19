@@ -11,8 +11,8 @@ Differential by default — inherited debt is not this change's fault — with
 import unittest
 from pathlib import Path
 
-from aegisflow.core.policy import Policy, Structure
-from aegisflow.core.structure import (
+from yieldpoint.core.policy import Policy, Structure
+from yieldpoint.core.structure import (
     CHANGE_TOO_LARGE,
     COMPLEXITY_TOO_HIGH,
     DUPLICATE_IMPLEMENTATION,
@@ -23,8 +23,8 @@ from aegisflow.core.structure import (
     UTILITY_MODULE,
     check,
 )
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change, verify_diff
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change, verify_diff
 
 GREENFIELD = Structure(greenfield=True)
 
@@ -220,7 +220,7 @@ class TestConfiguration(unittest.TestCase):
 class TestDogfooding(unittest.TestCase):
     def test_no_file_in_this_repository_exceeds_its_own_limit(self):
         config = Structure(greenfield=True)
-        for path in sorted(Path("aegisflow").rglob("*.py")):
+        for path in sorted(Path("yieldpoint").rglob("*.py")):
             found = [f.rule for f in check(None, path.read_text(), str(path), config)[0]]
             self.assertNotIn(FILE_TOO_LONG, found, str(path))
             self.assertNotIn(UTILITY_MODULE, found, str(path))

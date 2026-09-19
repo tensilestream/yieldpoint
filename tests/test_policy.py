@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Status
+from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Status
 
 
 class TestDefaults(unittest.TestCase):
@@ -17,7 +17,7 @@ class TestDefaults(unittest.TestCase):
 
     def test_defaults_do_not_protect_ordinary_source(self):
         policy = Policy()
-        for path in ("src/latest.py", "src/testimonial.tsx", "aegisflow/core/diff.py"):
+        for path in ("src/latest.py", "src/testimonial.tsx", "yieldpoint/core/diff.py"):
             self.assertFalse(policy.protects(path), path)
 
 
@@ -69,17 +69,17 @@ class TestLoading(unittest.TestCase):
     def test_load_from_file_and_discover_upward(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / ".aegisflow.json").write_text(
+            (root / ".yieldpoint.json").write_text(
                 json.dumps({"project": {"name": "demo"}}), encoding="utf-8"
             )
             nested = root / "a" / "b"
             nested.mkdir(parents=True)
 
-            self.assertEqual(Policy.load(root / ".aegisflow.json").project_name, "demo")
+            self.assertEqual(Policy.load(root / ".yieldpoint.json").project_name, "demo")
             self.assertEqual(Policy.load(root).project_name, "demo")
             # .resolve() on both sides: macOS symlinks /var -> /private/var.
             self.assertEqual(
-                Policy.discover(nested), (root / ".aegisflow.json").resolve()
+                Policy.discover(nested), (root / ".yieldpoint.json").resolve()
             )
 
     def test_discover_returns_none_rather_than_guessing(self):
@@ -88,16 +88,16 @@ class TestLoading(unittest.TestCase):
 
     def test_invalid_json_names_the_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / ".aegisflow.json"
+            path = Path(tmp) / ".yieldpoint.json"
             path.write_text("{not json", encoding="utf-8")
             with self.assertRaises(ValueError) as ctx:
                 Policy.load(path)
-            self.assertIn(".aegisflow.json", str(ctx.exception))
+            self.assertIn(".yieldpoint.json", str(ctx.exception))
 
     def test_missing_file_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(FileNotFoundError):
-                Policy.load(Path(tmp) / ".aegisflow.json")
+                Policy.load(Path(tmp) / ".yieldpoint.json")
 
     def test_policy_passes_through_unchanged(self):
         policy = Policy(project_name="already-loaded")
@@ -105,12 +105,12 @@ class TestLoading(unittest.TestCase):
 
 
 class TestRepositoryOwnPolicy(unittest.TestCase):
-    """AegisFlow's own .aegisflow.json must stay loadable and warning-free."""
+    """Yieldpoint's own .yieldpoint.json must stay loadable and warning-free."""
 
     def test_repo_policy_loads_cleanly(self):
-        policy = Policy.load(Path(__file__).resolve().parent.parent / ".aegisflow.json")
+        policy = Policy.load(Path(__file__).resolve().parent.parent / ".yieldpoint.json")
         self.assertEqual(policy.warnings, ())
-        self.assertEqual(policy.project_name, "AegisFlow")
+        self.assertEqual(policy.project_name, "Yieldpoint")
         self.assertEqual(len(policy.boundaries.zones), 2)
 
 

@@ -1,7 +1,7 @@
 """Ways to make a failing test pass without fixing the code. Every one must fire.
 
 A false negative here is the failure that makes the product pointless: these are
-the edits AegisFlow exists to catch, and coverage cannot see any of them.
+the edits Yieldpoint exists to catch, and coverage cannot see any of them.
 """
 
 from __future__ import annotations

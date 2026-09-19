@@ -1,4 +1,4 @@
-"""AegisFlow as a function tool for the OpenAI Agents SDK.
+"""Yieldpoint as a function tool for the OpenAI Agents SDK.
 
 A tool the model chooses to call is **advice**, not a gate — an agent set on
 weakening a test will not ask permission. Give it the tool so a blocked agent
@@ -10,15 +10,15 @@ from __future__ import annotations
 
 import json
 
-from aegisflow.core.verdict import Status
-from aegisflow.verify import verify_change, verify_diff
+from yieldpoint.core.verdict import Status
+from yieldpoint.verify import verify_change, verify_diff
 
-POLICY = ".aegisflow.json"
+POLICY = ".yieldpoint.json"
 
 
 # --------------------------------------------------------- advisory: the tool
 
-def aegis_verify(path: str, before: str, after: str) -> str:
+def yieldpoint_verify(path: str, before: str, after: str) -> str:
     """Check whether a proposed edit weakens what the tests verify.
 
     Register with ``@function_tool`` (or pass the schema by hand). The
@@ -32,7 +32,7 @@ def as_tool():
     """Wrap it for the SDK. Kept separate so this file imports without it."""
     from agents import function_tool
 
-    return function_tool(aegis_verify)
+    return function_tool(yieldpoint_verify)
 
 
 # ------------------------------------------------------- enforcing: the gate
