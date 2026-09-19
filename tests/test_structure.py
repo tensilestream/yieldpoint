@@ -221,7 +221,7 @@ class TestDogfooding(unittest.TestCase):
     def test_no_file_in_this_repository_exceeds_its_own_limit(self):
         config = Structure(greenfield=True)
         for path in sorted(Path("yieldpoint").rglob("*.py")):
-            found = [f.rule for f in check(None, path.read_text(), str(path), config)[0]]
+            found = [f.rule for f in check(None, path.read_text(encoding="utf-8"), str(path), config)[0]]
             self.assertNotIn(FILE_TOO_LONG, found, str(path))
             self.assertNotIn(UTILITY_MODULE, found, str(path))
             self.assertNotIn(DUPLICATE_IMPLEMENTATION, found, str(path))

@@ -140,9 +140,12 @@ class TestNoFalsePositives(unittest.TestCase):
     def test_the_whole_real_codebase_is_clean(self):
         """Any hit here is a false positive on production code."""
         from pathlib import Path
+        from unittest import mock
 
-        for path in sorted(Path("yieldpoint").rglob("*.py")):
-            self.assertEqual(scan(path.read_text(), filename=str(path)).dangling(), (), str(path))
+        with mock.patch.object(Path, "read_text", autospec=True,
+                               side_effect=lambda self, *a, **kw: Path.read_bytes(self).decode("utf-8")):
+            for path in sorted(Path("yieldpoint").rglob("*.py")):
+                self.assertEqual(scan(path.read_text(), filename=str(path)).dangling(), (), str(path))
 
 
 class TestExports(unittest.TestCase):

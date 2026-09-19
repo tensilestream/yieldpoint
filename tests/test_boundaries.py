@@ -152,7 +152,7 @@ class TestThisRepository(unittest.TestCase):
         root = Path(__file__).resolve().parent.parent
         for path in sorted((root / "yieldpoint").rglob("*.py")):
             relative = str(path.relative_to(root))
-            findings, _ = boundaries.check(None, path.read_text(), relative, config)
+            findings, _ = boundaries.check(None, path.read_text(encoding="utf-8"), relative, config)
             self.assertEqual(findings, [], f"{relative}: {[f.detail for f in findings]}")
 
 

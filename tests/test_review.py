@@ -40,6 +40,8 @@ class TestInARepository(unittest.TestCase):
         _git(["commit", "-qm", "initial"], self.tmp.name)
 
     def tearDown(self):
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def test_a_clean_tree_says_so_rather_than_failing(self):

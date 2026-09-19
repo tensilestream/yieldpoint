@@ -26,6 +26,8 @@ class TestRepositoryRoot(unittest.TestCase):
         self.nested.mkdir(parents=True)
 
     def tearDown(self):
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def test_a_subdirectory_resolves_to_the_root(self):

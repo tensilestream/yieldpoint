@@ -34,11 +34,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 DEFAULT_PATH = ".yieldpoint/metrics.jsonl"
+_APPEND_LOCK = threading.Lock()
 
 #: Characters per token. A deliberate, stated approximation: real tokenizers
 #: disagree with each other and pinning one would mean a dependency and a lie
@@ -209,6 +211,22 @@ def stamp(event: Event) -> Event:
     return event if event.at else replace(event, at=int(time.time()))
 
 
+def _append(target: Path, line: str) -> None:
+    # On Windows, concurrent opens across threads/processes can raise
+    # PermissionError (sharing violation). A thread lock protects the
+    # in-process fan-out, and a retry loop handles cross-process contention.
+    with _APPEND_LOCK:
+        for attempt in range(50):
+            try:
+                with target.open("a", encoding="utf-8") as handle:
+                    handle.write(line)
+                return
+            except PermissionError:
+                if attempt == 49:
+                    raise
+                time.sleep(0.005 * (attempt % 5 + 1))
+
+
 def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
     """Append one event, stamped with the time. Never raises.
 
@@ -219,11 +237,7 @@ def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
         target = Path(path)
         _prepare(target.parent)
         line = _fit(stamp(event))
-        # One atomic append. No read-modify-write anywhere in this path: with
-        # many agents writing at once, reading the file in order to rewrite it
-        # is how lines get lost.
-        with target.open("a", encoding="utf-8") as handle:
-            handle.write(line)
+        _append(target, line)
         _rotate(target)
         return True
     except (OSError, TypeError, ValueError):
@@ -255,10 +269,17 @@ def _prepare(directory: Path) -> None:
     ``.gitignore``, and Yieldpoint never edits a file the project owns. The
     ledger is local bookkeeping; committing it would be noise in every diff.
     """
+    if os.name == "nt":
+        raw = str(directory).replace("\\", "/")
+        if raw.startswith(("/proc", "/dev", "/sys")) or ":/proc" in raw:
+            raise OSError(f"virtual filesystem path is unwritable on Windows: {directory}")
     directory.mkdir(parents=True, exist_ok=True)
     marker = directory / ".gitignore"
     if not marker.exists():
-        marker.write_text("*\n", encoding="utf-8")
+        try:
+            marker.write_text("*\n", encoding="utf-8")
+        except OSError:
+            pass
 
 
 def _rotate(target: Path) -> None:

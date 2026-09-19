@@ -143,6 +143,7 @@ def _connect(path: str | Path | None) -> sqlite3.Connection | None:
     if str(target) in cached:
         return cached[str(target)]
 
+    connection = None
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         marker = target.parent / ".gitignore"
@@ -163,6 +164,11 @@ def _connect(path: str | Path | None) -> sqlite3.Connection | None:
             ")"
         )
     except (OSError, sqlite3.Error):
+        if connection is not None:
+            try:
+                connection.close()
+            except sqlite3.Error:
+                pass
         cached[str(target)] = None
         return None
 

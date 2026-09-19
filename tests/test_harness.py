@@ -137,6 +137,8 @@ class TestGate(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self.previous)
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def _edit(self, new: str) -> Gate:

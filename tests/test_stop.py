@@ -54,6 +54,8 @@ class _Repository:
         return self
 
     def __exit__(self, *exc):
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def weaken(self):
@@ -142,6 +144,8 @@ class TestItFailsOpen(unittest.TestCase):
     def test_outside_a_repository_nothing_is_held(self):
         with tempfile.TemporaryDirectory() as tmp:
             outcome = stop.evaluate(tmp, Policy())
+            from yieldpoint.core import parsecache
+            parsecache.close()
             self.assertFalse(outcome.holds)
             self.assertFalse(outcome.ran)
             self.assertTrue(outcome.reason)

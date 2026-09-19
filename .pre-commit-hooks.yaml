@@ -1,0 +1,22 @@
+# Hooks this repository offers to others. Consumers write:
+#
+#   repos:
+#     - repo: https://github.com/tensilestream/yieldpoint
+#       rev: v0.1.0
+#       hooks:
+#         - id: yieldpoint
+#
+# `review --staged` asks git for the staged diff itself. It deliberately does not
+# read stdin: pre-commit does not pipe a diff to a hook, so a stdin-reading entry
+# sees nothing and reports `ok` — the exact silent pass this project exists to catch.
+
+- id: yieldpoint
+  name: Yieldpoint (verify staged changes)
+  description: Reports whether a staged change weakens what the tests verify. Exits 1 on a finding.
+  entry: yieldpoint review --staged
+  language: python
+  pass_filenames: false
+  always_run: true
+  stages: [pre-commit]
+  verbose: true
+  minimum_pre_commit_version: "3.2.0"

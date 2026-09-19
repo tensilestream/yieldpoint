@@ -93,7 +93,7 @@ class TestConcurrentWriters(unittest.TestCase):
     def test_separate_processes_do_not_interleave(self):
         """The real fan-out: one repository, many worker processes."""
         script = Path(self.tmp.name) / "writer.py"
-        script.write_text(WRITER)
+        script.write_text(WRITER, encoding="utf-8")
         workers = 12
         rounds = 6
         procs = [

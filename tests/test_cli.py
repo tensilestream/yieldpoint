@@ -48,6 +48,8 @@ class CliCase(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self._previous)
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self._tmp.cleanup()
 
 
@@ -222,10 +224,6 @@ class TestTheStopGateIsAlwaysRegistered(CliCase):
         self.assertEqual(len(self._stop_commands()), 2)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestInit(CliCase):
     """``init`` is the one-command setup, so it must be safe to run twice."""
 
@@ -350,3 +348,8 @@ class TestTurnEndReport(CliCase):
             list(root.glob("*.html")),
             "nothing may be written to the repository root",
         )
+
+
+if __name__ == "__main__":
+    unittest.main()
+

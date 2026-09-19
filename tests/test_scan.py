@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from yieldpoint.commands import EXIT_FINDINGS, EXIT_OK
+from yieldpoint.core import parsecache
 from yieldpoint.core.policy import Policy
 from yieldpoint.core.verdict import SCHEMA_VERSION, Status
 from yieldpoint.scan import ScanResult, scan, walk
@@ -30,6 +31,7 @@ class ScanCase(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self._previous)
+        parsecache.close()
         self._tmp.cleanup()
 
     def write(self, rel, text):

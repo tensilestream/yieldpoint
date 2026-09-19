@@ -4,11 +4,14 @@ repos:
     hooks:
       - id: yieldpoint
         name: Yieldpoint (verify staged changes)
-        entry: yieldpoint check --diff -
+        entry: yieldpoint review --staged
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-commit]
-        # `yieldpoint check --diff -` reads the staged diff on stdin.
+        # `review --staged` asks git for the staged diff. Do not use
+        # `check --diff -` here: pre-commit gives a hook no stdin, so it reads
+        # an empty diff and reports `ok` on everything.
         verbose: true
 
       - id: tests

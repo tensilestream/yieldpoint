@@ -37,6 +37,8 @@ class TestDoctorFindsSilentFailures(unittest.TestCase):
         (self.root / "src" / "a.py").write_text("x = 1\n")
 
     def tearDown(self):
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def _config(self, data):
@@ -134,6 +136,8 @@ class TestBacktest(unittest.TestCase):
         self._commit("initial")
 
     def tearDown(self):
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def _commit(self, message):
@@ -141,8 +145,8 @@ class TestBacktest(unittest.TestCase):
         _git(["commit", "-qm", message], self.root)
 
     def test_a_clean_history_flags_nothing(self):
-        self.test.write_text(self.test.read_text() + "\ndef test_more():\n"
-                             "    assert invoice.tax == 7\n")
+        self.test.write_text(self.test.read_text(encoding="utf-8") + "\ndef test_more():\n"
+                             "    assert invoice.tax == 7\n", encoding="utf-8")
         self._commit("add a test")
         result = backtest.run(self.root, since="HEAD~1")
         self.assertEqual(len(result.commits), 1)
@@ -229,6 +233,8 @@ class TestHookFiredCheck(unittest.TestCase):
 
     def tearDown(self):
         self._env.stop()
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self.tmp.cleanup()
 
     def _hook_check(self):

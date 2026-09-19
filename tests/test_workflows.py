@@ -186,7 +186,7 @@ class TestIntegration(unittest.TestCase):
     def test_this_repositorys_own_workflow_parses(self):
         from pathlib import Path
 
-        source = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text()
+        source = (Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         self.assertGreater(len(steps_of(source)), 5)
 
 

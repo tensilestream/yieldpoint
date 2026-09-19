@@ -33,6 +33,8 @@ class HookCase(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self._previous)
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self._tmp.cleanup()
 
     def edit(self, old: str, new: str) -> dict:

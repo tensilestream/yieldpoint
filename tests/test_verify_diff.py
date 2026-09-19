@@ -49,6 +49,8 @@ class DiffCase(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self._previous)
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self._tmp.cleanup()
 
     def write(self, rel: str, text: str):

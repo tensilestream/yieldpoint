@@ -203,6 +203,8 @@ class TestInstalling(unittest.TestCase):
 
     def tearDown(self):
         os.chdir(self._previous)
+        from yieldpoint.core import parsecache
+        parsecache.close()
         self._tmp.cleanup()
 
     def test_writing_a_project_config(self):
@@ -232,10 +234,6 @@ class TestInstalling(unittest.TestCase):
         _, backup = install(BY_KEY["claude-code"], self.root)
         self.assertEqual(backup.read_text(), "{ not json")
         self.assertIn("yieldpoint", json.loads(path.read_text())["mcpServers"])
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TestCommandResolution(unittest.TestCase):
@@ -336,3 +334,7 @@ class TestTheClientTable(unittest.TestCase):
             parsed = json.loads(target.read_text())
             self.assertIn("other", parsed["mcpServers"])
             self.assertIn("yieldpoint", parsed["mcpServers"])
+
+
+if __name__ == "__main__":
+    unittest.main()
