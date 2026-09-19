@@ -35,7 +35,7 @@ jobs:
       - run: pip install -e .
 
       # Correctness rules must be clean. Maintainability findings are reported
-      # but do not fail the build; see IMPLEMENTATION_STAGES.md Stage 11.
+      # but do not fail the build: maintainability findings are advisory.
       - name: Audit our own source
         run: |
           yieldpoint scan yieldpoint --policy .yieldpoint.json \

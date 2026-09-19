@@ -82,7 +82,9 @@ def _emit(verdict, args, policy, deletions: tuple = ()) -> int:
     if args.json:
         print(verdict.to_json(indent=2))
     else:
-        console.print_human(verdict, policy)
+        console.print_human(verdict, policy,
+                            staged=getattr(args, "staged", False),
+                            root=getattr(args, "root", "."))
     return _exit_for(verdict)
 
 
@@ -146,7 +148,9 @@ def check_diff(args) -> int:
     if args.json:
         print(verdict.to_json(indent=2))
     else:
-        console.print_human(verdict, policy)
+        console.print_human(verdict, policy,
+                            staged=getattr(args, "staged", False),
+                            root=getattr(args, "root", "."))
     return _exit_for(verdict)
 
 

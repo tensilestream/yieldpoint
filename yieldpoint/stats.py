@@ -7,8 +7,8 @@ which assumption it rests on.
 
 What is *not* claimed here: that an agent using Yieldpoint converges in fewer
 total model calls. That needs a benchmark against a real model, it does not
-exist yet, and PLAN_AND_POSITIONING.md section 4.1 says so. The counterfactual
-below is narrower and defensible — it prices the *critique*, which Yieldpoint
+exist yet, and this says so plainly. The counterfactual below is narrower and
+defensible — it prices the *critique*, which Yieldpoint
 produces for nothing and an LLM-as-judge produces for one call.
 """
 

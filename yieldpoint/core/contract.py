@@ -16,7 +16,7 @@ from .verdict import Confidence, Finding, Status, Verdict
 ASSERTION_MONOTONICITY = "assertion_monotonicity"
 
 #: Only Python is analysed exactly today. Other languages are reported as
-#: skipped rather than silently passed; see IMPLEMENTATION_STAGES.md.
+#: skipped rather than silently passed.
 EXACT_SUFFIXES = (".py",)
 
 _OFFENCE_POLICY = {

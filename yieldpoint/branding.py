@@ -35,6 +35,9 @@ TAGLINE = "find where a test suite stops holding"
 #: rather than truecolour, because a great many terminals still stop there.
 _STEEL = "\033[38;5;67m"
 _AMBER = "\033[38;5;173m"
+#: Only for a verdict that stops the caller. Muted brick rather than terminal
+#: red, so it sits with the steel and amber instead of shouting over them.
+_RED = "\033[38;5;167m"
 _DIM = "\033[38;5;244m"
 _BOLD = "\033[1m"
 _RESET = "\033[0m"
@@ -59,6 +62,7 @@ class Palette:
 
     steel: str = ""
     amber: str = ""
+    red: str = ""
     dim: str = ""
     bold: str = ""
     reset: str = ""
@@ -69,7 +73,8 @@ class Palette:
 
 
 PLAIN = Palette()
-COLOUR = Palette(steel=_STEEL, amber=_AMBER, dim=_DIM, bold=_BOLD, reset=_RESET)
+COLOUR = Palette(steel=_STEEL, amber=_AMBER, red=_RED, dim=_DIM, bold=_BOLD,
+                 reset=_RESET)
 
 
 def wants_colour(stream=None) -> bool:

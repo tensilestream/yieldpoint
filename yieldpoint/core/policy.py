@@ -157,7 +157,7 @@ class Boundaries:
 
 @dataclass(frozen=True)
 class LoopBreaker:
-    """Semantic no-progress detection; see PLAN_AND_POSITIONING.md section 4.3."""
+    """Semantic no-progress detection: an agent going round without moving."""
 
     window: int = 6
     max_repeats_without_progress: int = 3

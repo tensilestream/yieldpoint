@@ -29,8 +29,8 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   assertion helper was reported as nothing.
 - **`python -m tests.corpus`** — a committed corpus of 19 legitimate refactors and 18
   tampering patterns, scored and split by provenance, enforced in CI by
-  `tests/test_corpus.py`. This is the measured false-positive rate that
-  PLAN_AND_POSITIONING.md §7 requires before any rule may block.
+  `tests/test_corpus.py`. A rule may not block until its false-positive rate on that
+  corpus is measured.
 
 - **`yieldpoint init`** — one command that writes `.yieldpoint.json`, registers the MCP
   server and installs the hook. Advisory by default; `--enforce` to block, `--no-hook` for
@@ -46,7 +46,7 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   construction — zero model calls made, so an LLM-as-judge costs one per verdict), and
   *estimated* (arithmetic on measured bytes, with the characters-per-token assumption
   printed beside the result). A "fewer total model calls to convergence" figure is
-  deliberately absent and named as unclaimed, per PLAN_AND_POSITIONING.md §4.1.
+  deliberately absent and named as unclaimed: it has not been benchmarked.
 - **`metrics` policy section.** Recording is on by default and entirely local — there is
   no network call in this package. Disabled with `"metrics": {"enabled": false}` or
   `YIELDPOINT_NO_METRICS=1`. The ledger directory writes its own `.gitignore`, so it never

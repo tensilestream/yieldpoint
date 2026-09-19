@@ -1,7 +1,7 @@
 """The corpus is a gate, not a report.
 
-PLAN_AND_POSITIONING.md section 7 makes a measured false-positive rate the
-condition a rule must meet before it may block. Asserting the rate here is what
+A measured false-positive rate is the condition a rule must meet before it may
+block. Asserting the rate here is what
 stops that number drifting quietly: a change that starts flagging a legitimate
 refactor fails CI rather than showing up as a complaint months later.
 """

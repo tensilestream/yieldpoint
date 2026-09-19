@@ -1,3 +1,4 @@
+# yieldpoint: allow export_removed - `allow_notice` was named in __all__ but never defined in this module, so `import *` raised on it; nothing could have imported it.
 """Putting a verdict on a terminal.
 
 Split from commands.py because the two change for different reasons: that file
@@ -105,11 +106,70 @@ def palette():
     return _resolve(sys.stdout)
 
 
-def has_contract(verdict) -> bool:
-    return any(f.rule in _CONTRACT for f in verdict.findings)
+#: What each status asks the reader to do next, in the imperative. An agent can
+#: afford to read a finding and take another turn; a person whose commit just
+#: stopped needs to be told what to do about it, on the screen, without going to
+#: look anything up.
+_ACTIONS = {
+    Status.REPAIR: "Fix what each `fix:` line names above, then run `yieldpoint review` again.",
+    Status.ESCALATE: "This needs a person to decide. Resolve it, then run `yieldpoint review` again.",
+    Status.BLOCK: "Do not retry this change. Restore what each `fix:` line names above.",
+    Status.UNVERIFIED: "Nothing was checked, so nothing here is a pass. Decide whether to proceed.",
+}
+
+#: Statuses that stop the reader rather than asking them to iterate.
+_STOPS = frozenset({Status.BLOCK, Status.ESCALATE, Status.UNVERIFIED})
 
 
-def print_human(verdict: Verdict, policy: Policy) -> None:
+def report_link(policy: Policy, root: str = ".") -> str:
+    """A clickable ``file://`` URL for the HTML report, or "" if none exists.
+
+    Never written on demand: linking a page that is not there is worse than not
+    linking one at all, and the Stop hook already refreshes it every turn.
+    """
+    from . import ledger
+
+    try:
+        page = ledger.path_for(policy, root).parent / "report.html"
+        return page.as_uri() if page.is_file() else ""
+    except (OSError, ValueError):
+        return ""
+
+
+def _headline_colour(verdict: Verdict, paint) -> str:
+    """Red stops you, amber asks you to repair.
+
+    The verdict word is coloured whatever the rule was, because at that moment
+    it is the thing the reader has to act on. Whether the cause was a weakened
+    contract or a matter of taste stays visible where it was always drawn — on
+    the ``[rule]`` tag of each finding, amber or dim.
+    """
+    if verdict.status in _STOPS:
+        return paint.red
+    if verdict.findings:
+        return paint.amber
+    return paint.bold
+
+
+def _next_step(verdict: Verdict, policy: Policy, paint, *,
+               staged: bool, root: str) -> str:
+    """The closing block: what to do, how to escape, where the detail is."""
+    action = _ACTIONS.get(verdict.status, "")
+    if not action:
+        return ""
+    tint = paint.red if verdict.status in _STOPS else paint.amber
+    lines = [f"{tint}→{paint.reset} {action}"]
+    if staged:
+        lines.append(f"  {paint.dim}This stopped a commit. To record it anyway:"
+                     f" git commit --no-verify{paint.reset}")
+    link = report_link(policy, root)
+    if link:
+        lines.append(f"  {paint.dim}Details:{paint.reset} {link}")
+    return "\n".join(lines)
+
+
+def print_human(verdict: Verdict, policy: Policy, *,
+                staged: bool = False, root: str = ".") -> None:
     for warning in policy.warnings:
         print(f"policy warning: {warning}", file=sys.stderr)
     _dead_patterns(policy)
@@ -124,15 +184,19 @@ def print_human(verdict: Verdict, policy: Policy) -> None:
 
     if verdict.status is Status.UNVERIFIED:
         # Saying "0 findings" here would read as a clean result. Nothing ran.
-        print("UNVERIFIED  no rule could analyse this change; see skipped above")
+        paint = palette()
+        print(f"{paint.red}UNVERIFIED{paint.reset}  "
+              "no rule could analyse this change; see skipped above")
+        print(_next_step(verdict, policy, paint, staged=staged, root=root))
         return
 
     paint = palette()
-    head = paint.amber if has_contract(verdict) else paint.bold
+    head = _headline_colour(verdict, paint)
     print(f"{head}{verdict.status.value.upper()}{paint.reset}  "
           f"{len(verdict.findings)} finding(s)\n")
     for finding in verdict.findings:
         print(_finding(finding, paint))
+    print(_next_step(verdict, policy, paint, staged=staged, root=root))
 
 
 def _finding(finding, paint) -> str:
@@ -149,10 +213,7 @@ def _finding(finding, paint) -> str:
         f"    {finding.detail}\n"
         f"    {paint.dim}fix:{paint.reset} {finding.prescription}\n"
     )
-    total = running_total(policy)
-    if total:
-        print(total)
 
 
 __all__ = ["print_human", "print_skips", "print_pace", "running_total",
-           "allow_notice", "palette"]
+           "report_link", "palette"]

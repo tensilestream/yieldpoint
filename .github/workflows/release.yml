@@ -1,0 +1,257 @@
+name: Release & Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name to release (e.g., v0.1.1). Leave blank to use version from pyproject.toml'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run: validate and build without publishing to PyPI or creating a public release'
+        required: false
+        default: false
+        type: boolean
+      draft:
+        description: 'Create GitHub release as a draft for review'
+        required: false
+        default: false
+        type: boolean
+      prerelease:
+        description: 'Mark GitHub release as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Test & Validate
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13']
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Check version markers agree across artifacts
+        run: python3 scripts/bump_version.py --check
+
+      - name: Run test suite
+        run: python3 -m unittest discover -s tests -t . -v
+
+      - name: Run release pre-flight check
+        if: matrix.python-version == '3.12'
+        run: |
+          pip install build
+          ./scripts/release-check.sh
+
+  build:
+    name: Build Distribution Packages
+    needs: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Create a tag for a manual workflow_dispatch release
+    outputs:
+      release_tag: ${{ steps.resolve_tag.outputs.tag }}
+      version: ${{ steps.resolve_tag.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Resolve Release Tag & Version
+        id: resolve_tag
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag_name }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          PROJECT_VERSION="$(python3 -c "import tomllib; f=open('pyproject.toml', 'rb'); print(tomllib.load(f)['project']['version'])")"
+          if [ -n "${INPUT_TAG}" ]; then
+            TAG="${INPUT_TAG}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${PROJECT_VERSION}"
+          fi
+
+          if [ "${TAG}" != "v${PROJECT_VERSION}" ]; then
+            echo "Release tag ${TAG} must exactly match pyproject.toml version ${PROJECT_VERSION}." >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            TAG_COMMIT=$(git rev-list -n 1 "refs/tags/${TAG}")
+            if [ "${TAG_COMMIT}" != "$(git rev-parse HEAD)" ]; then
+              echo "Release tag ${TAG} does not point to the checked-out commit." >&2
+              exit 1
+            fi
+          elif [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ "${DRY_RUN}" != "true" ]; then
+            echo "Creating and pushing git tag ${TAG}..."
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "Release ${TAG}"
+            git push origin "${TAG}"
+          elif [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "Dry run: not creating tag ${TAG}."
+          else
+            echo "Expected release tag ${TAG} was not found." >&2
+            exit 1
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${PROJECT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved Tag: ${TAG} (Version: ${PROJECT_VERSION})"
+
+      - name: Build sdist and wheel
+        run: |
+          pip install build
+          python3 -m build
+
+      - name: Generate SHA256 Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload package artifacts for PyPI
+        uses: actions/upload-artifact@v4
+        with:
+          name: yieldpoint-packages
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          retention-days: 7
+
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: yieldpoint-release-assets
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          retention-days: 7
+
+  github-release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: yieldpoint-release-assets
+          path: dist/
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.build.outputs.release_tag }}
+          name: Yieldpoint ${{ needs.build.outputs.release_tag }}
+          generate_release_notes: true
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.draft != 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    environment:
+      name: pypi
+      url: https://pypi.org/p/yieldpoint
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: yieldpoint-packages
+          path: dist/
+
+      - name: Publish to PyPI (via PYPI_API_TOKEN secret)
+        if: ${{ env.PYPI_API_TOKEN != '' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ env.PYPI_API_TOKEN }}
+          packages-dir: dist/
+          skip-existing: true
+
+      - name: Publish to PyPI (via Trusted Publishing OIDC)
+        if: ${{ env.PYPI_API_TOKEN == '' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true
+          # Cryptographically signed provenance attestations via PyPI OIDC
+          attestations: true
+
+  post-release:
+    name: Auto-Bump Next Version
+    needs: [build, github-release, publish-pypi]
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.draft != 'true' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Auto-increment patch version for next development cycle
+        run: |
+          python3 scripts/bump_version.py --patch
+          NEXT_VERSION="$(python3 -c "import tomllib; f=open('pyproject.toml', 'rb'); print(tomllib.load(f)['project']['version'])")"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml yieldpoint/__init__.py
+          git commit -m "chore(release): prepare next version v${NEXT_VERSION} [skip ci]"
+          git push origin main || echo "Version bump push skipped (branch up to date or protected)."

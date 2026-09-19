@@ -1,8 +1,8 @@
 """A committed corpus for measuring what the monotonicity check gets wrong.
 
 RULES.md section 5 forbids stating a rate that a reader cannot reproduce, and
-PLAN_AND_POSITIONING.md section 7 makes a measured false-positive rate the gate
-a rule must pass before it is ever allowed to block. This package is that
+a measured false-positive rate is the gate a rule must pass before it is ever
+allowed to block. This package is that
 measurement, kept runnable::
 
     python -m tests.corpus

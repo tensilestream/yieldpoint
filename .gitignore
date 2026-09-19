@@ -13,4 +13,4 @@ htmlcov/
 .codegraph/
 
 # Backups written by `yieldpoint init` / `install-mcp` / `install-hook`
-*.yieldpoint-backup
+*-backup

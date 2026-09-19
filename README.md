@@ -922,8 +922,6 @@ Start with [CONTRIBUTING.md](./CONTRIBUTING.md) and [RULES.md](./RULES.md).
 
 | Document | Contents |
 |---|---|
-| [PLAN_AND_POSITIONING.md](./PLAN_AND_POSITIONING.md) | Why this exists, who it is for, what was deliberately cut |
-| [IMPLEMENTATION_STAGES.md](./IMPLEMENTATION_STAGES.md) | Build order, every stage and its gate |
 | [RULES.md](./RULES.md) | Engineering standards for this codebase |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | How to work on it |
 | [RELEASING.md](./RELEASING.md) | How a release is cut |

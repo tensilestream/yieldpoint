@@ -1,7 +1,7 @@
 # Yieldpoint Engineering Standards
 
-Standards for this codebase. Scope and product rationale live in
-[PLAN_AND_POSITIONING.md](./PLAN_AND_POSITIONING.md).
+Standards for this codebase: what may depend on what, what may not be claimed, and
+what a change has to prove before it ships.
 
 ---
 
