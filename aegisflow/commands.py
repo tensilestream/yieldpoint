@@ -19,6 +19,21 @@ from .verify import verify_change, verify_diff
 
 EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 
+#: Nothing in the change could be analysed — no rule ran, so there is no result
+#: to trust. Distinct from EXIT_FINDINGS because "I found a problem" and "I
+#: cannot tell you anything" are different facts and CI should be able to treat
+#: them differently. Only reached when the *whole* change was unanalysable; a
+#: change with one Python file among twenty TypeScript ones still exits OK.
+EXIT_UNVERIFIED = 3
+
+
+def _exit_for(verdict) -> int:
+    if verdict.status is Status.PASS:
+        return EXIT_OK
+    if verdict.status is Status.UNVERIFIED:
+        return EXIT_UNVERIFIED
+    return EXIT_FINDINGS
+
 HOOK_MATCHER = "Edit|MultiEdit|Write"
 
 
@@ -54,7 +69,37 @@ def check(args) -> int:
         print(verdict.to_json(indent=2))
     else:
         _print_human(verdict, policy)
-    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
+    return _exit_for(verdict)
+
+
+def review_command(args) -> int:
+    """Verify whatever is not committed yet. The zero-argument entry point.
+
+    Every other command asks what changed. This one asks git, because the person
+    running it has already made the change and wants to know what it broke.
+    """
+    from .verify import verify_diff
+    from .worktree import uncommitted
+
+    try:
+        policy = Policy.load(args.policy)
+    except (OSError, ValueError) as exc:
+        print(f"aegisflow: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    diff = uncommitted(args.root, staged=args.staged, against=args.against or "")
+    if not diff.ok:
+        # Nothing to check is not a failure, and neither is "not a git
+        # repository" — the other commands still work there.
+        print(f"aegisflow: {diff.reason}", file=sys.stderr)
+        return EXIT_OK
+
+    verdict = verify_diff(diff.text, root=diff.root, policy=policy)
+    if args.json:
+        print(verdict.to_json(indent=2))
+    else:
+        _print_human(verdict, policy)
+    return _exit_for(verdict)
 
 
 def check_diff(args) -> int:
@@ -76,7 +121,7 @@ def check_diff(args) -> int:
         print(verdict.to_json(indent=2))
     else:
         _print_human(verdict, policy)
-    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
+    return _exit_for(verdict)
 
 
 def hook_command(args) -> int:
@@ -87,16 +132,16 @@ def hook_command(args) -> int:
         print(decision_json(verdict, change))
         return EXIT_OK
 
-    if verdict.status is Status.PASS or args.advisory:
+    if args.advisory or not blocks(verdict):
         if verdict.findings:
             print(render(verdict, change), file=sys.stderr)
+        for note in verdict.skipped:
+            print(f"aegisflow: not evaluated — {note}", file=sys.stderr)
         return EXIT_OK
 
-    if blocks(verdict):
-        # Exit code 2 is the blocking signal; stderr is fed back to the agent.
-        print(render(verdict, change), file=sys.stderr)
-        return EXIT_ERROR
-    return EXIT_OK
+    # Exit code 2 is the blocking signal; stderr is fed back to the agent.
+    print(render(verdict, change), file=sys.stderr)
+    return EXIT_ERROR
 
 
 def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> int:
@@ -113,7 +158,7 @@ def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> in
         print(f"  {detail}")
     if utterance.confirmation:
         print(f"\n  {utterance.confirmation.question}")
-    return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
+    return _exit_for(verdict)
 
 
 def scan_command(args) -> int:
@@ -136,7 +181,7 @@ def scan_command(args) -> int:
 
     if args.json:
         print(verdict.to_json(indent=2))
-        return EXIT_OK if verdict.status is Status.PASS else EXIT_FINDINGS
+        return _exit_for(verdict)
 
     for note in result.unreadable:
         print(f"unreadable: {note}", file=sys.stderr)
@@ -211,6 +256,11 @@ def _print_human(verdict: Verdict, policy: Policy) -> None:
             print(f"ok  {', '.join(verdict.checked)}")
         elif not verdict.skipped:
             print("ok  nothing to check")
+        return
+
+    if verdict.status is Status.UNVERIFIED:
+        # Saying "0 findings" here would read as a clean result. Nothing ran.
+        print("UNVERIFIED  no rule could analyse this change; see skipped above")
         return
 
     print(f"{verdict.status.value.upper()}  {len(verdict.findings)} finding(s)\n")

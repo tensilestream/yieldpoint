@@ -13,9 +13,12 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
-from .mcp.clients import BY_KEY, CLIENTS, install as install_client, snippet
+from .mcp.clients import (
+    BY_KEY, CLIENTS, command_line, install as install_client, snippet,
+)
 
 EXIT_OK, EXIT_ERROR = 0, 2
 
@@ -82,7 +85,10 @@ def install_hook(args) -> int:
         backup.write_text(json.dumps(settings, indent=2), encoding="utf-8")
         print(f"backed up existing settings to {backup}")
 
-    command = "aegisflow hook" + (" --advisory" if args.advisory else "")
+    # Resolved rather than hard-coded: a hook registered as a bare "aegisflow"
+    # that is not on the editor's PATH fails on every edit, and the failure
+    # surfaces as a hook error rather than as a missing install.
+    command = command_line("hook") + (" --advisory" if args.advisory else "")
     entry = {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": command}]}
 
     hooks = settings.setdefault("hooks", {})
@@ -94,6 +100,81 @@ def install_hook(args) -> int:
     print(f"registered '{command}' on {HOOK_MATCHER} in {path} ({mode} mode)")
     print("Restart Claude Code, or start a new session, for it to take effect.")
     return EXIT_OK
+
+
+STARTER_CONFIG = {
+    "version": 1,
+    "test_contract": {
+        "_comment": "Severities: repair (send the agent back), escalate (ask a "
+                    "human), block (refuse), or null to switch a rule off.",
+        "assertion_monotonicity": "repair",
+        "forbid_vacuous_assertions": "repair",
+        "forbid_new_skip_markers": "repair",
+        "forbid_swallowed_exceptions": "repair",
+    },
+    "structure": {
+        "_comment": "Differential by default: a limit is reported only when this "
+                    "change introduced or worsened the violation, so existing debt "
+                    "is not blamed on the current edit.",
+        "greenfield": False,
+        "severity": "repair",
+    },
+}
+
+
+def init(args) -> int:
+    """Wire up everything in one command: config, MCP server, and the hook.
+
+    Three separate commands is three chances to stop halfway, and the half that
+    usually gets skipped is the hook — which is the only one that enforces
+    anything. Advisory by default, because a gate that blocks on its first run
+    in an unfamiliar repository gets uninstalled rather than tuned.
+    """
+    root = Path(args.root or ".")
+    print(f"Setting up AegisFlow in {root.resolve()}\n")
+
+    config = root / ".aegisflow.json"
+    if config.is_file():
+        print(f"  config   {config} already exists, left alone")
+    else:
+        config.write_text(json.dumps(STARTER_CONFIG, indent=2) + "\n", encoding="utf-8")
+        print(f"  config   wrote {config}")
+
+    client = BY_KEY.get(args.client or "claude-code")
+    if client is None:
+        print(f"aegisflow: unknown client {args.client!r}; try install-mcp --list",
+              file=sys.stderr)
+        return EXIT_ERROR
+    try:
+        path, _backup = install_client(client, root)
+        print(f"  mcp      registered for {client.label} in {path}")
+    except OSError as exc:
+        print(f"  mcp      could not write configuration: {exc}", file=sys.stderr)
+
+    if args.no_hook:
+        print("  hook     skipped (--no-hook); nothing will enforce, only explain")
+    else:
+        hook_args = _HookArgs(
+            settings=str(root / ".claude" / "settings.json"),
+            advisory=not args.enforce,
+        )
+        install_hook(hook_args)
+
+    print("\nNext:")
+    print("  aegisflow review          # check what you have already changed")
+    print("  restart your editor       # so it picks up the MCP server and hook")
+    if not args.enforce and not args.no_hook:
+        print("\nThe hook is advisory: it reports and never blocks. Re-run with")
+        print("  aegisflow init --enforce   once you are happy with what it reports.")
+    return EXIT_OK
+
+
+@dataclass
+class _HookArgs:
+    """The arguments ``install_hook`` reads, so ``init`` can call it directly."""
+
+    settings: str
+    advisory: bool
 
 
 # ------------------------------------------------------------------- helpers

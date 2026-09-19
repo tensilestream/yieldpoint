@@ -94,9 +94,14 @@ class TestVerifyBehaviour(unittest.TestCase):
         self.assertIn("regenerate", verdict.findings[0].prescription)
 
     def test_regeneration_in_a_diff_is_not_reported(self):
-        """Committing regenerated output is normal; only hand-editing is not."""
+        """Committing regenerated output is normal; only hand-editing is not.
+
+        No finding — but no pass either. Nothing in this change was analysed, so
+        the honest status is UNVERIFIED. Returning PASS here would be the green
+        banner RULES.md section 5 forbids.
+        """
         verdict = verify_change(self.BEFORE, self.AFTER, self.PATH, Policy())
-        self.assertIs(verdict.status, Status.PASS)
+        self.assertIs(verdict.status, Status.UNVERIFIED)
         self.assertEqual(verdict.findings, ())
 
     def test_generated_file_is_never_counted_as_checked(self):
@@ -108,7 +113,7 @@ class TestVerifyBehaviour(unittest.TestCase):
         before = "# @generated\ndef test_x():\n    assert a == 1\n"
         after = "# @generated\ndef test_x():\n    assert a is not None\n"
         verdict = verify_change(before, after, "tests/test_gen.py", Policy())
-        self.assertIs(verdict.status, Status.PASS)
+        self.assertIs(verdict.status, Status.UNVERIFIED)
         self.assertIn("generated code", verdict.skipped[0])
 
     def test_authored_test_file_is_still_verified(self):

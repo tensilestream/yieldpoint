@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Any, Iterable, Sequence
 
 #: Incremented on any breaking change to the serialised verdict shape.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class Status(str, Enum):
@@ -25,7 +25,17 @@ class Status(str, Enum):
     """
 
     PASS = "pass"
-    """Nothing to do. Apply the change."""
+    """At least one rule evaluated this change and found nothing wrong."""
+
+    UNVERIFIED = "unverified"
+    """No rule evaluated this change at all, so there is nothing to report and
+    nothing to trust. A TypeScript file in a Python-only install lands here.
+
+    This is a separate status rather than a flag on PASS because the caller
+    routes on status: collapsing the two would make an unanalysed change read as
+    a clean one, which RULES.md section 5 names as the most serious defect this
+    project can ship. What to do about it is the caller's decision, and the
+    router makes them state it."""
 
     REPAIR = "repair"
     """The agent can fix this itself; route back to generation with the prescription."""
@@ -47,7 +57,10 @@ class Status(str, Enum):
         return max(statuses, key=lambda s: s.severity, default=cls.PASS)
 
 
-_SEVERITY = {Status.PASS: 0, Status.REPAIR: 1, Status.ESCALATE: 2, Status.BLOCK: 3}
+_SEVERITY = {
+    Status.PASS: 0, Status.UNVERIFIED: 1,
+    Status.REPAIR: 2, Status.ESCALATE: 3, Status.BLOCK: 4,
+}
 
 
 class Confidence(str, Enum):
@@ -151,6 +164,24 @@ class Finding:
         )
 
 
+def _derive(
+    findings: Sequence[Finding], checked: Sequence[str], skipped: Sequence[str]
+) -> Status:
+    """Status of a whole verdict: severity first, then coverage.
+
+    ``UNVERIFIED`` is reserved for the case where *nothing* in the change was
+    analysed. A change with 39 checked files and one skipped one is PASS with a
+    recorded gap, not unverified — otherwise a single unsupported file would
+    make every mixed-language repository permanently red, and a status people
+    learn to ignore protects nobody.
+    """
+    if findings:
+        return Status.worst(f.status for f in findings)
+    if skipped and not checked:
+        return Status.UNVERIFIED
+    return Status.PASS
+
+
 @dataclass(frozen=True)
 class Verdict:
     """The result of verifying one change set.
@@ -180,14 +211,18 @@ class Verdict:
         """
         ordered = tuple(sorted(findings, key=lambda f: f.sort_key))
         return cls(
-            status=Status.worst(f.status for f in ordered),
+            status=_derive(ordered, checked, skipped),
             findings=ordered,
             checked=tuple(sorted(checked)),
             skipped=tuple(sorted(skipped)),
         )
 
     def __bool__(self) -> bool:
-        """True when the change may be applied as-is."""
+        """True only when something was verified and it was clean.
+
+        ``UNVERIFIED`` is falsey on purpose: ``if verify_change(...)`` is the
+        shape people write, and it must not read as a pass when nothing ran.
+        """
         return self.status is Status.PASS
 
     def for_rule(self, rule: str) -> tuple[Finding, ...]:

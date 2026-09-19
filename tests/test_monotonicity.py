@@ -219,14 +219,31 @@ class TestUnparseableInput(unittest.TestCase):
         self.assertEqual(compare(extract("def test_x(:"), extract(BASELINE)), ())
 
 
-class TestKnownLimitations(unittest.TestCase):
-    """Documented false positives. Failing here means the limitation was fixed."""
+class TestSubjectAliasing(unittest.TestCase):
+    """Renaming the local that holds the subject is not a weakening.
 
-    def test_renaming_the_subject_variable_false_positives(self):
+    This was a documented false positive until single-assignment locals were
+    resolved to the expression they were assigned (subject.py).
+    """
+
+    def test_renaming_the_subject_variable_is_not_a_weakening(self):
         before = "def test_x():\n    inv = build()\n    assert inv.total == 42\n"
         after = "def test_x():\n    invoice = build()\n    assert invoice.total == 42\n"
-        found = weakenings(before, after)
-        self.assertTrue(found, "subject aliasing now handled; update PLAN section 4 and this test")
+        self.assertEqual(weakenings(before, after), ())
+
+    def test_a_reassigned_name_is_not_resolved(self):
+        """``inv`` names two different objects here, so neither may stand for it."""
+        before = "def test_x():\n    inv = build()\n    assert inv.total == 42\n"
+        after = (
+            "def test_x():\n    inv = build()\n    inv = other()\n"
+            "    assert inv.total is not None\n"
+        )
+        self.assertTrue(weakenings(before, after))
+
+    def test_renaming_still_catches_a_real_downgrade(self):
+        before = "def test_x():\n    inv = build()\n    assert inv.total == 42\n"
+        after = "def test_x():\n    invoice = build()\n    assert invoice.total\n"
+        self.assertTrue(weakenings(before, after))
 
 
 if __name__ == "__main__":

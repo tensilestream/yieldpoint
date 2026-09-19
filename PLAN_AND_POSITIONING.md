@@ -248,9 +248,13 @@ verdict API clean even though the LangGraph adapter ships first.
 
 - Dynamically-generated, snapshot-only, or heavily table-driven suites, where assertion
   counting is meaningless.
-- Legitimate refactors that consolidate assertions — real false positives. Mitigation:
-  return `repair`/`warn`, never `block`, until per-repo confidence is established.
-- Languages beyond Python/JS/TS at launch.
+- Assertions in a helper **imported from another module**. Same-module helpers are read
+  through, chains included; an imported one is not, and its assertions are not counted.
+- Languages beyond Python at launch. A change nothing can analyse now returns
+  `unverified`, never `pass` — see §10.
+- Per-repo false positives that the committed corpus does not represent. 37 hand-written
+  cases are a floor, not a rate. Mitigation stands: return `repair`, never `block`, until
+  per-repo confidence exists.
 
 ---
 
@@ -444,3 +448,87 @@ offline at verdict time.
 
 Voice lands as **Phase 1.5**, immediately after the core and the LangGraph node, because it
 needs nothing beyond them. No connectors are planned in any phase.
+
+---
+
+## 10. Adversarial review — what a sceptical buyer broke
+
+Someone who did not want to buy this was asked to attack it, with tests rather than
+opinions: a battery of refactors a real engineer performs (which must stay silent) and a
+battery of ways an agent games a suite (which must fire). Four things came out of it, and
+the first two were serious.
+
+### 10.1. `pass` on a file nothing analysed — the project's own worst defect
+
+A TypeScript change returned `status: pass` with the skip recorded in a field the caller
+had to go looking for. RULES.md §5.2 calls rendering a green result for an unperformed
+check the most serious defect this project can ship, and the router keyed on `status`
+would have sent that change straight to `apply_patch`.
+
+Fixed by making it a distinct outcome rather than a flag: **`Status.UNVERIFIED`** (verdict
+`schema_version` 2), CLI exit code `3`, and a router edge whose default is unmapped, so a
+graph that never considered the case raises instead of silently applying. It fires only
+when the *whole* change was unanalysable — one unsupported file among many is a recorded
+gap, not a red verdict, because a status people learn to ignore protects nobody.
+
+### 10.2. Assertions in a helper were invisible in both states
+
+The wedge (§4.2) did not hold for the very common suite that has already extracted
+`check_response(r)`. Assertions inside the helper were counted in neither state, so
+gutting the helper was reported as nothing at all — a false negative in the core claim,
+not an edge case.
+
+Fixed by attributing a helper's assertions to the test that calls it, substituting the
+call-site arguments for the helper's parameters, and following helper-calling-helper
+chains to a bounded depth. Expansion is symmetric across before and after, so it cannot
+invent a weakening — only reveal one that was hidden, or dissolve one that was never real.
+
+### 10.3. A 33% false-positive rate on legitimate refactors
+
+Four of twelve ordinary refactors were reported as tampering: extracting a helper, making
+a test `async`, decomposing a dict comparison into per-field assertions, and renaming the
+local variable holding the subject. At that rate the tool is uninstalled in a week,
+whatever its detection rate.
+
+Each was fixed at the subject-resolution layer, as a fallback that can suppress a finding
+but never invent one: helper expansion, `await` stripping, single-assignment alias
+resolution, and exact literal decomposition. Detection was re-measured after each fix; it
+did not move.
+
+### 10.4. There was no answer to "what is your false-positive rate?"
+
+§7 makes a measured rate the gate a rule must pass before it may block, and no such
+measurement existed. It does now: `python -m tests.corpus` scores 19 legitimate refactors
+and 18 tampering patterns and prints the rate, split by provenance so that cases used
+while fixing the checker are reported separately from cases written afterwards. Only the
+held-out split is evidence. `tests/test_corpus.py` makes it a CI gate so the number cannot
+drift quietly.
+
+**Current: 0 false positives and 0 false negatives, on both splits.** The honest reading
+is that 37 curated cases are a floor. The corpus is a mechanism for absorbing real reports,
+not a claim about anyone's repository.
+
+### 10.5. What the sceptic was right about and this did not fix
+
+- **Python only.** The strongest objection — "my agent writes TypeScript" — stands. It is
+  now answered honestly (`unverified`) rather than wrongly (`pass`), which is a smaller
+  thing than solving it.
+- **The convergence claim is still unmeasured**, exactly as §4.1 says.
+- **Mutation testing is the rigorous version of this check.** The argument for AegisFlow
+  over it is placement, not rigour: milliseconds and zero model calls means it can sit on
+  the edge between `generate` and `apply`, where a minutes-to-hours tool cannot.
+
+### 10.6. The objection that was not about the checks
+
+Asked what would still stop someone adopting this, the answer was not a rule or a
+language — it was that setup took three commands and every entry point demanded the
+caller describe the change they had just made.
+
+That is a real adoption objection and it outranks most of §10. A verifier nobody finishes
+installing verifies nothing, and "it silently failed to start" is indistinguishable from
+"it does not work". Stage 17 answers it: `aegisflow init` for setup, `aegisflow review`
+for the zero-argument check, resolved commands so neither surface can fail silently.
+
+Worth stating plainly, because it cuts against the instinct to keep adding checks: the
+highest-value work in this session after the two correctness defects was **removing
+steps**, not adding capability.

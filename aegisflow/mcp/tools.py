@@ -57,6 +57,27 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "aegis_review",
+        "title": "Check uncommitted work",
+        "description": (
+            "Verify everything changed but not yet committed, reading the diff from "
+            "git. Takes no arguments. Call this after finishing a set of edits, and "
+            "before telling the user the work is done — it is the cheapest way to "
+            "find out whether the change weakened the test suite."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "root": {"type": "string", "description": "Repository directory."},
+                "staged": {"type": "boolean", "description": "Only what is staged."},
+                "against": {
+                    "type": "string",
+                    "description": "Compare with a branch or commit instead of the working tree.",
+                },
+            },
+        },
+    },
+    {
         "name": "aegis_scan",
         "title": "Audit a repository",
         "description": (
@@ -100,6 +121,23 @@ def _verify_change(arguments: dict, policy: Policy):
 
 def _verify_diff(arguments: dict, policy: Policy):
     verdict = verify_diff(arguments.get("diff", ""), arguments.get("root") or ".", policy)
+    return _render(verdict), verdict.to_dict(), False
+
+
+def _review(arguments: dict, policy: Policy):
+    from ..worktree import uncommitted
+
+    diff = uncommitted(
+        arguments.get("root") or ".",
+        staged=bool(arguments.get("staged")),
+        against=arguments.get("against") or "",
+    )
+    if not diff.ok:
+        # Not an error: "nothing to check" and "not a git repository" are both
+        # ordinary answers, and returning is_error would make the agent retry.
+        return diff.reason, {"status": "unverified", "reason": diff.reason}, False
+
+    verdict = verify_diff(diff.text, root=diff.root, policy=policy)
     return _render(verdict), verdict.to_dict(), False
 
 
@@ -167,6 +205,7 @@ def _name(status) -> str:
 _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
     "aegis_verify_change": _verify_change,
     "aegis_verify_diff": _verify_diff,
+    "aegis_review": _review,
     "aegis_scan": _scan,
     "aegis_policy": _policy,
 }

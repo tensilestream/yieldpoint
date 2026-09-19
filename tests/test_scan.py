@@ -14,7 +14,7 @@ from pathlib import Path
 
 from aegisflow.commands import EXIT_FINDINGS, EXIT_OK
 from aegisflow.core.policy import Policy
-from aegisflow.core.verdict import Status
+from aegisflow.core.verdict import SCHEMA_VERSION, Status
 from aegisflow.scan import ScanResult, scan, walk
 from tests.test_cli import run
 
@@ -138,7 +138,7 @@ class TestCommand(ScanCase):
     def test_json_output_uses_the_versioned_schema(self):
         self.write("src/a.py", "def f():\n    return missing()\n")
         _, out, _ = run(["scan", str(self.root), "--json"])
-        self.assertEqual(json.loads(out)["schema_version"], 1)
+        self.assertEqual(json.loads(out)["schema_version"], SCHEMA_VERSION)
 
     def test_rule_filter_narrows_the_report(self):
         self.write("src/utils.py", "def f():\n    return missing()\n")

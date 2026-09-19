@@ -14,11 +14,32 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-COMMAND = "aegisflow"
-ARGS = ["mcp"]
+def command_argv(*subcommand: str) -> tuple[str, list[str]]:
+    """The command to register for ``subcommand``, chosen so that it actually runs.
+
+    Returns the bare ``aegisflow`` name when the console script is on PATH.
+    Bare rather than absolute on purpose: ``.mcp.json`` is committed to the
+    repository, and an absolute interpreter path baked into it works on exactly
+    one machine.
+
+    Falls back to ``<interpreter> -m aegisflow``, which cannot fail to resolve —
+    it names the interpreter this process is running under, in which the package
+    is importable by definition. That fallback *is* machine-specific, which is
+    the right trade when the alternative is a command that does not run at all.
+
+    This matters more than it looks. An MCP client that cannot find the command
+    reports a server that failed to start, not a missing PATH entry, and the
+    person spends an hour on the wrong problem.
+    """
+    if shutil.which("aegisflow"):
+        return "aegisflow", list(subcommand)
+    return sys.executable, ["-m", "aegisflow", *subcommand]
 
 
 @dataclass(frozen=True)
@@ -31,11 +52,12 @@ class Client:
     note: str = ""
 
     def entry(self) -> dict:
+        command, args = command_argv("mcp")
         if self.style == "zed":
-            return {"command": {"path": COMMAND, "args": list(ARGS)}}
+            return {"command": {"path": command, "args": args}}
         if self.style == "vscode":
-            return {"type": "stdio", "command": COMMAND, "args": list(ARGS)}
-        return {"command": COMMAND, "args": list(ARGS)}
+            return {"type": "stdio", "command": command, "args": args}
+        return {"command": command, "args": args}
 
 
 CLIENTS: tuple[Client, ...] = (
@@ -77,8 +99,6 @@ def _claude_desktop(home: Path) -> Path:
 
 
 def _is_macos() -> bool:
-    import sys
-
     return sys.platform == "darwin"
 
 
@@ -112,3 +132,9 @@ def install(client: Client, root: Path | None = None) -> tuple[Path, Path | None
 def snippet(client: Client) -> str:
     """The configuration to paste, for anyone who would rather do it by hand."""
     return json.dumps({client.section: {"aegisflow": client.entry()}}, indent=2)
+
+
+def command_line(*subcommand: str) -> str:
+    """``command_argv`` as a shell string, for configurations that take one."""
+    command, args = command_argv(*subcommand)
+    return " ".join(shlex.quote(part) for part in (command, *args))

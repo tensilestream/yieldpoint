@@ -106,7 +106,7 @@ def evaluate(payload: dict[str, Any], policy: Policy | str | None = None) -> tup
 
 def decision_json(verdict: Verdict, change: Change) -> str:
     """The structured PreToolUse response."""
-    if verdict.status is Status.PASS:
+    if not blocks(verdict):
         payload = {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -124,12 +124,29 @@ def decision_json(verdict: Verdict, change: Change) -> str:
     return json.dumps(payload)
 
 
+#: Rules that mean the test suite lost verification strength. Anything else is
+#: about the shape of the code, and saying otherwise in the block message is a
+#: small lie the reader can check — which costs more credibility than it saves.
+_CONTRACT_RULES = frozenset({
+    "assertion_monotonicity", "vacuous_assertion",
+    "empty_test", "skip_marker", "disabled_assertion",
+})
+
+
+def _headline(verdict: Verdict) -> str:
+    rules = {f.rule for f in verdict.findings}
+    contract = rules & _CONTRACT_RULES
+    if contract and rules - contract:
+        return ("AegisFlow blocked this edit: it weakens what the test suite "
+                "verifies, and breaks a project rule.")
+    if contract:
+        return "AegisFlow blocked this edit: it weakens what the test suite verifies."
+    return "AegisFlow blocked this edit: it breaks a rule this project enforces."
+
+
 def render(verdict: Verdict, change: Change) -> str:
     """The message the agent reads. Must say what broke and what to do."""
-    lines = [
-        "AegisFlow blocked this edit: it weakens what the test suite verifies.",
-        "",
-    ]
+    lines = [_headline(verdict), ""]
     del change  # reserved for future per-tool context in the message
     for finding in verdict.findings:
         where = f"{finding.file}:{finding.line}"
@@ -143,24 +160,41 @@ def render(verdict: Verdict, change: Change) -> str:
             "Stop and ask the user before proceeding. Do not work around this by "
             "editing the test another way."
         )
-    else:
+    elif {f.rule for f in verdict.findings} & _CONTRACT_RULES:
         lines.append(
             "Fix the code under test so the original assertions pass, rather than "
             "changing the assertions. If the test is genuinely wrong, say so "
             "explicitly and explain why before editing it."
         )
+    else:
+        lines.append(
+            "Apply the fix above. If the rule is wrong for this repository, change "
+            "it in .aegisflow.json rather than working around it."
+        )
     return "\n".join(lines)
 
 
+#: Statuses that let an edit through. ``UNVERIFIED`` is here because the hook
+#: fails open: no rule could analyse the change, and denying every edit to an
+#: unsupported language would make the hook unusable on any polyglot repository.
+#: The graph is where that decision is made — ``make_router(on_unverified=...)``
+#: — because a graph has somewhere to route to and a hook has only allow or deny.
+_ALLOWED = frozenset({Status.PASS, Status.UNVERIFIED})
+
+
 def blocks(verdict: Verdict) -> bool:
-    """Any non-passing verdict denies the edit.
+    """Whether this verdict should deny the edit.
 
     In a graph, ``REPAIR`` routes back to generation. A hook has no router — its
     only way to send the agent back around the loop is to deny with the
     prescription attached, so ``REPAIR`` denies here too. Severity still matters
     for the wording: ``ESCALATE`` tells the agent to stop and ask.
+
+    Nothing analysed means nothing to deny on. The verdict still says
+    ``unverified`` and the skipped files are still reported, so the fact is not
+    hidden — it just does not stand between a person and their editor.
     """
-    return verdict.status is not Status.PASS
+    return verdict.status not in _ALLOWED
 
 
 def _read(path: Path) -> str | None:

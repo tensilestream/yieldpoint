@@ -11,3 +11,6 @@ build/
 htmlcov/
 .DS_Store
 .codegraph/
+
+# Backups written by `aegisflow init` / `install-mcp` / `install-hook`
+*.aegisflow-backup

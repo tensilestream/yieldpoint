@@ -9,11 +9,16 @@ import io
 import json
 import os
 import tempfile
+import sys
+import subprocess
+from unittest import mock
 import unittest
+
+from aegisflow.core.verdict import SCHEMA_VERSION
 from pathlib import Path
 
 from aegisflow.core.policy import Policy
-from aegisflow.mcp.clients import BY_KEY, CLIENTS, config_path, install, snippet
+from aegisflow.mcp.clients import command_argv, BY_KEY, CLIENTS, config_path, install, snippet
 from aegisflow.mcp.server import METHOD_NOT_FOUND, PARSE_ERROR, handle, serve
 from aegisflow.mcp.tools import TOOLS, call
 
@@ -61,7 +66,8 @@ class TestToolListing(unittest.TestCase):
     def test_every_tool_is_offered(self):
         names = {tool["name"] for tool in request("tools/list")["result"]["tools"]}
         self.assertEqual(names, {
-            "aegis_verify_change", "aegis_verify_diff", "aegis_scan", "aegis_policy"})
+            "aegis_verify_change", "aegis_verify_diff", "aegis_review",
+            "aegis_scan", "aegis_policy"})
 
     def test_schemas_are_well_formed(self):
         for tool in TOOLS:
@@ -83,7 +89,7 @@ class TestToolCalls(unittest.TestCase):
 
     def test_structured_content_is_the_versioned_verdict(self):
         result = self.call("aegis_verify_change", WEAKENED)
-        self.assertEqual(result["structuredContent"]["schema_version"], 1)
+        self.assertEqual(result["structuredContent"]["schema_version"], SCHEMA_VERSION)
 
     def test_a_clean_change_passes(self):
         result = self.call("aegis_verify_change",
@@ -174,7 +180,9 @@ class TestClients(unittest.TestCase):
 
     def test_zed_nests_the_command(self):
         parsed = json.loads(snippet(BY_KEY["zed"]))
-        self.assertEqual(parsed["context_servers"]["aegisflow"]["command"]["path"], "aegisflow")
+        command, args = command_argv("mcp")
+        self.assertEqual(parsed["context_servers"]["aegisflow"]["command"]["path"], command)
+        self.assertEqual(parsed["context_servers"]["aegisflow"]["command"]["args"], args)
 
     def test_the_common_shape_is_mcp_servers(self):
         for key in ("claude-code", "claude-desktop", "cursor", "windsurf"):
@@ -196,7 +204,7 @@ class TestInstalling(unittest.TestCase):
         path, backup = install(BY_KEY["claude-code"], self.root)
         self.assertIsNone(backup)
         written = json.loads(path.read_text())
-        self.assertEqual(written["mcpServers"]["aegisflow"]["command"], "aegisflow")
+        self.assertEqual(written["mcpServers"]["aegisflow"]["command"], command_argv("mcp")[0])
 
     def test_existing_configuration_is_preserved_and_backed_up(self):
         path = self.root / ".mcp.json"
@@ -223,3 +231,53 @@ class TestInstalling(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCommandResolution(unittest.TestCase):
+    """The registered command must be one that actually runs.
+
+    A client that cannot find the command reports a server which failed to
+    start, not a missing PATH entry, so this picks the console script when it
+    exists and the running interpreter when it does not.
+    """
+
+    def test_the_console_script_is_preferred_when_on_path(self):
+        with mock.patch("aegisflow.mcp.clients.shutil.which", return_value="/usr/bin/aegisflow"):
+            self.assertEqual(command_argv("mcp"), ("aegisflow", ["mcp"]))
+
+    def test_the_console_script_is_registered_bare_not_absolute(self):
+        """``.mcp.json`` is committed; an absolute path works on one machine."""
+        with mock.patch("aegisflow.mcp.clients.shutil.which", return_value="/usr/bin/aegisflow"):
+            command, _args = command_argv("mcp")
+        self.assertNotIn("/", command)
+
+    def test_it_falls_back_to_this_interpreter(self):
+        with mock.patch("aegisflow.mcp.clients.shutil.which", return_value=None):
+            command, args = command_argv("mcp")
+        self.assertEqual(command, sys.executable)
+        self.assertEqual(args, ["-m", "aegisflow", "mcp"])
+
+    def test_the_fallback_is_runnable(self):
+        """``python -m aegisflow`` must exist, or the fallback is a broken promise."""
+        completed = subprocess.run(
+            [sys.executable, "-m", "aegisflow", "--version"],
+            capture_output=True, text=True, timeout=60,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("aegisflow", completed.stdout)
+
+
+class TestReviewTool(unittest.TestCase):
+    """``aegis_review`` is the zero-argument entry point, so it must tolerate
+    being called anywhere — including outside a git repository."""
+
+    def test_it_takes_no_required_arguments(self):
+        schema = next(t for t in TOOLS if t["name"] == "aegis_review")["inputSchema"]
+        self.assertEqual(schema.get("required", []), [])
+
+    def test_outside_a_repository_it_explains_rather_than_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            text, structured, is_error = call("aegis_review", {"root": tmp}, Policy())
+        self.assertFalse(is_error, "a non-repository must not read as a tool failure")
+        self.assertEqual(structured.get("status"), "unverified")
+        self.assertIn("git repository", text)

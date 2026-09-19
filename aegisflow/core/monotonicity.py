@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from .accessor import normalize
+from .decomposition import covered
 from .assertions import Extraction, TestCase
 from .relation import Relation
 from .subject import generalize
@@ -85,14 +86,17 @@ def subject_map(extraction: Extraction) -> dict[str, Relation]:
     return strongest
 
 
-def fallback_key(subject: str, params=(), *, accessors: bool = True) -> str:
+def fallback_key(subject: str, params=(), *, accessors: bool = True, aliases=()) -> str:
     """The key used when exact matching fails.
 
-    Composes the two normalisations that describe the same verification written
-    differently: parametrisation (``calc(1)`` and ``calc(n)``) and accessors
-    (``inv.total`` and ``inv.getTotal()``).
+    Composes the normalisations that describe the same verification written
+    differently: parametrisation (``calc(1)`` and ``calc(n)``), accessors
+    (``inv.total`` and ``inv.getTotal()``), ``await``, and local variable names
+    (``result = compute()`` and ``outcome = compute()``).
     """
-    return generalize(normalize(subject) if accessors else subject, params)
+    return generalize(
+        normalize(subject) if accessors else subject, params, dict(aliases)
+    )
 
 
 def generalized_map(
@@ -102,7 +106,9 @@ def generalized_map(
     strongest: dict[str, Relation] = {}
     for test in extraction.tests:
         for subject, relation in test.subjects.items():
-            key = fallback_key(subject, test.params, accessors=accessors)
+            key = fallback_key(
+                subject, test.params, accessors=accessors, aliases=test.aliases
+            )
             current = strongest.get(key)
             if current is None or relation.rank > current.rank:
                 strongest[key] = relation
@@ -125,43 +131,59 @@ def compare(
     if not before.ok or not after.ok:
         return ()
 
-    before_subjects = subject_map(before)
-    after_subjects = subject_map(after)
-    after_general = generalized_map(after, accessors=accessors)
-    extra = dict(also_covered or {})
+    resolver = _Resolver(
+        before=before,
+        exact=subject_map(after),
+        general=generalized_map(after, accessors=accessors),
+        extra=dict(also_covered or {}),
+        accessors=accessors,
+    )
     pairs = pair_tests(before, after)
 
-    findings: list[Weakening] = []
-    for subject, before_relation in sorted(before_subjects.items()):
-        if not before_relation.verifies_anything:
-            continue
-
-        after_relation, present = _lookup(
-            subject, before, after_subjects, after_general, extra, accessors
-        )
-
-        if not present:
-            kind = REMOVED
-        elif not after_relation.verifies_anything:
-            kind = DISABLED
-        elif after_relation.descends_from(before_relation):
-            kind = DOWNGRADED
-        else:
-            continue
-
-        owner, assertion = _owner(before, subject)
-        findings.append(
-            Weakening(
-                subject=subject,
-                before=before_relation,
-                after=after_relation,
-                kind=kind,
-                test=owner.qualname if owner else "",
-                line=_report_line(owner, assertion, pairs, after),
-                source=assertion.raw if assertion else "",
-            )
-        )
+    findings = []
+    for subject, before_relation in sorted(subject_map(before).items()):
+        weakening = _weakening(subject, before_relation, resolver, pairs, after)
+        if weakening is not None:
+            findings.append(weakening)
     return tuple(findings)
+
+
+def _weakening(subject, before_relation, resolver, pairs, after):
+    """The finding for one subject, or ``None`` when it is still verified."""
+    if not before_relation.verifies_anything:
+        return None
+
+    owner, assertion = _owner(resolver.before, subject)
+    if assertion is not None and covered(
+        subject, assertion.expected, before_relation, resolver.exact
+    ):
+        return None
+
+    after_relation, present = resolver.find(subject)
+    kind = _kind(before_relation, after_relation, present)
+    if kind is None:
+        return None
+
+    return Weakening(
+        subject=subject,
+        before=before_relation,
+        after=after_relation,
+        kind=kind,
+        test=owner.qualname if owner else "",
+        line=_report_line(owner, assertion, pairs, after),
+        source=assertion.raw if assertion else "",
+    )
+
+
+def _kind(before: Relation, after: Relation, present: bool) -> str | None:
+    """How the subject lost strength, or ``None`` if it did not."""
+    if not present:
+        return REMOVED
+    if not after.verifies_anything:
+        return DISABLED
+    if after.descends_from(before):
+        return DOWNGRADED
+    return None
 
 
 def pair_tests(before: Extraction, after: Extraction) -> dict[str, str]:
@@ -193,36 +215,51 @@ def pair_tests(before: Extraction, after: Extraction) -> dict[str, str]:
 def _similarity(before: TestCase, after: TestCase) -> float:
     if before.body_hash and before.body_hash == after.body_hash:
         return 1.0
-    left = {fallback_key(s, before.params) for s in before.subjects}
-    right = {fallback_key(s, after.params) for s in after.subjects}
+    left = {fallback_key(s, before.params, aliases=before.aliases) for s in before.subjects}
+    right = {fallback_key(s, after.params, aliases=after.aliases) for s in after.subjects}
     if not left or not right:
         return 0.0
     return len(left & right) / len(left | right)
 
 
-def _lookup(
-    subject: str,
-    before: Extraction,
-    exact: Mapping[str, Relation],
-    general: Mapping[str, Relation],
-    extra: Mapping[str, Relation],
-    accessors: bool = True,
-) -> tuple[Relation, bool]:
-    """Resolve a subject in the after state: exact, then elsewhere, then normalised.
+@dataclass(frozen=True)
+class _Resolver:
+    """Everything needed to answer "is this subject still verified?".
 
-    Exact first keeps precision; the normalised fallback only ever suppresses a
-    finding that exact matching would have raised, never invents one.
+    One object rather than five arguments threaded through each lookup: the
+    three maps and the accessor flag are always passed together, and a function
+    taking all of them separately is over the parameter limit this project
+    enforces on everyone else.
     """
-    if subject in exact:
-        return exact[subject], True
-    if subject in extra:
-        return extra[subject], True
 
-    owner, _ = _owner(before, subject)
-    key = fallback_key(subject, owner.params if owner else (), accessors=accessors)
-    if key in general:
-        return general[key], True
-    return Relation.NONE, False
+    before: Extraction
+    exact: Mapping[str, Relation]
+    general: Mapping[str, Relation]
+    extra: Mapping[str, Relation]
+    accessors: bool = True
+
+    def find(self, subject: str) -> tuple[Relation, bool]:
+        """Resolve a subject in the after state: exact, elsewhere, then normalised.
+
+        Exact first keeps precision; the normalised fallback only ever
+        suppresses a finding that exact matching would have raised, never
+        invents one.
+        """
+        if subject in self.exact:
+            return self.exact[subject], True
+        if subject in self.extra:
+            return self.extra[subject], True
+
+        owner, _ = _owner(self.before, subject)
+        key = fallback_key(
+            subject,
+            owner.params if owner else (),
+            accessors=self.accessors,
+            aliases=owner.aliases if owner else (),
+        )
+        if key in self.general:
+            return self.general[key], True
+        return Relation.NONE, False
 
 
 def _owner(extraction: Extraction, subject: str):

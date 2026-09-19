@@ -123,5 +123,20 @@ class TestVerdict(unittest.TestCase):
             Verdict.from_dict({"schema_version": SCHEMA_VERSION + 1, "findings": []})
 
 
+
+
+class TestSchemaContract(unittest.TestCase):
+    """The one place the schema version is pinned to a literal.
+
+    Surface tests assert they emit ``SCHEMA_VERSION``; this asserts what that
+    number currently is. Changing it here is the deliberate act of declaring a
+    breaking change to the cross-language verdict shape, and should come with a
+    CHANGELOG entry.
+    """
+
+    def test_schema_version_is_pinned(self):
+        self.assertEqual(SCHEMA_VERSION, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

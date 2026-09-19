@@ -14,10 +14,12 @@ Assertion recognition itself lives in recognise.py.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
+from .delegation import MAX_DEPTH, expand
 from .recognise import Assertion, from_assert, from_call
 from .relation import Relation
+from .subject import aliases_in
 
 _SKIP_MARKERS = ("skip", "xfail", "skipif", "skipunless", "expectedfailure")
 
@@ -36,6 +38,15 @@ class TestCase:
     unclassified_calls: tuple[str, ...] = ()
     """Statement-level calls no recogniser understood. A test full of these is
     not a test that asserts nothing — it is a style we do not read yet."""
+
+    aliases: tuple[tuple[str, str], ...] = ()
+    """Local names assigned exactly once, paired with the expression assigned.
+    Lets a renamed variable resolve to the same subject (see subject.py)."""
+
+    statement_calls: tuple[str, ...] = ()
+    """Every statement-level call, recognised or not. A call to a same-module
+    helper usually *is* recognised — as an opaque assertion — so helper
+    expansion cannot be driven from ``unclassified_calls`` alone."""
 
     @property
     def subjects(self) -> dict[str, Relation]:
@@ -74,8 +85,88 @@ def extract(source: str, *, filename: str = "<source>") -> Extraction:
     except (ValueError, RecursionError) as exc:  # null bytes, pathological nesting
         return Extraction(error=f"could not parse {filename}: {exc}")
 
-    tests = tuple(_collect(tree, prefix=""))
+    helpers = _helpers(tree)
+    tests = tuple(
+        _with_helpers(case, helpers) for case in _collect(tree, prefix="")
+    )
     return Extraction(tests=tests, by_name={t.qualname: t for t in tests})
+
+
+def _helpers(tree: ast.AST) -> dict[str, tuple]:
+    """Same-module functions that assert and are not themselves tests.
+
+    Keyed by bare name because that is what a call site says. A class method is
+    excluded: ``self.check(x)`` is not an ``ast.Name`` call, so it would never be
+    resolved anyway, and pretending otherwise would bind the wrong parameters.
+    """
+    found: dict[str, tuple] = {}
+    for node in getattr(tree, "body", []):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if _is_test(node.name, prefix=""):
+            continue
+        sink = _Sink([], [], [])
+        _scan(node.body, sink, reachable=True)
+        found[node.name] = (
+            tuple(_signature(node)), tuple(sink.assertions), tuple(sink.calls)
+        )
+    return _asserting(found)
+
+
+def _asserting(candidates: dict[str, tuple]) -> dict[str, tuple]:
+    """Keep only functions that assert, directly or through another helper.
+
+    A function that merely calls one is still on the path from the test to the
+    assertion, so omitting it breaks the chain: ``test -> row_ok -> field_ok``
+    would leave ``field_ok`` unreachable and its weakening unreported. Grown to
+    a fixed point rather than in one pass, bounded by the same depth the
+    expansion itself honours.
+    """
+    kept = {name: value for name, value in candidates.items() if value[1]}
+    for _ in range(MAX_DEPTH):
+        grown = {
+            name: value for name, value in candidates.items()
+            if name not in kept
+            and any(_calls_helper(call, kept) for call in value[2])
+        }
+        if not grown:
+            break
+        kept.update(grown)
+    return kept
+
+
+def _signature(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
+    args = fn.args
+    return [a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)]
+
+
+def _with_helpers(case: TestCase, helpers: dict[str, tuple]) -> TestCase:
+    """Attribute helper assertions to the test that calls the helper."""
+    if not helpers or not case.statement_calls:
+        return case
+    resolved = {t for t in case.statement_calls if _calls_helper(t, helpers)}
+    if not resolved:
+        return case
+
+    # The call itself was recorded as an opaque assertion standing in for
+    # whatever it checks. Now that the helper has been read, the stand-in is
+    # replaced by the real assertions rather than counted alongside them.
+    kept = [a for a in case.assertions if a.subject not in resolved]
+    expanded = expand(kept, sorted(resolved), helpers)
+    return replace(
+        case,
+        assertions=tuple(expanded),
+        unclassified_calls=tuple(c for c in case.unclassified_calls if c not in resolved),
+    )
+
+
+def _calls_helper(text: str, helpers: dict[str, tuple]) -> bool:
+    try:
+        node = ast.parse(text, mode="eval").body
+    except (SyntaxError, ValueError, RecursionError):
+        return False
+    return isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+        and node.func.id in helpers
 
 
 # ------------------------------------------------------------------ collection
@@ -96,19 +187,20 @@ def _is_test(name: str, prefix: str) -> bool:
 
 
 def _build_case(fn: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str) -> TestCase:
-    assertions: list[Assertion] = []
-    unclassified: list[str] = []
-    _scan(fn.body, assertions, reachable=True, unclassified=unclassified)
+    sink = _Sink([], [], [])
+    _scan(fn.body, sink, reachable=True)
     body = _significant(fn.body)
     return TestCase(
         qualname=f"{prefix}{fn.name}",
         line=fn.lineno,
-        assertions=tuple(assertions),
+        assertions=tuple(sink.assertions),
         skip_markers=tuple(_skip_markers(fn)),
         params=tuple(_params(fn)),
         is_empty=not body,
         body_hash=_body_hash(fn),
-        unclassified_calls=tuple(unclassified),
+        unclassified_calls=tuple(sink.unclassified),
+        statement_calls=tuple(sink.calls),
+        aliases=tuple(sorted(aliases_in(fn.body).items())),
     )
 
 
@@ -167,60 +259,74 @@ def _body_hash(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
 # -------------------------------------------------------------- reachability
 
 
-def _scan(
-    body: list[ast.stmt], out: list[Assertion], *, reachable: bool,
-    unclassified: list[str] | None = None,
-) -> None:
+@dataclass
+class _Sink:
+    """Where a statement walk puts what it finds.
+
+    One object rather than three out-parameters: the walk is recursive and
+    threading each list through every branch is how a signature grows past the
+    limit this project enforces on everyone else.
+    """
+
+    assertions: list
+    unclassified: list
+    calls: list
+
+
+def _scan(body: list[ast.stmt], sink: _Sink, *, reachable: bool) -> None:
     """Walk statements, tracking whether an assertion here could actually fail."""
     live = reachable
     for stmt in body:
-        _scan_stmt(stmt, out, reachable=live, unclassified=unclassified)
+        _scan_stmt(stmt, sink, reachable=live)
         if isinstance(stmt, (ast.Return, ast.Raise, ast.Break, ast.Continue)):
             live = False
 
 
-def _scan_stmt(
-    stmt: ast.stmt, out: list[Assertion], *, reachable: bool,
-    unclassified: list[str] | None = None,
-) -> None:
+def _scan_stmt(stmt: ast.stmt, sink: _Sink, *, reachable: bool) -> None:
     if isinstance(stmt, ast.Assert):
-        out.extend(from_assert(stmt, reachable))
+        sink.assertions.extend(from_assert(stmt, reachable))
         return
     if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
-        found = from_call(stmt.value, reachable)
-        if found:
-            out.append(found)
-        elif unclassified is not None:
-            unclassified.append(ast.unparse(stmt.value))
+        _scan_call(stmt.value, sink, reachable=reachable)
         return
     if isinstance(stmt, ast.If):
         branch = _constant_truth(stmt.test)
-        _scan(stmt.body, out, unclassified=unclassified, reachable=reachable and branch is not False)
-        _scan(stmt.orelse, out, unclassified=unclassified, reachable=reachable and branch is not True)
+        _scan(stmt.body, sink, reachable=reachable and branch is not False)
+        _scan(stmt.orelse, sink, reachable=reachable and branch is not True)
         return
     if isinstance(stmt, ast.Try):
         # A handler that swallows means assertions in the body cannot fail the test.
         swallowed = any(not _significant(h.body) for h in stmt.handlers)
-        _scan(stmt.body, out, unclassified=unclassified, reachable=reachable and not swallowed)
+        _scan(stmt.body, sink, reachable=reachable and not swallowed)
         for handler in stmt.handlers:
-            _scan(handler.body, out, unclassified=unclassified, reachable=reachable)
-        _scan(stmt.orelse, out, unclassified=unclassified, reachable=reachable)
-        _scan(stmt.finalbody, out, unclassified=unclassified, reachable=reachable)
+            _scan(handler.body, sink, reachable=reachable)
+        _scan(stmt.orelse, sink, reachable=reachable)
+        _scan(stmt.finalbody, sink, reachable=reachable)
         return
     if isinstance(stmt, (ast.With, ast.AsyncWith)):
         for item in stmt.items:
             if isinstance(item.context_expr, ast.Call):
                 found = from_call(item.context_expr, reachable)
                 if found and found.relation is Relation.RAISES:
-                    out.append(found)
-        _scan(stmt.body, out, unclassified=unclassified, reachable=reachable)
+                    sink.assertions.append(found)
+        _scan(stmt.body, sink, reachable=reachable)
         return
     if isinstance(stmt, (ast.For, ast.AsyncFor, ast.While)):
-        _scan(stmt.body, out, unclassified=unclassified, reachable=reachable)
-        _scan(stmt.orelse, out, unclassified=unclassified, reachable=reachable)
+        _scan(stmt.body, sink, reachable=reachable)
+        _scan(stmt.orelse, sink, reachable=reachable)
         return
     for inner in getattr(stmt, "body", []) or []:
-        _scan_stmt(inner, out, reachable=reachable, unclassified=unclassified)
+        _scan_stmt(inner, sink, reachable=reachable)
+
+
+def _scan_call(call: ast.Call, sink: _Sink, *, reachable: bool) -> None:
+    """Record a statement-level call as an assertion, a helper call, or both."""
+    sink.calls.append(ast.unparse(call))
+    found = from_call(call, reachable)
+    if found:
+        sink.assertions.append(found)
+    else:
+        sink.unclassified.append(ast.unparse(call))
 
 
 def _constant_truth(test: ast.expr) -> bool | None:

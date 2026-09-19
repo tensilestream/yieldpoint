@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "aegisflow": {
+      "command": "aegisflow",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

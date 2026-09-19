@@ -17,19 +17,52 @@ from . import __version__
 from .commands import (
     EXIT_ERROR,
     EXIT_FINDINGS,
+    EXIT_UNVERIFIED,
     EXIT_OK,
     check,
     check_diff,
+    review_command,
     hook_command,
     linters_command,
     scan_command,
 )
-from .install import HOOK_MATCHER, install_hook, install_mcp, mcp_command
+from .install import HOOK_MATCHER, init, install_hook, install_mcp, mcp_command
 
 #: The shell contract is part of this module's API, so it is declared explicitly
 #: — an export the `export_removed` rule can then protect.
-__all__ = ["main", "EXIT_OK", "EXIT_FINDINGS", "EXIT_ERROR"]
+__all__ = ["main", "EXIT_OK", "EXIT_FINDINGS", "EXIT_UNVERIFIED", "EXIT_ERROR"]
 
+
+
+def _add_setup_commands(sub) -> None:
+    """Subcommands that wire AegisFlow into something else rather than run it.
+
+    Split out of ``_parser`` for one reason: it was over the length limit this
+    project enforces on everyone else, and these four belong together.
+    """
+    init_cmd = sub.add_parser(
+        "init", help="set up config, MCP server and hook in one command")
+    init_cmd.add_argument("--root", default=".", help="project directory")
+    init_cmd.add_argument("--client", default="claude-code", help="editor to register with")
+    init_cmd.add_argument(
+        "--enforce", action="store_true", help="hook blocks instead of only reporting")
+    init_cmd.add_argument("--no-hook", action="store_true", help="MCP only, no enforcement")
+    init_cmd.set_defaults(handler=init)
+
+    mcp_cmd = sub.add_parser("mcp", help="run the MCP server on stdio")
+    mcp_cmd.add_argument("--policy", help="path to .aegisflow.json")
+    mcp_cmd.set_defaults(handler=mcp_command)
+
+    mcp_install = sub.add_parser("install-mcp", help="register the MCP server with an editor")
+    mcp_install.add_argument("--client", help="claude-code, cursor, vscode, ...")
+    mcp_install.add_argument("--list", action="store_true", help="list supported clients")
+    mcp_install.add_argument("--show", action="store_true", help="print the snippet, do not write")
+    mcp_install.set_defaults(handler=install_mcp)
+
+    install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
+    install_cmd.add_argument("--settings", help="settings file (default: .claude/settings.json)")
+    install_cmd.add_argument("--advisory", action="store_true", help="install in advisory mode")
+    install_cmd.set_defaults(handler=install_hook)
 
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
@@ -63,6 +96,16 @@ def _parser() -> argparse.ArgumentParser:
                        help="render for a listener, with voice-mode severity")
     check_cmd.set_defaults(handler=check)
 
+    review_cmd = sub.add_parser(
+        "review", help="verify uncommitted work — no arguments needed")
+    review_cmd.add_argument("--root", default=".", help="repository directory")
+    review_cmd.add_argument("--staged", action="store_true", help="only what is staged")
+    review_cmd.add_argument(
+        "--against", default="", help="compare with a branch or commit instead")
+    review_cmd.add_argument("--policy", default=None, help="path to .aegisflow.json")
+    review_cmd.add_argument("--json", action="store_true", help="machine-readable output")
+    review_cmd.set_defaults(handler=review_command)
+
     hook_cmd = sub.add_parser("hook", help="run as a Claude Code PreToolUse hook (reads stdin)")
     hook_cmd.add_argument("--policy", help="path to .aegisflow.json")
     hook_cmd.add_argument(
@@ -84,20 +127,7 @@ def _parser() -> argparse.ArgumentParser:
     linters_cmd.add_argument("--policy", help="path to .aegisflow.json")
     linters_cmd.set_defaults(handler=linters_command)
 
-    mcp_cmd = sub.add_parser("mcp", help="run the MCP server on stdio")
-    mcp_cmd.add_argument("--policy", help="path to .aegisflow.json")
-    mcp_cmd.set_defaults(handler=mcp_command)
-
-    mcp_install = sub.add_parser("install-mcp", help="register the MCP server with an editor")
-    mcp_install.add_argument("--client", help="claude-code, cursor, vscode, ...")
-    mcp_install.add_argument("--list", action="store_true", help="list supported clients")
-    mcp_install.add_argument("--show", action="store_true", help="print the snippet, do not write")
-    mcp_install.set_defaults(handler=install_mcp)
-
-    install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
-    install_cmd.add_argument("--settings", help="settings file (default: .claude/settings.json)")
-    install_cmd.add_argument("--advisory", action="store_true", help="install in advisory mode")
-    install_cmd.set_defaults(handler=install_hook)
+    _add_setup_commands(sub)
 
     return parser
 

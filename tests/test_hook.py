@@ -1,12 +1,15 @@
 """Stage 5 gate: the hook denies a weakening edit, and fails open on everything else."""
 
+import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
 
-from aegisflow.core.verdict import Status
-from aegisflow.hook import blocks, build_change, evaluate, read_payload, render
+from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
+from aegisflow.hook import (
+    Change, blocks, build_change, decision_json, evaluate, read_payload, render,
+)
 
 ORIGINAL = (
     "from decimal import Decimal\n\n"
@@ -148,3 +151,59 @@ class TestMessage(HookCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestUnverifiedFailsOpen(unittest.TestCase):
+    """A change nothing could analyse must not stand between a person and an edit.
+
+    The hook has only allow and deny, so an honest "I checked nothing" has to
+    resolve to allow. The graph is where that choice is configurable; see
+    ``make_router(on_unverified=...)``.
+    """
+
+    def setUp(self):
+        self.verdict = Verdict.of([], skipped=["a.ts: no exact analyser for this language yet"])
+
+    def test_status_is_unverified_not_pass(self):
+        self.assertIs(self.verdict.status, Status.UNVERIFIED)
+
+    def test_it_does_not_block(self):
+        self.assertFalse(blocks(self.verdict))
+
+    def test_the_decision_payload_allows(self):
+        payload = json.loads(decision_json(self.verdict, Change(path="a.ts")))
+        self.assertEqual(
+            payload["hookSpecificOutput"]["permissionDecision"], "allow"
+        )
+
+
+class TestBlockMessageHeadline(unittest.TestCase):
+    """The first line must describe the findings that are actually present.
+
+    A maintainability finding reported as "weakens what the test suite verifies"
+    is a claim the reader can check and find false, which costs more credibility
+    than the simpler wording saves.
+    """
+
+    @staticmethod
+    def _verdict(rule):
+        return Verdict.of([Finding(
+            rule=rule, status=Status.REPAIR, file="a.py", line=1,
+            detail="d", prescription="p", confidence=Confidence.EXACT,
+        )], checked=["a.py"])
+
+    def test_a_weakened_test_says_so(self):
+        message = render(self._verdict("assertion_monotonicity"), Change(path="a.py"))
+        self.assertIn("weakens what the test suite verifies", message)
+
+    def test_a_structural_finding_does_not_claim_a_weakened_test(self):
+        message = render(self._verdict("file_too_long"), Change(path="a.py"))
+        self.assertNotIn("test suite", message)
+        self.assertIn("breaks a rule this project enforces", message)
+
+    def test_both_kinds_present_says_both(self):
+        verdict = self._verdict("assertion_monotonicity").merge(
+            self._verdict("file_too_long"))
+        message = render(verdict, Change(path="a.py"))
+        self.assertIn("weakens what the test suite verifies", message)
+        self.assertIn("breaks a project rule", message)

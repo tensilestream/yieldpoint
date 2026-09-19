@@ -706,6 +706,97 @@ standard set.
 
 ---
 
+## Stage 16 — adversarial review ✅
+
+Not a planned stage. A sceptical buyer was asked to attack the product with tests rather
+than opinions, and what they broke set the scope. Full write-up in
+PLAN_AND_POSITIONING.md §10; the mechanics:
+
+**16.1 `pass` on a file nothing analysed.** `Status.UNVERIFIED` (verdict `schema_version`
+2), CLI exit `3`, router edge `on_unverified` defaulting to unmapped. Derived from
+findings *and* coverage, and only when the whole change was unanalysable — a single
+unsupported file among many stays `pass` with the gap recorded, because a status people
+learn to ignore protects nobody.
+
+Adding a status broke fail-open in two places at once: `blocks()` and `decision_json()`
+each tested `status is Status.PASS` directly, so the hook would have denied every
+TypeScript edit. Both now go through one definition of "let it through", and three tests
+pin it. Worth noting as the general hazard: **widening an enum silently changes the
+meaning of every `is not PASS` in the codebase.**
+
+**16.2 Helper assertions invisible in both states.** `core/delegation.py` attributes a
+helper's assertions to the calling test, substituting call-site arguments for parameters
+and following helper-to-helper chains to a bounded depth. The helper map is grown to a
+fixed point, because a function that only *calls* an asserting helper is still on the path
+from the test to the assertion. Symmetric across before and after, so it cannot invent a
+weakening.
+
+**16.3 False positives, 4/12 → 0/12.** `await` stripping and single-assignment alias
+resolution in `core/subject.py`; exact literal decomposition in `core/decomposition.py`.
+All applied as fallbacks after exact matching, so each can suppress a finding but never
+invent one. Detection re-measured after every fix and did not move.
+
+**16.4 The missing measurement.** `tests/corpus/` — 19 legitimate refactors, 18 tampering
+patterns, split by provenance so cases used while fixing the checker are reported
+separately from cases written afterwards. `python -m tests.corpus` prints the rate;
+`tests/test_corpus.py` makes it a CI gate.
+
+**Gate.** 520 tests pass. Corpus: 0 false positives, 0 false negatives on both splits.
+Self-audit went 27 findings → 24 — three removed, none added, and `compare`/`_lookup` were
+refactored rather than exempted.
+
+**Method worth keeping.** Every gap here came from running the tool against cases it had
+not been built for, not from reading the plan. The two that mattered were both invisible
+to the test suite: 520 passing tests coexisted with `pass` on unanalysed files and a blind
+spot covering any suite that uses assertion helpers.
+
+---
+
+## Stage 17 — removing the friction ✅
+
+The objection that decides adoption turned out not to be about the checks at all. Setup
+was three commands, every entry point demanded that the caller describe the change, and
+two of the registered commands could fail silently.
+
+**17.1 `aegisflow review`.** The zero-argument entry point: it reads the uncommitted diff
+from git and verifies it. Every other surface asks *what changed*; the person running this
+has already made the change and wants to know what it broke. Exposed over MCP as
+`aegis_review`, the tool an agent calls after finishing a set of edits.
+
+Running git is a **surface** concern, not a check — the same shape as the existing
+`git diff | aegisflow check --diff -`. The verdict is still computed by the pure engine
+from the diff text, so RULES.md §4 holds: given the diff, the answer does not depend on
+git being present.
+
+One bug found by its own test: `git diff` omits untracked files, and emptiness was judged
+before they were added, so a change consisting only of **new files** reported "nothing to
+check" — the most interesting thing an agent produces was the one case not checked.
+
+**17.2 `aegisflow init`.** Config, MCP registration and hook in one idempotent command.
+Advisory by default, because a gate that blocks on its first run in an unfamiliar
+repository gets uninstalled rather than tuned. Three separate commands was three chances
+to stop halfway, and the half usually skipped was the hook — the only one that enforces.
+
+**17.3 Commands that actually resolve.** Both the MCP server and the hook were registered
+as a bare `aegisflow`. When that is not on the client's PATH — conda, virtualenvs, an
+editor launched from a desktop icon — the failure surfaces as *"server failed to start"*
+rather than *"not on PATH"*. Now resolved at install time: the bare console-script name
+when it exists, since `.mcp.json` is committed and an absolute path works on one machine,
+falling back to `<interpreter> -m aegisflow`, which cannot fail to resolve. That fallback
+needed `aegisflow/__main__.py`, which did not exist.
+
+**17.4 Instructions over MCP.** The server sends MCP `instructions` naming when to call
+each tool. MCP still explains rather than enforces — an agent that does not want a verdict
+will not ask — but the gap between "the tool exists" and "the agent knows to use it" was
+free to close.
+
+**Gate.** 541 tests. Corpus unchanged at 0 false positives and 0 false negatives. Self-audit
+unchanged at 24 findings — four new modules, none of them adding one. Verified by running
+the registered command as a real subprocess over stdio, not by calling the handler
+in-process: initialize, tools/list and a tools/call all answered, stdout clean.
+
+---
+
 ## Not scheduled
 
 TypeScript analysis (lexical, cannot block — enforced by `Finding.__post_init__`), MCP

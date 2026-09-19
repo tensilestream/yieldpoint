@@ -5,10 +5,13 @@ import json
 import os
 import tempfile
 import unittest
+
+from aegisflow.core.verdict import SCHEMA_VERSION
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from aegisflow.cli import EXIT_ERROR, EXIT_FINDINGS, EXIT_OK, main
+from aegisflow.mcp.clients import command_line
+from aegisflow.cli import EXIT_UNVERIFIED, EXIT_ERROR, EXIT_FINDINGS, EXIT_OK, main
 
 BEFORE = 'def test_total():\n    assert inv.total == 42\n'
 WEAKER = 'def test_total():\n    assert inv.total is not None\n'
@@ -61,7 +64,7 @@ class TestCheck(CliCase):
             ["check", "--path", "tests/t.py", "--before", "before.py",
              "--after", "weaker.py", "--json"])
         payload = json.loads(out)
-        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
         self.assertEqual(payload["status"], "repair")
         self.assertEqual(payload["findings"][0]["rule"], "assertion_monotonicity")
 
@@ -83,8 +86,13 @@ class TestCheck(CliCase):
     def test_skipped_files_are_reported_on_stderr(self):
         code, _, err = run(
             ["check", "--path", "tests/t.ts", "--before", "before.py", "--after", "weaker.py"])
-        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(code, EXIT_UNVERIFIED)
         self.assertIn("skipped:", err)
+
+    def test_unverified_exits_distinctly_from_findings(self):
+        """CI must be able to tell "I found a problem" from "I checked nothing"."""
+        self.assertNotEqual(EXIT_UNVERIFIED, EXIT_FINDINGS)
+        self.assertNotEqual(EXIT_UNVERIFIED, EXIT_OK)
 
 
 class TestHookCommand(CliCase):
@@ -129,7 +137,11 @@ class TestInstallHook(CliCase):
         settings = json.loads((self.root / ".claude/settings.json").read_text())
         entry = settings["hooks"]["PreToolUse"][0]
         self.assertEqual(entry["matcher"], "Edit|MultiEdit|Write")
-        self.assertEqual(entry["hooks"][0]["command"], "aegisflow hook")
+        self.assertEqual(entry["hooks"][0]["command"], command_line("hook"))
+        self.assertTrue(
+            entry["hooks"][0]["command"].endswith("hook"),
+            "the registered command must invoke the hook subcommand",
+        )
         self.assertIn("registered", out)
 
     def test_preserves_existing_settings_and_backs_them_up(self):
@@ -158,3 +170,56 @@ class TestInstallHook(CliCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestInit(CliCase):
+    """``init`` is the one-command setup, so it must be safe to run twice."""
+
+    def _repo(self):
+        root = self.root / "proj"
+        root.mkdir(exist_ok=True)
+        return root
+
+    def test_it_writes_config_mcp_and_hook(self):
+        root = self._repo()
+        code, out, _ = run(["init", "--root", str(root)])
+        self.assertEqual(code, EXIT_OK)
+        self.assertTrue((root / ".aegisflow.json").is_file())
+        self.assertTrue((root / ".mcp.json").is_file())
+        self.assertTrue((root / ".claude" / "settings.json").is_file())
+        self.assertIn("advisory", out)
+
+    def test_the_hook_is_advisory_unless_enforce_is_given(self):
+        root = self._repo()
+        run(["init", "--root", str(root)])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        self.assertIn("--advisory", command)
+
+    def test_enforce_removes_advisory(self):
+        root = self._repo()
+        run(["init", "--root", str(root), "--enforce"])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        command = settings["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        self.assertNotIn("--advisory", command)
+
+    def test_an_existing_config_is_not_overwritten(self):
+        root = self._repo()
+        (root / ".aegisflow.json").write_text('{"version": 1, "project": "mine"}')
+        run(["init", "--root", str(root)])
+        self.assertIn("mine", (root / ".aegisflow.json").read_text())
+
+    def test_running_it_twice_does_not_duplicate_the_hook(self):
+        root = self._repo()
+        run(["init", "--root", str(root)])
+        run(["init", "--root", str(root)])
+        settings = json.loads((root / ".claude" / "settings.json").read_text())
+        entries = settings["hooks"]["PreToolUse"]
+        self.assertEqual(len(entries), 1, "init must be idempotent")
+
+    def test_no_hook_skips_enforcement(self):
+        root = self._repo()
+        code, out, _ = run(["init", "--root", str(root), "--no-hook"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertFalse((root / ".claude" / "settings.json").exists())
+        self.assertIn("only explain", out)

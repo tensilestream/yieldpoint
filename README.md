@@ -37,10 +37,12 @@ REPAIR  1 finding(s)
 
 ## Contents
 
-- [Install](#install) · [Quick start](#quick-start) · [Editor setup (MCP)](#editor-setup-mcp)
+- [Install](#install) · [Quick start](#quick-start) — two commands
+- [`aegisflow review`](#aegisflow-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
 - [What it checks](#what-it-checks) · [Configuration](#configuration)
-- [Why deterministic](#why-deterministic) · [Status and limits](#status-and-limits)
+- [Why deterministic](#why-deterministic) · [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
+- [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
 - [Contributing](#contributing) · [License](#license)
 
 ---
@@ -67,30 +69,61 @@ pip install git+https://github.com/tensilestream/AgeisFlow    # from source
 
 ## Quick start
 
-### 1. Audit what you already have — 30 seconds
+Two commands. The first sets everything up; the second tells you what you already broke.
 
 ```sh
-aegisflow scan
+aegisflow init         # config + MCP server + editor hook, in one go
+aegisflow review       # check everything you have changed but not committed
 ```
 
-Exits `0` when clean, `1` with findings. Add `--json` for CI, `--rule <name>` to narrow.
+`init` writes three files and backs up anything it touches:
 
-### 2. Stop an agent weakening a test, in your editor
+| File | What it does |
+|---|---|
+| `.aegisflow.json` | The rules. Committed, so the team shares one definition. |
+| `.mcp.json` | Registers the MCP server, so your agent can *ask* what a rule means. |
+| `.claude/settings.json` | Registers the hook, which is the part that actually *enforces*. |
 
-```sh
-aegisflow install-hook          # add --advisory to report without blocking
+The hook starts **advisory** — it reports and never blocks. Run `aegisflow init --enforce`
+once you are happy with what it reports. Restart your editor so it picks both up.
+
+### `aegisflow review` — the whole product in one command
+
+No arguments. It reads your uncommitted diff from git, including files you have not staged
+yet, and tells you whether anything you changed weakens what the tests verify.
+
+```console
+$ aegisflow review
+REPAIR  1 finding(s)
+
+  tests/test_invoice.py:14 in test_total  [assertion_monotonicity]
+    Assertion on invoice.total was weakened: eq -> non_null.
+    fix: Re-assert invoice.total at eq strength, or fix the code under test so the
+         original assertion passes. Restore `assert invoice.total == 42`.
 ```
 
-Registers a Claude Code `PreToolUse` hook. Start a new session; when an agent tries to
-weaken an assertion in a protected test file, the edit is **denied** and the agent is told
-which subject was downgraded and what to restore. Your `.claude/settings.json` is backed up
-first.
-
-### 3. Verify a change by hand
+That verdict cost zero model calls and is byte-identical on every machine.
 
 ```sh
+aegisflow review --staged             # only what is staged
+aegisflow review --against main       # a whole branch
+aegisflow review --json               # for CI
+```
+
+### Prefer to do it a piece at a time?
+
+```sh
+aegisflow scan                        # audit the repo as it stands
+aegisflow install-mcp --client cursor # MCP only, any editor
+aegisflow install-hook --advisory     # the enforcing half, on its own
 aegisflow check --path tests/test_invoice.py --before old.py --after new.py
 git diff --cached | aegisflow check --diff -
+```
+
+Everything also runs without anything on your `PATH`:
+
+```sh
+python -m aegisflow review
 ```
 
 ---
@@ -125,6 +158,12 @@ Most clients take this shape:
 }
 ```
 
+If `aegisflow` is not on the PATH your editor sees — common with conda, virtualenvs, and
+editors launched from a desktop icon rather than a shell — the installer writes
+`"command": "<your python>", "args": ["-m", "aegisflow", "mcp"]` instead, which always
+resolves. This matters because a client that cannot find the command reports *"server
+failed to start"*, not *"not on PATH"*, and you lose an hour on the wrong problem.
+
 <details>
 <summary>VS Code and Zed use different shapes</summary>
 
@@ -139,7 +178,18 @@ Most clients take this shape:
 ```
 </details>
 
-Tools offered: `aegis_verify_change`, `aegis_verify_diff`, `aegis_scan`, `aegis_policy`.
+Tools offered:
+
+| Tool | Arguments | Use |
+|---|---|---|
+| **`aegis_review`** | **none** | Check everything uncommitted. The one to call after finishing a set of edits. |
+| `aegis_verify_change` | path, before, after | Check one edit before writing it. |
+| `aegis_verify_diff` | a unified diff | Check a change set you already have. |
+| `aegis_scan` | path | Audit a repository as it stands. |
+| `aegis_policy` | none | List the rules in force, before planning work. |
+
+The server also sends MCP `instructions` at startup, so a connected agent is told when to
+call these rather than having to be asked each time.
 
 > **MCP explains; it does not enforce.** An MCP tool is one the agent *chooses* to call, so
 > an agent intent on weakening a test will simply not ask. Use it so a blocked agent can
@@ -184,6 +234,18 @@ git diff origin/main... | aegisflow check --diff - --json    # CI
 ```
 
 A ready-made [`.pre-commit-config.yaml`](./.pre-commit-config.yaml) is included.
+
+Exit codes, so a pipeline can tell the three outcomes apart:
+
+| Code | Meaning |
+|---|---|
+| `0` | Something was checked and it was clean. |
+| `1` | Findings. The change weakens the suite, breaks a boundary, or trips a rule. |
+| `2` | AegisFlow itself failed — bad arguments, unreadable input. |
+| `3` | **Nothing in the change could be analysed.** No result to trust, and not the same as passing. Only returned when the *whole* change was unanalysable; one Python file among twenty TypeScript ones still exits `0`. |
+
+Code `3` is the reason the CLI can be trusted in CI at all: the alternative is exiting `0`
+on a change nothing looked at, which reads as approval.
 
 ---
 
@@ -261,22 +323,74 @@ signal is gameable: the agent can win by weakening the test. If you run an eval 
 an RL loop over a coding agent, this is the check that tells you whether it solved the task
 or gamed the benchmark.
 
+## How wrong is it? — run the number yourself
+
+The question that decides whether a checker like this is usable is its false-positive
+rate, because a tool that flags legitimate refactors gets switched off within a week. So
+the measurement ships with the code:
+
+```sh
+python -m tests.corpus
+```
+
+It scores a committed corpus of **19 legitimate refactors** that must stay silent and
+**18 tampering patterns** that must fire. Current result:
+
+| Split | False positives | False negatives |
+|---|---|---|
+| Held out — written after the checker was fixed, never used to tune it | **0 / 7** | **0 / 8** |
+| Tuned — used while fixing the checker | 0 / 12 | 0 / 10 |
+| All | **0 / 19** | **0 / 18** |
+
+Only the held-out row is evidence; a perfect score on cases used for debugging proves
+just that the fix landed. Both are printed so you can see the split rather than take a
+blended number on trust. The corpus is also a CI gate ([`tests/test_corpus.py`](./tests/test_corpus.py)),
+so the rate cannot drift quietly.
+
+Thirty-seven hand-written cases are a floor, not a false-positive rate for your
+repository. If AegisFlow flags a refactor you know is sound, that is a bug —
+[file it](./.github/ISSUE_TEMPLATE/false_positive.yml) and it becomes a corpus case.
+
 ## Status and limits
 
 **Alpha.** The engine, CLI, Claude Code hook, MCP server, LangGraph adapter, diff/CI path
-and repository audit all work and are covered by 509 tests. Read this before adopting:
+and repository audit all work and are covered by 520 tests. Read this before adopting:
 
-- **Python only.** TypeScript and Java are designed but not built; other languages are
-  reported as `skipped`, never silently passed.
+- **Python only.** TypeScript and Java are designed but not built. Other languages are
+  never silently passed — a change nothing could analyse returns status `unverified`, not
+  `pass`, and the CLI exits `3` rather than `0`. If your agent writes TypeScript, this
+  will tell you honestly that it checked nothing, which is useful but is not the product
+  you want yet.
 - **Snapshot, property-based and heavily table-driven suites** are poorly served — counting
   assertions is not meaningful there.
-- **Subject aliasing is a known false positive**: renaming `inv` to `invoice` reads as a
-  lost subject. Pinned as a test so it cannot be forgotten.
+- **Assertions in an imported helper are invisible.** Helpers in the same module are read
+  through, including helper-calling-helper chains, so weakening one is caught. A helper
+  imported from another module is not expanded and its assertions are not counted.
+- **Decomposing a dict comparison into per-field assertions is deliberately allowed**, even
+  though it drops the implicit "and no other keys" check. That trade and its reasoning are
+  written out in [`core/decomposition.py`](./aegisflow/core/decomposition.py).
 - **The cost claim is unmeasured.** That the prescription costs zero model calls is a
   property of the architecture and holds. That repair loops therefore converge in fewer
   *total* calls against a real model has not been benchmarked, and is not claimed.
 - No performance figure appears anywhere in this project without a runnable benchmark
   behind it.
+
+## "Why not just use something that exists?"
+
+Fair question, and for two of the three things AegisFlow does the answer is *you should*.
+
+| You already have | Does it catch an agent weakening a test? |
+|---|---|
+| **Coverage** | No — and it is worse than neutral. Delete an assertion and coverage is unchanged; delete a whole failing test and it goes *up*. |
+| **Linters** (ruff, ESLint, Spotless) | No. `assert x == 42` and `assert x` are both clean code. Nothing in a linter reads the previous version of the file. |
+| **Mutation testing** | Yes, in principle — it is the rigorous answer. It also needs minutes to hours per run, so it cannot sit on the edge between `generate` and `apply`. AegisFlow is milliseconds and no model calls; use both, at different points. |
+| **Code review** | Sometimes. Not reliably, in a forty-file agent diff, on the fourth one that day. |
+| **`dependency-cruiser`, import-linter, ArchUnit** | For layer boundaries — yes, and they are mature. AegisFlow ships `boundary_violation` for convenience, not as a reason to adopt it. |
+| **LLM-as-judge** | Sometimes, at one extra model call per round, 5–15s of latency, and a verdict that changes between runs. You cannot gate a pipeline on a judge that flakes. |
+
+The narrow claim: **every one of those evaluates code as it now stands.** "The agent
+cheated" is a statement about what was *taken away*, and only a diff-native check can
+express it. That is the whole product; everything else in this repository is support.
 
 ---
 

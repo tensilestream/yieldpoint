@@ -102,10 +102,22 @@ def _initialize(params: dict) -> dict:
         "capabilities": {"tools": {"listChanged": False}},
         "serverInfo": {"name": "aegisflow", "version": __version__},
         "instructions": (
-            "AegisFlow verifies that a change does not weaken what the tests verify. "
-            "Call aegis_verify_change before editing a test file; it returns a "
-            "deterministic verdict and a prescription naming exactly what to restore. "
-            "Call aegis_policy to see the rules in force before planning work."
+            "AegisFlow checks, deterministically and without any model call, whether a "
+            "change weakens what the test suite verifies.\n"
+            "\n"
+            "Call aegis_review after finishing a set of edits and before reporting the "
+            "work as done. It takes no arguments, reads the diff from git, and is the "
+            "cheapest way to find out whether anything was weakened.\n"
+            "\n"
+            "Call aegis_verify_change before editing a protected test file, to check a "
+            "specific edit ahead of writing it.\n"
+            "\n"
+            "Call aegis_policy before planning work, to see which rules and limits are "
+            "in force in this repository.\n"
+            "\n"
+            "Every verdict carries a prescription naming exactly what to restore, so a "
+            "rejected change does not need to be diagnosed by guessing. A verdict of "
+            "'unverified' means no rule could analyse the change — it is not a pass."
         ),
     }
 

@@ -19,6 +19,7 @@ from .breaker import HISTORY_KEY
 from .node import ATTEMPTS_KEY, TRIPPED_KEY, VERDICT_KEY, verdict_from
 
 PASS = Status.PASS.value
+UNVERIFIED = Status.UNVERIFIED.value
 REPAIR = Status.REPAIR.value
 ESCALATE = Status.ESCALATE.value
 BLOCK = Status.BLOCK.value
@@ -37,6 +38,7 @@ def make_router(
     verdict_key: str = VERDICT_KEY,
     on_exhausted: str = ESCALATE,
     on_stalled: str = ESCALATE,
+    on_unverified: str = UNVERIFIED,
 ) -> Callable[[Mapping[str, Any]], str]:
     """Build a router.
 
@@ -44,10 +46,19 @@ def make_router(
     before a human is asked. ``on_stalled`` fires when the loop detector sees the
     same proposal produce the same findings repeatedly — retrying that is pure
     token burn.
+
+    ``on_unverified`` decides what happens when no rule could analyse the change
+    at all — a TypeScript file today, or a file that failed to parse. It defaults
+    to its own ``"unverified"`` edge, which means an unmapped graph raises instead
+    of quietly treating an unanalysed change as a clean one. Point it at ``PASS``
+    to accept unverified changes, or at ``ESCALATE`` to ask a human; both are
+    reasonable, and the choice belongs to whoever owns the pipeline.
     """
 
     def route(state: Mapping[str, Any]) -> str:
         verdict = verdict_from(state, verdict_key)
+        if verdict.status is Status.UNVERIFIED:
+            return on_unverified
         if verdict.status is not Status.REPAIR:
             return verdict.status.value
 
@@ -79,5 +90,5 @@ def repair_context(state: Mapping[str, Any], verdict_key: str = VERDICT_KEY) -> 
 
 __all__ = [
     "route_on_verdict", "make_router", "repair_context",
-    "PASS", "REPAIR", "ESCALATE", "BLOCK", "HISTORY_KEY",
+    "PASS", "UNVERIFIED", "REPAIR", "ESCALATE", "BLOCK", "HISTORY_KEY",
 ]
