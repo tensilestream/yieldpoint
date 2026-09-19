@@ -1004,7 +1004,14 @@ Start with [CONTRIBUTING.md](./CONTRIBUTING.md) and [RULES.md](./RULES.md).
 | [RELEASING.md](./RELEASING.md) | How a release is cut |
 | [CHANGELOG.md](./CHANGELOG.md) | Release history |
 | [SECURITY.md](./.github/SECURITY.md) | Threat model and reporting |
+| [TRADEMARK.md](./TRADEMARK.md) | What the licence covers, and what the name does not |
 
 ## License
 
-[Apache-2.0](./LICENSE)
+[Apache-2.0](./LICENSE). Use it commercially, fork it, ship it inside something you sell —
+the licence asks only that you keep the copyright notices and include
+[`NOTICE`](./NOTICE) when you redistribute.
+
+The **name and mark are not covered by the licence**, which is ordinary for Apache-2.0
+(section 6) and is written out in [TRADEMARK.md](./TRADEMARK.md): fork it freely, give
+your fork its own name.

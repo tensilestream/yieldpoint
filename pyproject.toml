@@ -9,7 +9,7 @@ description = "Deterministic verification for agents that write code"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
-license-files = ["LICENSE"]
+license-files = ["LICENSE", "NOTICE", "TRADEMARK.md"]
 authors = [{ name = "Yieldpoint contributors" }]
 keywords = [
   "langgraph", "agents", "verification", "guardrails", "testing",

@@ -47,3 +47,8 @@ comment or log line unless a reader can reproduce it.
 
 Commits and tags are made by maintainers; see [RELEASING.md](./RELEASING.md). Tags are
 `vMAJOR.MINOR.PATCH` and annotated.
+
+## Licensing of contributions
+
+By opening a pull request you agree that your contribution is licensed under
+[Apache-2.0](./LICENSE), the same terms as the rest of the project. There is no CLA.

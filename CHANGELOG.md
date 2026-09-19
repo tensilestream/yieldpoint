@@ -12,6 +12,14 @@ package version is not.
 
 ### Added
 
+- **`NOTICE` and `TRADEMARK.md`.** The licence is unchanged — Apache-2.0, commercial use
+  and forking freely permitted. What is now written down is the part Apache-2.0 section 6
+  already implies: the name, the mark and the package name are not licensed with the code,
+  so a fork needs its own name. `NOTICE` ships in the wheel and sdist, and section 4(d)
+  requires redistributors to carry it.
+
+### Added
+
 - **`yieldpoint export`** — the ledger as JSON Lines on stdout, with per-event and
   cumulative savings on every row. `--since`, `--run` and `--agent` select a window.
 - **`YIELDPOINT_SINK`** — a command, as a JSON array of argv, that each turn's new events
