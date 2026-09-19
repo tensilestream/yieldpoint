@@ -18,7 +18,9 @@ from aegisflow.core.verdict import SCHEMA_VERSION
 from pathlib import Path
 
 from aegisflow.core.policy import Policy
-from aegisflow.mcp.clients import command_argv, BY_KEY, CLIENTS, config_path, install, snippet
+from aegisflow.mcp.clients import (
+    BY_KEY, CLIENTS, UnwritableFormat, command_argv, config_path, install, snippet,
+)
 from aegisflow.mcp.server import METHOD_NOT_FOUND, PARSE_ERROR, handle, serve
 from aegisflow.mcp.tools import TOOLS, call
 
@@ -67,7 +69,7 @@ class TestToolListing(unittest.TestCase):
         names = {tool["name"] for tool in request("tools/list")["result"]["tools"]}
         self.assertEqual(names, {
             "aegis_verify_change", "aegis_verify_diff", "aegis_review",
-            "aegis_scan", "aegis_stats", "aegis_policy"})
+            "aegis_scan", "aegis_assess", "aegis_stats", "aegis_policy"})
 
     def test_schemas_are_well_formed(self):
         for tool in TOOLS:
@@ -171,7 +173,8 @@ class TestResilience(unittest.TestCase):
 class TestClients(unittest.TestCase):
     def test_every_client_resolves_a_path(self):
         for client in CLIENTS:
-            self.assertTrue(str(config_path(client)).endswith(".json"), client.key)
+            suffix = {"json": ".json", "yaml": ".yaml", "toml": ".toml"}[client.fmt]
+            self.assertTrue(str(config_path(client)).endswith(suffix), client.key)
 
     def test_vscode_uses_its_own_shape(self):
         parsed = json.loads(snippet(BY_KEY["vscode"]))
@@ -281,3 +284,53 @@ class TestReviewTool(unittest.TestCase):
         self.assertFalse(is_error, "a non-repository must not read as a tool failure")
         self.assertEqual(structured.get("status"), "unverified")
         self.assertIn("git repository", text)
+
+
+class TestTheClientTable(unittest.TestCase):
+    """The table is data, and every row has to hold together."""
+
+    def test_keys_are_unique(self):
+        keys = [c.key for c in CLIENTS]
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def test_every_client_produces_a_snippet(self):
+        for client in CLIENTS:
+            with self.subTest(client.key):
+                text = snippet(client)
+                self.assertIn("aegisflow", text)
+                self.assertIn(client.section, text)
+
+    def test_json_snippets_parse(self):
+        for client in CLIENTS:
+            if client.fmt != "json":
+                continue
+            with self.subTest(client.key):
+                parsed = json.loads(snippet(client))
+                self.assertIn("aegisflow", parsed[client.section])
+
+    def test_non_json_clients_refuse_to_be_written(self):
+        """Better to print the snippet than to corrupt a file we cannot read."""
+        for client in CLIENTS:
+            if client.writable:
+                continue
+            with self.subTest(client.key), tempfile.TemporaryDirectory() as tmp:
+                with self.assertRaises(UnwritableFormat):
+                    install(client, Path(tmp))
+
+    def test_a_path_override_configures_an_unlisted_client(self):
+        """The escape hatch: any MCP client, anywhere."""
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "some" / "vendor" / "mcp.json"
+            written, _backup = install(BY_KEY["cursor"], path=target)
+            self.assertEqual(written, target)
+            parsed = json.loads(target.read_text())
+            self.assertIn("aegisflow", parsed["mcpServers"])
+
+    def test_existing_servers_are_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "mcp.json"
+            target.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
+            install(BY_KEY["cursor"], path=target)
+            parsed = json.loads(target.read_text())
+            self.assertIn("other", parsed["mcpServers"])
+            self.assertIn("aegisflow", parsed["mcpServers"])

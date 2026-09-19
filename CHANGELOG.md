@@ -52,8 +52,35 @@ Verdict `schema_version` **2**. Breaking for consumers that switch on `status`.
   `AEGISFLOW_NO_METRICS=1`. The ledger directory writes its own `.gitignore`, so it never
   appears in a diff and AegisFlow never edits a file the project owns.
 
+**Fan-out and long-running sessions**
+
+- **Per-agent attribution.** `AEGISFLOW_RUN_ID` and `AEGISFLOW_AGENT` label each worker,
+  and `aegisflow stats` reports findings per agent and distinct runs. With a fan-out of
+  three hundred, "the suite got weaker" is not actionable; "worker 47 keeps doing this" is.
+- **Acknowledgements in source.** `# aegisflow: allow <rule> - <reason>` answers a finding
+  the author meant. It names one rule, requires a reason, and is counted on the verdict and
+  in `aegisflow stats`, so suppression stays visible instead of quietly accumulating.
+  Verdict `schema_version` **3**.
+- **Ten integration examples** under `examples/`, covering LangGraph (single and fan-out),
+  CrewAI, the OpenAI Agents SDK, the Claude Agent SDK, pytest, GitHub Actions, GitLab CI,
+  an eval harness, and no framework at all. Exercised by `tests/test_examples.py`, because
+  documentation that no longer runs is a confident wrong answer.
+
 ### Fixed
 
+- **The per-turn total was O(events) per read, and therefore O(events²) over a session.**
+  Invisible at twenty events, 680 ms per verdict at twenty thousand. Folded incrementally
+  from a cached byte offset; flat at ~1 ms regardless of ledger size. The cache is
+  distrusted on read, so corrupt, stale or rotated-underneath costs one full read rather
+  than a wrong number.
+- **Ledger writes were not safe under a fan-out.** Events are now capped below the POSIX
+  atomic-append size and written with a single append; rotation is an atomic rename behind
+  an exclusive lock. The previous trim read the file and wrote it back, which discards
+  whatever other agents appended in between.
+- **`UNVERIFIED` was not exported** from `aegisflow.langgraph`, so a graph could not map
+  the edge the router returns.
+- **A confirmation-token test named four words literally**, and passed only while the
+  derived token happened not to be one of them.
 - **MCP and hook commands are resolved rather than assumed.** A bare `aegisflow` that is
   not on the client's PATH surfaces as "server failed to start", not as a missing install.
   The console script is registered by bare name when it resolves — `.mcp.json` is

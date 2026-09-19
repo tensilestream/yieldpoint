@@ -15,7 +15,8 @@ from pathlib import Path
 from aegisflow import ledger
 from aegisflow.core.policy import Policy
 from aegisflow.core.verdict import Confidence, Finding, Status, Verdict
-from aegisflow.stats import render, summarise, to_dict
+from aegisflow.report import render, to_dict
+from aegisflow.stats import summarise
 
 
 def _verdict(rules=("assertion_monotonicity",)):

@@ -1,0 +1,20 @@
+# GitLab CI. Same shape as the GitHub action: diff against the merge base,
+# because a verifier that grades the transition needs both sides.
+aegisflow:
+  image: python:3.12-slim
+  variables:
+    GIT_DEPTH: "0"
+  before_script:
+    - pip install aegisflow
+  script:
+    - |
+      git fetch origin "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      set +e
+      git diff --no-color "origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME...HEAD" \
+        | aegisflow check --diff - --root .
+      code=$?
+      set -e
+      [ "$code" -eq 3 ] && echo "AegisFlow: nothing could be analysed" && exit 0
+      exit "$code"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

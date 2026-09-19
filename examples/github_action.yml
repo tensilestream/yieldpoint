@@ -1,0 +1,45 @@
+# Gate a pull request on the change, not on the end state.
+#
+# The `fetch-depth: 0` and the merge-base diff matter: AegisFlow grades the
+# transition, so it needs the before-state. A shallow checkout gives it the
+# after-state twice and it will correctly report that it cannot tell.
+name: AegisFlow
+
+on:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install aegisflow
+
+      - name: Verify the change
+        run: |
+          set +e
+          git diff --no-color "origin/${{ github.base_ref }}...HEAD" \
+            | aegisflow check --diff - --root .
+          code=$?
+          set -e
+          case $code in
+            0) echo "::notice::AegisFlow: clean" ;;
+            1) echo "::error::AegisFlow: the change weakens what the tests verify"; exit 1 ;;
+            3) echo "::warning::AegisFlow: nothing in this change could be analysed" ;;
+            *) echo "::error::AegisFlow failed to run"; exit $code ;;
+          esac
+
+      # Exit 3 is "I could not look", which is not the same as "it is fine".
+      # Treated as a warning here; make it `exit 1` if your repo is Python-only
+      # and an unanalysable change should stop the line.
+
+      - name: Report what it cost
+        if: always()
+        run: aegisflow stats || true

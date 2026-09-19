@@ -78,6 +78,8 @@ def _add_setup_commands(sub) -> None:
     mcp_install.add_argument("--client", help="claude-code, cursor, vscode, ...")
     mcp_install.add_argument("--list", action="store_true", help="list supported clients")
     mcp_install.add_argument("--show", action="store_true", help="print the snippet, do not write")
+    mcp_install.add_argument(
+        "--path", default=None, help="write to this file instead of the known location")
     mcp_install.set_defaults(handler=install_mcp)
 
     install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")

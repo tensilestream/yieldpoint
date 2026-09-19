@@ -171,7 +171,25 @@ def render(verdict: Verdict, change: Change) -> str:
             "Apply the fix above. If the rule is wrong for this repository, change "
             "it in .aegisflow.json rather than working around it."
         )
+    running = _running_total()
+    if running:
+        lines += ["", running]
     return "\n".join(lines)
+
+
+def _running_total() -> str:
+    """The ledger line the agent sees on every blocked edit. Never raises."""
+    try:
+        from . import ledger
+        from .report import running_line
+        from .totals import totals
+
+        policy = Policy()
+        if not ledger.enabled(policy):
+            return ""
+        return running_line(totals(ledger.path_for(policy)))
+    except Exception:  # a report must never be why an edit fails
+        return ""
 
 
 #: Statuses that let an edit through. ``UNVERIFIED`` is here because the hook

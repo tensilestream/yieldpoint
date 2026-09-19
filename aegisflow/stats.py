@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
-from .ledger import CHARS_PER_TOKEN, Event
+from .ledger import Event
 
 
 @dataclass(frozen=True)
@@ -35,12 +35,56 @@ class Summary:
     files_skipped: int = 0
     total_ms: int = 0
     median_ms: int = 0
+    p95_ms: int = 0
+
+    severities: tuple[tuple[str, int], ...] = ()
+    confidences: tuple[tuple[str, int], ...] = ()
+    languages: tuple[tuple[str, int], ...] = ()
+    agents: tuple[tuple[str, int], ...] = ()
+    """Findings per agent, for a fan-out. Empty when nobody set AEGISFLOW_AGENT."""
+
+    runs: int = 0
+    """Distinct orchestrated jobs represented in this ledger."""
+
+    hotspots: tuple[tuple[str, int], ...] = ()
+    """Files with the most findings. Where the debt actually is."""
+
+    acknowledged: int = 0
+    """Findings answered by a source comment. Visible so suppression cannot rot."""
+
+    resolved: int = 0
+    """Findings that were gone the next time their file was analysed."""
+
+    recurring: int = 0
+    """Findings still present in the most recent look at their file."""
 
     @property
     def caught(self) -> int:
         """Verdicts that reported something. The times it earned its place."""
         return sum(count for status, count in self.statuses
                    if status not in ("pass", "unverified"))
+
+    @property
+    def contract_findings(self) -> int:
+        """Findings that mean the test suite lost strength, as opposed to shape."""
+        return sum(count for rule, count in self.rules if rule in CONTRACT_RULES)
+
+    @property
+    def blocking_grade(self) -> int:
+        """Findings derived exactly, and therefore permitted to block."""
+        return sum(count for name, count in self.confidences if name == "exact")
+
+    @property
+    def fix_rate(self) -> float:
+        """Share of findings gone by the next look. An observation, not a proof."""
+        seen = self.resolved + self.recurring
+        return self.resolved / seen if seen else 0.0
+
+    @property
+    def unverified_rate(self) -> float:
+        """Share of files nothing could analyse. The honesty metric."""
+        total = self.files_checked + self.files_skipped
+        return self.files_skipped / total if total else 0.0
 
     @property
     def compaction(self) -> float:
@@ -54,24 +98,121 @@ class Summary:
         return self.analysed_chars / self.prescription_chars
 
 
+#: Rules that mean the suite lost verification strength rather than shape.
+CONTRACT_RULES = frozenset({
+    "assertion_monotonicity", "vacuous_assertion",
+    "empty_test", "skip_marker", "disabled_assertion",
+})
+
+
 def summarise(events: list[Event]) -> Summary:
+    """Fold the ledger into one Summary. Every field here is measured."""
     if not events:
         return Summary()
-    durations = sorted(e.duration_ms for e in events)
-    rules = _rule_counts(events)
+    resolved, recurring = _outcomes(events)
     return Summary(
         verdicts=len(events),
-        findings=sum(e.findings for e in events),
-        rules=tuple(sorted(rules.items(), key=lambda kv: (-kv[1], kv[0]))),
-        statuses=tuple(sorted(Counter(e.status for e in events).items())),
-        surfaces=tuple(sorted(Counter(e.surface for e in events).items())),
-        prescription_chars=sum(e.prescription_chars for e in events),
-        analysed_chars=sum(e.analysed_chars for e in events),
-        files_checked=sum(e.files_checked for e in events),
-        files_skipped=sum(e.files_skipped for e in events),
-        total_ms=sum(durations),
-        median_ms=durations[len(durations) // 2],
+        resolved=resolved,
+        recurring=recurring,
+        **_sums(events),
+        **_timings(events),
+        **_groupings(events),
     )
+
+
+def _sums(events: list[Event]) -> dict:
+    """Plain totals across every event."""
+    return {
+        "findings": sum(e.findings for e in events),
+        "prescription_chars": sum(e.prescription_chars for e in events),
+        "analysed_chars": sum(e.analysed_chars for e in events),
+        "files_checked": sum(e.files_checked for e in events),
+        "files_skipped": sum(e.files_skipped for e in events),
+        "acknowledged": sum(e.acknowledged for e in events),
+    }
+
+
+def _timings(events: list[Event]) -> dict:
+    """Total, median and 95th percentile, from the sorted durations."""
+    durations = sorted(e.duration_ms for e in events)
+    last = len(durations) - 1
+    return {
+        "total_ms": sum(durations),
+        "median_ms": durations[len(durations) // 2],
+        "p95_ms": durations[min(last, int(len(durations) * 0.95))],
+    }
+
+
+def _groupings(events: list[Event]) -> dict:
+    """Every "by X" breakdown the report offers."""
+    rules = _rule_counts(events)
+    return {
+        "rules": tuple(sorted(rules.items(), key=lambda kv: (-kv[1], kv[0]))),
+        "statuses": tuple(sorted(Counter(e.status for e in events).items())),
+        "surfaces": tuple(sorted(Counter(e.surface for e in events).items())),
+        "severities": _tally(events, "severities"),
+        "confidences": _tally(events, "confidences"),
+        "languages": _tally(events, "languages"),
+        "agents": _by_agent(events),
+        "runs": len({e.run for e in events if e.run}),
+        "hotspots": _hotspots(events),
+    }
+
+
+def _tally(events: list[Event], field_name: str) -> tuple[tuple[str, int], ...]:
+    counts: Counter = Counter()
+    for event in events:
+        counts.update(getattr(event, field_name))
+    return tuple(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def _by_agent(events: list[Event], limit: int = 10) -> tuple[tuple[str, int], ...]:
+    """Findings attributed to each worker, worst first."""
+    counts: Counter = Counter()
+    for event in events:
+        if event.agent:
+            counts[event.agent] += event.findings
+    return tuple(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit])
+
+
+def _hotspots(events: list[Event], limit: int = 5) -> tuple[tuple[str, int], ...]:
+    counts: Counter = Counter()
+    for event in events:
+        for key in event.keys:
+            counts[key.split("::")[0]] += 1
+    return tuple(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:limit])
+
+
+def _outcomes(events: list[Event]) -> tuple[int, int]:
+    """Split findings into those later absent and those still there.
+
+    A finding counts as resolved when its file was analysed again afterwards
+    and the finding was gone. Files never looked at again are counted as
+    neither — silence is not evidence of a fix.
+
+    This is an *observation*, not a measurement of cause: something fixed the
+    finding, and it need not have been AegisFlow. Reported as such.
+    """
+    latest_for_file: dict[str, set] = {}
+    for event in events:
+        for path in event.checked:
+            latest_for_file[path] = set(event.keys)
+
+    ever: set = set()
+    for event in events:
+        ever.update(event.keys)
+
+    resolved = recurring = 0
+    for key in ever:
+        path = key.split("::")[0]
+        last = latest_for_file.get(path)
+        if last is None:
+            continue
+        if key in last:
+            recurring += 1
+        else:
+            resolved += 1
+    return resolved, recurring
 
 
 def _rule_counts(events: list[Event]) -> Counter:
@@ -81,126 +222,4 @@ def _rule_counts(events: list[Event]) -> Counter:
     return counts
 
 
-def render(summary: Summary) -> str:
-    """The human report, one block per kind of number."""
-    if not summary.verdicts:
-        return (
-            "No verifications recorded yet.\n\n"
-            "Run `aegisflow review` or let the hook see an edit, then try again.\n"
-            "Recording is local only and is switched off with\n"
-            '  "metrics": { "enabled": false }   in .aegisflow.json'
-        )
-
-    return "\n".join([
-        *_measured(summary), "",
-        *_architectural(summary), "",
-        *_estimated(summary),
-    ])
-
-
-def _measured(summary: Summary) -> list[str]:
-    out = [
-        "MEASURED — counted from what actually ran",
-        f"  verifications          {summary.verdicts:>10,}",
-        f"  reported something     {summary.caught:>10,}",
-        f"  findings               {summary.findings:>10,}",
-        f"  files checked          {summary.files_checked:>10,}",
-        f"  files not analysed     {summary.files_skipped:>10,}",
-        f"  time in verification   {_ms(summary.total_ms):>10}"
-        f"   (median {_ms(summary.median_ms)} per verdict)",
-    ]
-    if summary.rules:
-        out.append("")
-        out.append("  what it caught")
-        for rule, count in summary.rules:
-            out.append(f"    {rule:<26} {count:>6,}")
-    return out
-
-
-def _architectural(summary: Summary) -> list[str]:
-    out = [
-        "ARCHITECTURAL — true by construction, not measured",
-        f"  model calls made by AegisFlow          {0:>10,}",
-        f"  prescriptions assembled, not generated {summary.findings:>10,}",
-        f"  characters of critique produced free   {summary.prescription_chars:>10,}",
-    ]
-    if summary.compaction:
-        out.append(f"  {_compaction_line(summary.compaction)}")
-    return out
-
-
-def _compaction_line(ratio: float) -> str:
-    """How the critique compares in size to the code it describes.
-
-    Stated in whichever direction is true. On a small change the prescription is
-    legitimately *larger* than the code analysed, and rounding that to "0x
-    smaller" would be a nonsense number dressed as a win.
-    """
-    if ratio >= 1:
-        return f"critique is {ratio:,.1f}x smaller than the code it describes"
-    return (
-        f"critique is {1 / ratio:,.1f}x larger than the code analysed"
-        " — expected when changes are small"
-    )
-
-
-def _estimated(summary: Summary) -> list[str]:
-    judge_calls = summary.verdicts
-    judge_tokens = summary.analysed_chars // CHARS_PER_TOKEN
-    return [
-        "ESTIMATED — arithmetic on the measured bytes above",
-        "  If an LLM-as-judge had produced the same critiques:",
-        f"    model calls                          {judge_calls:>10,}"
-        "   (one per verdict, by construction)",
-        f"    input tokens                        ~{judge_tokens:>10,}"
-        f"   ({summary.analysed_chars:,} chars / {CHARS_PER_TOKEN})",
-        "",
-        f"  The token figure divides measured characters by {CHARS_PER_TOKEN}. Real",
-        "  tokenizers disagree; treat it as an order of magnitude, not a bill.",
-        "",
-        "NOT CLAIMED",
-        "  That your agent converges in fewer total model calls. That needs a",
-        "  benchmark against a real model, and it does not exist yet.",
-    ]
-
-
-def _ms(value: int) -> str:
-    if value < 1000:
-        return f"{value} ms"
-    return f"{value / 1000:.1f} s"
-
-
-def to_dict(summary: Summary) -> dict:
-    """The machine-readable form, tiered the same way as the report."""
-    return {
-        "measured": {
-            "verdicts": summary.verdicts,
-            "reported_something": summary.caught,
-            "findings": summary.findings,
-            "by_rule": dict(summary.rules),
-            "by_status": dict(summary.statuses),
-            "by_surface": dict(summary.surfaces),
-            "files_checked": summary.files_checked,
-            "files_skipped": summary.files_skipped,
-            "prescription_chars": summary.prescription_chars,
-            "analysed_chars": summary.analysed_chars,
-            "total_ms": summary.total_ms,
-            "median_ms": summary.median_ms,
-        },
-        "architectural": {
-            "model_calls_made": 0,
-            "prescriptions_assembled": summary.findings,
-            "compaction_ratio": round(summary.compaction, 1),
-        },
-        "estimated": {
-            "assumption": f"{CHARS_PER_TOKEN} characters per token",
-            "llm_judge_model_calls": summary.verdicts,
-            "llm_judge_input_tokens": summary.analysed_chars // CHARS_PER_TOKEN,
-        },
-        "not_claimed": [
-            "fewer total model calls to convergence; unbenchmarked",
-        ],
-    }
-
-
-__all__ = ["Summary", "summarise", "render", "to_dict"]
+__all__ = ["Summary", "summarise", "CONTRACT_RULES"]

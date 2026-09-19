@@ -4,7 +4,7 @@ import unittest
 
 from aegisflow.core.policy import Policy
 from aegisflow.core.verdict import Finding, Status, Verdict
-from aegisflow.speech import speak
+from aegisflow.speech import _WORDS, speak
 from aegisflow.verify import verify_change
 
 BEFORE = (
@@ -134,7 +134,16 @@ class TestToken(unittest.TestCase):
             self.assertFalse(self.confirmation.matches(spoken), spoken)
 
     def test_a_different_token_is_not_assent(self):
-        self.assertFalse(self.confirmation.matches("anchor beacon cobalt dynamo"))
+        """Every word in the list except the real one must be rejected.
+
+        Previously this named four words literally, which passed only while the
+        derived token happened not to be one of them — so any change to the
+        verdict shape could fail it for a reason unrelated to confirmation.
+        """
+        others = [w for w in _WORDS if w != self.confirmation.token]
+        self.assertEqual(len(others), len(_WORDS) - 1, "token must come from the list")
+        for word in others:
+            self.assertFalse(self.confirmation.matches(word), word)
 
     def test_none_input_is_not_assent(self):
         self.assertFalse(self.confirmation.matches(None))

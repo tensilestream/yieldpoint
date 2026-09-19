@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .mcp.clients import (
-    BY_KEY, CLIENTS, command_line, install as install_client, snippet,
+    BY_KEY, CLIENTS, UnwritableFormat, command_line, config_path,
+    install as install_client, snippet,
 )
 
 EXIT_OK, EXIT_ERROR = 0, 2
@@ -35,30 +36,26 @@ def mcp_command(args) -> int:
 def install_mcp(args) -> int:
     """Register the server with an editor, or show the snippet to paste."""
     if getattr(args, "list", False) or not getattr(args, "client", None):
-        print("Clients AegisFlow can configure:\n")
-        for client in CLIENTS:
-            note = f"  ({client.note})" if client.note else ""
-            print(f"  {client.key:16} {client.label:16} {client.scope}-level{note}")
-        print("\n  aegisflow install-mcp --client claude-code")
-        print("  aegisflow install-mcp --client cursor --show   # print, do not write")
-        print("\nPaths and formats are set by each vendor and do change; --show prints")
-        print("the snippet if you would rather wire it up yourself.")
-        return EXIT_OK
+        return _list_clients()
 
     client = BY_KEY.get(args.client)
     if client is None:
         print(f"aegisflow: unknown client {args.client!r}; try --list", file=sys.stderr)
         return EXIT_ERROR
 
+    override = Path(args.path) if getattr(args, "path", None) else None
     if getattr(args, "show", False):
-        from .mcp.clients import config_path
-
-        print(f"# {client.label}  ->  {config_path(client)}")
+        print(f"# {client.label}  ->  {override or config_path(client)}")
         print(snippet(client))
         return EXIT_OK
 
     try:
-        path, backup = install_client(client)
+        path, backup = install_client(client, path=override)
+    except UnwritableFormat as exc:
+        print(f"aegisflow: {exc}\n", file=sys.stderr)
+        print(f"# {client.label}  ->  {config_path(client)}")
+        print(snippet(client))
+        return EXIT_ERROR
     except OSError as exc:
         print(f"aegisflow: could not write configuration: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -67,6 +64,35 @@ def install_mcp(args) -> int:
         print(f"backed up existing configuration to {backup}")
     print(f"registered the AegisFlow MCP server for {client.label} in {path}")
     print("Restart the editor for it to connect.")
+    return EXIT_OK
+
+
+def _list_clients() -> int:
+    """Every client in the table, grouped by whether it can be written."""
+    writable = [c for c in CLIENTS if c.writable]
+    manual = [c for c in CLIENTS if not c.writable]
+
+    print("Clients AegisFlow can configure for you:\n")
+    for client in writable:
+        note = f"  ({client.note})" if client.note else ""
+        print(f"  {client.key:16} {client.label:24} {client.scope}-level{note}")
+
+    if manual:
+        print("\nClients configured in YAML or TOML — use --show and paste:\n")
+        for client in manual:
+            print(f"  {client.key:16} {client.label:24} {client.fmt.upper()}")
+
+    print("""
+  aegisflow install-mcp --client cursor              write it
+  aegisflow install-mcp --client codex --show        print it instead
+  aegisflow install-mcp --client cursor --path FILE  any location you like
+
+Not listed? Every MCP client takes the same stdio command. Print the snippet
+with --show and paste it wherever that client keeps its servers, or point
+--path at the file. `aegisflow mcp` is the part that matters.
+
+Vendors move these paths between releases, so treat the table as a convenience
+rather than an authority.""")
     return EXIT_OK
 
 

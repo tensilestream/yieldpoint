@@ -41,6 +41,8 @@ REPAIR  1 finding(s)
 - [`aegisflow review`](#aegisflow-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
 - [What it checks](#what-it-checks) · [Configuration](#configuration)
+- [Routing and gating](#routing-and-gating--decisions-instead-of-round-trips) · [Fan-out and long sessions](#fan-out-and-long-running-sessions)
+- [Examples](./examples/)
 - [Why deterministic](#why-deterministic) · [Is it helping?](#is-it-actually-helping--aegisflow-stats)
 - [How wrong is it?](#how-wrong-is-it--run-the-number-yourself)
 - [Status and limits](#status-and-limits) · [Why not an existing tool?](#why-not-just-use-something-that-exists)
@@ -323,6 +325,97 @@ It also detects **reward hacking**. If your agent's reward signal is "tests pass
 signal is gameable: the agent can win by weakening the test. If you run an eval harness or
 an RL loop over a coding agent, this is the check that tells you whether it solved the task
 or gamed the benchmark.
+
+## Routing and gating — decisions instead of round trips
+
+An agent loop is: a model decides, a tool runs, something judges the result, repeat. Two
+of those steps ask a model questions that are not language questions, and both can be
+computed instead.
+
+```python
+from aegisflow.harness import middleware, Change
+
+mw = middleware(policy=".aegisflow.json",
+                tiers={"small": "haiku", "standard": "sonnet", "capable": "opus"},
+                escalate_to="human-review")
+
+mw.model_name(Change(path, before, after))   # which model this work needs
+mw.before_tool("Edit", tool_input)           # allow or deny, before it runs
+```
+
+**Before the model** — how much model does this work actually need?
+
+| Work | Risk | Tier | Why |
+|---|---|---|---|
+| Reword a docstring | `trivial` | `small` | cosmetic and local |
+| Add a function and an import | `low` | `standard` | a normal edit |
+| Restructure a module | `moderate` | `capable` | structural change of real size |
+| Edit a protected test | `critical` | `human` | a weakening hides itself here |
+| Verified, mechanical, small | — | `none` | **no model call at all** |
+
+Each row costs one parse and no round trip. Asking a model which tier something is adds a
+round trip to save one, and answers differently next time.
+
+**Before the tool** — judge the edit, not the test run. A bad edit that lands costs the
+test run, the failure output, the model's reasoning about the failure, and the retry.
+Refusing it up front replaces all of that with one sentence naming what to restore.
+[`examples/harness_middleware.py`](./examples/harness_middleware.py) prints both halves
+with the character counts.
+
+**What it returns** are typed decisions, not prose — `Choice`, `Score`, `Gate` — each
+carrying the signals it was derived from, so a harness can log *why* it routed without
+asking anything to explain itself.
+
+**Two honest limits.** These read the *shape* of a change, never its meaning: a one-line
+edit to a payments calculation measures as `trivial` and is not. So the tier is a ceiling
+on cheapness — it says when the expensive model is unnecessary, never that a change is
+unimportant. And a question it cannot answer returns `unknown` rather than a plausible
+default, so a harness can fall back to a model instead of acting on a guess.
+
+Also available in-session as the `aegis_assess` MCP tool.
+
+---
+
+## Fan-out and long-running sessions
+
+A verifier for people building agents has to survive how agents are actually run: many
+workers on one repository, for hours.
+
+```python
+from aegisflow.verify import verify_change
+from examples.langgraph_fanout import pooled_subjects   # 20 lines, copy it
+
+covered = pooled_subjects(edits, policy)          # every subject in the change set
+verdicts = {
+    edit.agent: verify_change(edit.before, edit.after, edit.path, policy,
+                              also_covered=covered)
+    for edit in edits
+}
+```
+
+**Verify the change set, not each worker.** Worker A moves a test into a module worker B
+owns. Verified separately, A is reported as deleting an assertion and B as doing nothing —
+both wrong. `also_covered` tells each verification that a subject missing *here* may be
+verified *there*. [`examples/langgraph_fanout.py`](./examples/langgraph_fanout.py) shows
+the same edits scored both ways.
+
+**Label the workers.** Set `AEGISFLOW_RUN_ID` and `AEGISFLOW_AGENT` per worker and
+`aegisflow stats` reports findings per agent — so "the suite got weaker" becomes "worker 47
+keeps doing this".
+
+**What holds under load**, pinned by [`tests/test_concurrency.py`](./tests/test_concurrency.py):
+
+| | |
+|---|---|
+| Concurrent appends | Each event is one atomic append, capped below the POSIX atomic-write size. 12 processes × 6 rounds, zero interleaved lines. Nothing in the write path reads the file to rewrite it. |
+| The per-turn total | Folded incrementally from a cached byte offset, so it reads only what is new. Flat at ~1 ms whether the ledger holds 200 events or 20,000; a full re-read would be 680 ms at 20k. |
+| Stalled loops | `observe()` detects the same structural state recurring rather than counting supersteps, so a loop stops when it stops making progress rather than at an arbitrary N. |
+| Verification itself | No shared state, no clock, no network. Parallel-safe because it is a pure function of its inputs. |
+
+[`examples/long_running_session.py`](./examples/long_running_session.py) demonstrates both
+failure modes over 600 verdicts.
+
+---
 
 ## Is it actually helping? — `aegisflow stats`
 

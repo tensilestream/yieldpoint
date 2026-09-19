@@ -135,7 +135,7 @@ class TestSchemaContract(unittest.TestCase):
     """
 
     def test_schema_version_is_pinned(self):
-        self.assertEqual(SCHEMA_VERSION, 2)
+        self.assertEqual(SCHEMA_VERSION, 3)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .core.policy import Policy
+from .ledger import Run, record_run as _record
 from .core.verdict import Status, Verdict
 from .hook import blocks, decision_json, evaluate, read_payload, render
 from .verify import verify_change, verify_diff
@@ -26,31 +27,6 @@ EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 #: them differently. Only reached when the *whole* change was unanalysable; a
 #: change with one Python file among twenty TypeScript ones still exits OK.
 EXIT_UNVERIFIED = 3
-
-
-@dataclass(frozen=True)
-class _Run:
-    """What a surface knows about a verification that the verdict does not."""
-
-    surface: str
-    analysed: int
-    elapsed: int
-    root: str = "."
-
-
-def _record(verdict, run: _Run, policy) -> None:
-    """Append one ledger line. After the verdict, so it cannot change one."""
-    from . import ledger
-
-    if not ledger.enabled(policy):
-        return
-    ledger.record(
-        ledger.observe(
-            verdict, run.surface,
-            analysed_chars=run.analysed, duration_ms=run.elapsed,
-        ),
-        ledger.path_for(policy, run.root),
-    )
 
 
 def _exit_for(verdict) -> int:
@@ -92,7 +68,7 @@ def check(args) -> int:
         policy = policy.for_voice()
     with Timer() as timer:
         verdict = verify_change(before, after, args.path, policy)
-    _record(verdict, _Run("check", len(before or "") + len(after or ""),
+    _record(verdict, Run("check", len(before or "") + len(after or ""),
                           timer.elapsed_ms), policy)
     return _emit(verdict, args, policy,
                  deletions=() if after is not None else (args.path,))
@@ -135,14 +111,15 @@ def review_command(args) -> int:
 
     with Timer() as timer:
         verdict = verify_diff(diff.text, root=diff.root, policy=policy)
-    _record(verdict, _Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
+    _record(verdict, Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
     return _emit(verdict, args, policy)
 
 
 def stats_command(args) -> int:
     """Report what the ledger holds. Reads only; records nothing."""
     from . import ledger
-    from .stats import render, summarise, to_dict
+    from .report import render, to_dict
+    from .stats import summarise
 
     try:
         policy = Policy.load(args.policy)
@@ -192,7 +169,7 @@ def hook_command(args) -> int:
     if change.usable:
         _record(
             verdict,
-            _Run("hook", len(change.before or "") + len(change.after or ""),
+            Run("hook", len(change.before or "") + len(change.after or ""),
                  timer.elapsed_ms),
             Policy.load(args.policy),
         )
@@ -314,6 +291,16 @@ def _read_source(value: str | None) -> str | None:
     return Path(value).read_text(encoding="utf-8")
 
 
+def _running_total(policy: Policy, root: str = ".") -> str:
+    from . import ledger
+    from .report import running_line
+    from .totals import totals
+
+    if not ledger.enabled(policy):
+        return ""
+    return running_line(totals(ledger.path_for(policy, root)))
+
+
 def _print_human(verdict: Verdict, policy: Policy) -> None:
     for warning in policy.warnings:
         print(f"policy warning: {warning}", file=sys.stderr)
@@ -338,3 +325,6 @@ def _print_human(verdict: Verdict, policy: Policy) -> None:
         print(f"  {finding.file}:{finding.line}{symbol}  [{finding.rule}]")
         print(f"    {finding.detail}")
         print(f"    fix: {finding.prescription}\n")
+    total = _running_total(policy)
+    if total:
+        print(total)

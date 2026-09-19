@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
 DEFAULT_PATH = ".aegisflow/metrics.jsonl"
@@ -44,9 +44,16 @@ DEFAULT_PATH = ".aegisflow/metrics.jsonl"
 #: about precision. Every figure derived from it is labelled an estimate.
 CHARS_PER_TOKEN = 4
 
-#: Cap on the recorded file, in lines. The ledger is an accounting aid, not a
-#: data store, and an unbounded file in someone's repository is a bug.
-MAX_LINES = 20_000
+#: Cap on one serialised event, in bytes. This is a **correctness** limit, not
+#: tidiness. A POSIX ``O_APPEND`` write is atomic only up to the pipe buffer, so
+#: a line over that can interleave with another process's line and corrupt both.
+#: Three hundred agents appending concurrently is exactly when that happens, so
+#: the variable-length fields are trimmed until the line fits.
+MAX_LINE_BYTES = 3_500
+
+#: Rotate once the file passes this. The ledger is an accounting aid, not a data
+#: store, and an unbounded file in someone's repository is a bug.
+MAX_BYTES = 8_000_000
 
 
 @dataclass(frozen=True)
@@ -63,6 +70,37 @@ class Event:
     files_skipped: int = 0
     duration_ms: int = 0
 
+    severities: tuple[str, ...] = ()
+    """Status of each finding, so severity can be reported separately from count."""
+
+    confidences: tuple[str, ...] = ()
+    """How each finding was derived. Only ``exact`` may block, so the mix says
+    how much of the output is authoritative rather than advisory."""
+
+    languages: tuple[str, ...] = ()
+    """Extensions of the files analysed — the honest view of what coverage this
+    install actually has, given Python is the only exact analyser today."""
+
+    checked: tuple[str, ...] = ()
+    """Paths analysed, capped. Needed to tell a finding that was fixed from one
+    in a file nothing has looked at since."""
+
+    run: str = ""
+    """Groups every verdict from one orchestrated job. Set by the orchestrator
+    through ``AEGISFLOW_RUN_ID``; empty when nobody is coordinating."""
+
+    agent: str = ""
+    """Which worker produced this verdict, from ``AEGISFLOW_AGENT``. With a
+    fan-out of three hundred, "what did the suite look like" is far less useful
+    than "which agent keeps weakening it"."""
+
+    acknowledged: int = 0
+    """Findings a source comment answered. Counted so suppression stays visible."""
+
+    keys: tuple[str, ...] = ()
+    """``file::rule`` per finding, so the same problem can be recognised across
+    verdicts."""
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
 
@@ -78,23 +116,78 @@ class Event:
             files_checked=int(data.get("files_checked", 0)),
             files_skipped=int(data.get("files_skipped", 0)),
             duration_ms=int(data.get("duration_ms", 0)),
+            run=str(data.get("run", "")),
+            agent=str(data.get("agent", "")),
+            acknowledged=int(data.get("acknowledged", 0)),
+            severities=tuple(data.get("severities", ())),
+            confidences=tuple(data.get("confidences", ())),
+            languages=tuple(data.get("languages", ())),
+            checked=tuple(data.get("checked", ())),
+            keys=tuple(data.get("keys", ())),
         )
 
 
+#: Paths recorded per event. Bounded so one scan of a large repository cannot
+#: write a line long enough to matter.
+MAX_PATHS = 60
+
+
+@dataclass(frozen=True)
+class Who:
+    """Which orchestrated run and which worker produced a verdict."""
+
+    run: str = ""
+    agent: str = ""
+
+
+def identity() -> tuple[str, str]:
+    """``(run, agent)`` for this process, from the environment.
+
+    Read here rather than in ``core`` — this is a surface concern, and RULES.md
+    section 4 keeps environment reads out of the verification path. An
+    orchestrator fanning out sets these once per worker; a lone developer sets
+    neither and the fields stay empty.
+    """
+    return (
+        os.environ.get("AEGISFLOW_RUN_ID", "")[:64],
+        os.environ.get("AEGISFLOW_AGENT", "")[:64],
+    )
+
+
 def observe(verdict, surface: str, *, analysed_chars: int = 0,
-            duration_ms: int = 0) -> Event:
-    """Build the event for a verdict. Pure: no clock, no filesystem."""
+            duration_ms: int = 0, who: "Who | None" = None) -> Event:
+    """Build the event for a verdict. Pure: no clock, no filesystem.
+
+    ``who`` defaults to the environment, which is how a fan-out labels three
+    hundred workers without threading an identifier through every call site.
+    """
+    findings = verdict.findings
+    origin = who or Who(*identity())
     return Event(
+        run=origin.run,
+        agent=origin.agent,
         surface=surface,
         status=verdict.status.value,
-        findings=len(verdict.findings),
-        rules=tuple(sorted({f.rule for f in verdict.findings})),
+        findings=len(findings),
+        rules=tuple(sorted({f.rule for f in findings})),
         prescription_chars=len(verdict.prescription or ""),
         analysed_chars=analysed_chars,
         files_checked=len(verdict.checked),
         files_skipped=len(verdict.skipped),
         duration_ms=duration_ms,
+        acknowledged=len(getattr(verdict, "acknowledged", ())),
+        severities=tuple(sorted(f.status.value for f in findings)),
+        confidences=tuple(sorted(f.confidence.value for f in findings)),
+        languages=tuple(sorted({_language(path) for path in verdict.checked})),
+        checked=tuple(sorted(verdict.checked))[:MAX_PATHS],
+        keys=tuple(sorted({f"{f.file}::{f.rule}" for f in findings}))[:MAX_PATHS],
     )
+
+
+def _language(path: str) -> str:
+    """The extension, or ``other``. Not a language detector — a grouping key."""
+    _, _, suffix = path.rpartition(".")
+    return suffix.lower() if suffix and suffix != path else "other"
 
 
 def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
@@ -106,12 +199,34 @@ def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
     try:
         target = Path(path)
         _prepare(target.parent)
+        line = _fit(event)
+        # One atomic append. No read-modify-write anywhere in this path: with
+        # many agents writing at once, reading the file in order to rewrite it
+        # is how lines get lost.
         with target.open("a", encoding="utf-8") as handle:
-            handle.write(event.to_json() + "\n")
-        _trim(target)
+            handle.write(line)
+        _rotate(target)
         return True
     except (OSError, TypeError, ValueError):
         return False
+
+
+def _fit(event: Event) -> str:
+    """Serialise, trimming the variable-length fields until the line is atomic.
+
+    ``checked`` and ``keys`` are the only fields that grow with the size of the
+    change, so they are what gets shortened. Counts are never touched: a
+    shorter list is a smaller sample, a wrong count is a wrong number.
+    """
+    line = event.to_json()
+    while len(line.encode("utf-8")) > MAX_LINE_BYTES and (event.checked or event.keys):
+        event = replace(
+            event,
+            checked=event.checked[: max(0, len(event.checked) // 2)],
+            keys=event.keys[: max(0, len(event.keys) // 2)],
+        )
+        line = event.to_json()
+    return line + "\n"
 
 
 def _prepare(directory: Path) -> None:
@@ -127,25 +242,47 @@ def _prepare(directory: Path) -> None:
         marker.write_text("*\n", encoding="utf-8")
 
 
-def _trim(target: Path) -> None:
-    """Keep the file bounded, dropping the oldest lines."""
+def _rotate(target: Path) -> None:
+    """Move the file aside once it is large, keeping one previous generation.
+
+    Rotation is a single ``os.replace``, which is atomic, and only the process
+    that wins an exclusive lock file attempts it. Rewriting the file in place —
+    read the lines, drop the old ones, write it back — would silently discard
+    whatever other agents appended in between.
+    """
     try:
-        if target.stat().st_size < MAX_LINES * 120:
-            return  # cheap guard: only read the file when it could be too long
-        lines = target.read_text(encoding="utf-8").splitlines()
-        if len(lines) <= MAX_LINES:
+        if target.stat().st_size < MAX_BYTES:
             return
-        target.write_text("\n".join(lines[-MAX_LINES:]) + "\n", encoding="utf-8")
     except OSError:
         return
 
+    guard = target.with_suffix(target.suffix + ".rotating")
+    try:
+        handle = os.open(str(guard), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except OSError:
+        return  # another process is rotating; appending meanwhile is safe
+    try:
+        os.close(handle)
+        if target.stat().st_size >= MAX_BYTES:
+            os.replace(str(target), str(target) + ".1")
+    except OSError:
+        pass
+    finally:
+        try:
+            os.unlink(str(guard))
+        except OSError:
+            pass
+
 
 def load(path: str | Path = DEFAULT_PATH) -> list[Event]:
-    """Every recorded event. A missing or damaged file reads as no events."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return []
+    """Every recorded event, including the rotated generation.
+
+    A missing or damaged file reads as no events. A partial line — which an
+    append cannot produce, but a full disk can — is skipped without losing the
+    rest of the file.
+    """
+    target = Path(path)
+    text = _read(Path(str(target) + ".1")) + _read(target)
     events = []
     for line in text.splitlines():
         line = line.strip()
@@ -158,6 +295,40 @@ def load(path: str | Path = DEFAULT_PATH) -> list[Event]:
         if isinstance(data, dict):
             events.append(Event.from_dict(data))
     return events
+
+
+def _read(path: Path) -> str:
+    """File contents, or empty when it is absent or unreadable."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return ""
+
+
+@dataclass(frozen=True)
+class Run:
+    """What a surface knows about a verification that the verdict does not."""
+
+    surface: str
+    analysed: int
+    elapsed: int = 0
+    root: str = "."
+
+
+def record_run(verdict, run: Run, policy) -> bool:
+    """Record one verification. The single place every surface goes through.
+
+    Shared rather than repeated per surface: two copies of this drift, and a
+    ledger that counts differently depending on which door was used is worse
+    than no ledger.
+    """
+    if not enabled(policy):
+        return False
+    return record(
+        observe(verdict, run.surface, analysed_chars=run.analysed,
+                duration_ms=run.elapsed),
+        path_for(policy, run.root),
+    )
 
 
 class Timer:
@@ -193,6 +364,7 @@ def path_for(policy, root: str | Path = ".") -> Path:
 
 
 __all__ = [
-    "Event", "Timer", "observe", "record", "load", "enabled", "path_for",
-    "DEFAULT_PATH", "CHARS_PER_TOKEN", "MAX_LINES",
+    "Event", "Run", "Who", "Timer", "observe", "record", "record_run", "load",
+    "enabled", "path_for",
+    "DEFAULT_PATH", "CHARS_PER_TOKEN", "MAX_LINE_BYTES", "MAX_BYTES",
 ]

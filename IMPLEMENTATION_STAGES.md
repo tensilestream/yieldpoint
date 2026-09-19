@@ -832,6 +832,45 @@ installed binary — hook blocks a weakening, `aegisflow stats` shows it.
 
 ---
 
+## Stage 19 — fan-out, long sessions, and integration examples ✅
+
+The question was whether this survives the way agents are actually run: hundreds of
+workers on one repository, for hours. Three defects, each found by measuring rather than
+reasoning.
+
+**19.1 The per-turn total was quadratic.** Adding the footer in Stage 18 made every verdict
+re-read and re-summarise the whole ledger — O(events) per call, O(events²) over a session.
+Measured at 680 ms per verdict with 20,000 events. Now folded incrementally from a cached
+byte offset in `totals.py`: flat at ~1 ms at any size, with the cache distrusted on read so
+a stale or rotated one costs a full read rather than a wrong answer.
+
+**19.2 Ledger writes were unsafe under a fan-out.** The old trim read the file and wrote it
+back, discarding concurrent appends. Now one atomic append per event, capped below the
+POSIX atomic-write size, with rotation as an atomic rename behind an exclusive lock.
+Pinned by 12 real processes writing concurrently.
+
+**19.3 Isolated verification is wrong for a fan-out.** A test moved from worker A's file to
+worker B's reads as a deletion to A and a no-op to B. Both wrong, and neither worker can
+see it. `also_covered` already existed; `examples/langgraph_fanout.py` shows the same edits
+scored both ways and is asserted on in `tests/test_examples.py`.
+
+**Also.** Per-agent attribution through `AEGISFLOW_RUN_ID`/`AEGISFLOW_AGENT`; source-level
+acknowledgements (`# aegisflow: allow <rule> - <reason>`, one rule, reason required,
+counted in stats) so an intentional change is answerable without switching the rule off;
+`UNVERIFIED` exported from the LangGraph package, which it never was.
+
+**Ten examples**, from LangGraph to a thirty-line plain loop, with `tests/test_examples.py`
+running the standalone ones and checking that the framework ones import lazily.
+
+**Gate.** 581 tests. Corpus unchanged at 0/0. Self-audit 23 — six new modules across two
+stages, none adding a finding.
+
+**Worth keeping.** Every defect in this stage came from measuring the thing under load, not
+from reading the code. The quadratic footer was written, reviewed and tested three stages
+in a row without anyone noticing, because at twenty events it is free.
+
+---
+
 ## Not scheduled
 
 TypeScript analysis (lexical, cannot block — enforced by `Finding.__post_init__`), MCP

@@ -18,7 +18,7 @@ from typing import Callable, Iterable, Mapping
 from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
-from .core import boundaries, glob, monotonicity, refactor, structure, workflows
+from .core import acknowledge, boundaries, glob, monotonicity, refactor, structure, workflows
 from .core.assertions import extract
 from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
 from .core.linters import report as lintreport
@@ -102,8 +102,9 @@ def verify_change(
     checked.extend(c for c in contract.checked if c not in checked)
     skipped.extend(contract.skipped)
 
+    kept, answered = acknowledge.apply(contractrules.deduplicate(findings), after)
     return Verdict.of(
-        contractrules.deduplicate(findings), checked=checked, skipped=skipped
+        kept, checked=checked, skipped=skipped, acknowledged=answered
     )
 
 
@@ -132,14 +133,19 @@ def verify_diff(
     covered = _pool(states, resolved)
     defined = _pool_definitions(states)
 
-    for path, before, after in states:
-        verdict = verdict.merge(
+    # Combined in one pass: folding merge over a large change set re-sorts
+    # every finding on every step, which is quadratic (see Verdict.combine).
+    return Verdict.combine([
+        verdict,
+        *(
             verify_change(
                 before, after, path, resolved,
                 also_covered=covered, also_defined=defined,
             )
-        )
-    return verdict.merge(_change_size(states, resolved))
+            for path, before, after in states
+        ),
+        _change_size(states, resolved),
+    ])
 
 
 def _change_size(states, policy: Policy) -> Verdict:

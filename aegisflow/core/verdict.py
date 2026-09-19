@@ -14,7 +14,7 @@ from enum import Enum
 from typing import Any, Iterable, Sequence
 
 #: Incremented on any breaking change to the serialised verdict shape.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class Status(str, Enum):
@@ -194,6 +194,12 @@ class Verdict:
     findings: tuple[Finding, ...] = field(default_factory=tuple)
     checked: tuple[str, ...] = field(default_factory=tuple)
     skipped: tuple[str, ...] = field(default_factory=tuple)
+    acknowledged: tuple[Finding, ...] = field(default_factory=tuple)
+    """Findings a source comment answered, kept rather than dropped.
+
+    Silently discarding them is how a suppression mechanism rots: nobody can
+    see that a rule has stopped reporting, or that one file is answering it
+    twenty times. Counted by ``aegisflow stats``."""
 
     @classmethod
     def of(
@@ -202,6 +208,7 @@ class Verdict:
         *,
         checked: Sequence[str] = (),
         skipped: Sequence[str] = (),
+        acknowledged: Sequence[Finding] = (),
     ) -> "Verdict":
         """Build a verdict, deriving status from the most severe finding.
 
@@ -215,6 +222,7 @@ class Verdict:
             findings=ordered,
             checked=tuple(sorted(checked)),
             skipped=tuple(sorted(skipped)),
+            acknowledged=tuple(sorted(acknowledged, key=lambda f: f.sort_key)),
         )
 
     def __bool__(self) -> bool:
@@ -228,11 +236,34 @@ class Verdict:
     def for_rule(self, rule: str) -> tuple[Finding, ...]:
         return tuple(f for f in self.findings if f.rule == rule)
 
+    @classmethod
+    def combine(cls, verdicts: Iterable["Verdict"]) -> "Verdict":
+        """Merge many verdicts in one pass.
+
+        ``merge`` builds a new verdict each time, and building one sorts every
+        finding and path it holds. Folding ``merge`` across a list is therefore
+        quadratic: at twelve thousand files that was eight seconds of pure
+        re-sorting, which is most of a large scan. Collect first, sort once.
+        """
+        findings: list[Finding] = []
+        checked: list[str] = []
+        skipped: list[str] = []
+        acknowledged: list[Finding] = []
+        for verdict in verdicts:
+            findings.extend(verdict.findings)
+            checked.extend(verdict.checked)
+            skipped.extend(verdict.skipped)
+            acknowledged.extend(verdict.acknowledged)
+        return cls.of(
+            findings, checked=checked, skipped=skipped, acknowledged=acknowledged
+        )
+
     def merge(self, other: "Verdict") -> "Verdict":
         return Verdict.of(
             self.findings + other.findings,
             checked=self.checked + other.checked,
             skipped=self.skipped + other.skipped,
+            acknowledged=self.acknowledged + other.acknowledged,
         )
 
     def demote(self, ceiling: Status) -> "Verdict":
@@ -267,6 +298,7 @@ class Verdict:
             "findings": [f.to_dict() for f in self.findings],
             "checked": list(self.checked),
             "skipped": list(self.skipped),
+            "acknowledged": [f.to_dict() for f in self.acknowledged],
         }
 
     def to_json(self, *, indent: int | None = None) -> str:

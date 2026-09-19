@@ -16,6 +16,7 @@ import json
 from typing import Any, Callable
 
 from ..core.policy import Policy
+from ..ledger import Run, record_run
 from ..core.verdict import Verdict
 from ..verify import verify_change, verify_diff
 
@@ -90,6 +91,26 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "aegis_assess",
+        "title": "How risky is this change, and how much model does it need",
+        "description": (
+            "Classify a proposed edit before doing it: a risk level, the amount of "
+            "model the work needs, and the measured signals behind both. Computed "
+            "from the syntax tree, so it costs nothing and answers the same way "
+            "every time. Use it to decide whether to escalate or to keep going."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": _FILE,
+                "before": {"type": "string", "description": "Current content, omit if new."},
+                "after": {"type": "string", "description": "Proposed content."},
+                "task": {"type": "string", "description": "What you were asked to do."},
+            },
+            "required": ["path", "after"],
+        },
+    },
+    {
         "name": "aegis_stats",
         "title": "What AegisFlow has caught and what it cost",
         "description": (
@@ -120,20 +141,53 @@ def call(name: str, arguments: dict[str, Any], policy: Policy) -> tuple[str, dic
     if handler is None:
         return f"Unknown tool: {name}", {}, True
     try:
-        return handler(arguments or {}, policy)
+        text, structured, is_error = handler(arguments or {}, policy)
     except Exception as exc:  # a tool error must not take the server down
         return f"{name} failed: {exc}", {}, True
+    return _with_running_total(name, text, arguments, policy), structured, is_error
+
+
+def _with_running_total(name: str, text: str, arguments: dict, policy: Policy) -> str:
+    """Append the running total to every verdict the agent reads.
+
+    Nobody runs a second command to find out whether the first was worth it, so
+    the total rides along. Skipped for aegis_stats, which is the total, and for
+    errors, where a footer is noise on top of a problem.
+    """
+    if name == "aegis_stats":
+        return text
+    from .. import ledger
+    from ..report import running_line
+    from ..totals import totals
+
+    if not ledger.enabled(policy):
+        return text
+    line = running_line(totals(
+        ledger.path_for(policy, arguments.get("root") or ".")
+    ))
+    return f"{text}\n\n{line}" if line else text
 
 
 def _verify_change(arguments: dict, policy: Policy):
-    verdict = verify_change(
-        arguments.get("before"), arguments.get("after"), arguments.get("path", ""), policy
-    )
+    from ..ledger import Timer
+
+    before, after = arguments.get("before"), arguments.get("after")
+    with Timer() as timer:
+        verdict = verify_change(before, after, arguments.get("path", ""), policy)
+    record_run(verdict, Run("mcp:verify_change",
+                            len(before or "") + len(after or ""),
+                            timer.elapsed_ms), policy)
     return _render(verdict), verdict.to_dict(), False
 
 
 def _verify_diff(arguments: dict, policy: Policy):
-    verdict = verify_diff(arguments.get("diff", ""), arguments.get("root") or ".", policy)
+    from ..ledger import Timer
+
+    diff = arguments.get("diff", "")
+    root = arguments.get("root") or "."
+    with Timer() as timer:
+        verdict = verify_diff(diff, root, policy)
+    record_run(verdict, Run("mcp:verify_diff", len(diff), timer.elapsed_ms, root), policy)
     return _render(verdict), verdict.to_dict(), False
 
 
@@ -150,7 +204,12 @@ def _review(arguments: dict, policy: Policy):
         # ordinary answers, and returning is_error would make the agent retry.
         return diff.reason, {"status": "unverified", "reason": diff.reason}, False
 
-    verdict = verify_diff(diff.text, root=diff.root, policy=policy)
+    from ..ledger import Timer
+
+    with Timer() as timer:
+        verdict = verify_diff(diff.text, root=diff.root, policy=policy)
+    record_run(verdict, Run("mcp:review", len(diff.text), timer.elapsed_ms,
+                            diff.root), policy)
     return _render(verdict), verdict.to_dict(), False
 
 
@@ -162,9 +221,29 @@ def _scan(arguments: dict, policy: Policy):
     return text, result.verdict.to_dict(), False
 
 
+def _assess(arguments: dict, policy: Policy):
+    from ..harness import Change, middleware
+
+    change = Change(
+        path=arguments.get("path", ""),
+        before=arguments.get("before"),
+        after=arguments.get("after"),
+        task=arguments.get("task", ""),
+    )
+    result = middleware(policy).assess(change)
+    text = (
+        f"risk: {result['risk']['value']} — {result['risk']['reason']}\n"
+        f"tier: {result['tier']['value']} — {result['tier']['reason']}\n"
+        f"churn: {result['signals']['churn']} lines, "
+        f"structural: {result['signals']['structural']}"
+    )
+    return text, result, False
+
+
 def _stats(arguments: dict, policy: Policy):
     from .. import ledger
-    from ..stats import render, summarise, to_dict
+    from ..report import render, to_dict
+    from ..stats import summarise
 
     root = arguments.get("root") or "."
     summary = summarise(ledger.load(ledger.path_for(policy, root)))
@@ -229,6 +308,7 @@ _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
     "aegis_verify_diff": _verify_diff,
     "aegis_review": _review,
     "aegis_scan": _scan,
+    "aegis_assess": _assess,
     "aegis_stats": _stats,
     "aegis_policy": _policy,
 }
