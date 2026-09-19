@@ -9,6 +9,12 @@ have to hold, and each was a real defect before it was a test.
    read on *every* verdict, so recomputing it from the whole file is O(events
    squared) over a session.
 3. Nothing in the write path reads the file in order to rewrite it.
+4. The cross-process lock really excludes. Appends were lost on Windows for
+   weeks because append mode there is seek-then-write, and a lost write raises
+   nothing at all — so the CI failure looked like flakiness and three rounds of
+   retry tuning could not have fixed it. Asserting mutual exclusion directly
+   means the next such defect fails on every platform, not only the one nobody
+   develops on.
 """
 
 from __future__ import annotations
@@ -22,7 +28,7 @@ import time
 import unittest
 from pathlib import Path
 
-from yieldpoint import ledger
+from yieldpoint import filelock, ledger
 from yieldpoint.core.verdict import Confidence, Finding, Status, Verdict
 from yieldpoint.totals import totals
 
@@ -42,6 +48,24 @@ v = Verdict.of(
 )
 for _ in range(rounds):
     ledger.record(ledger.observe(v, agent, analysed_chars=2048), path)
+""" % str(ROOT)
+
+
+#: Read-modify-write on a shared counter: the classic way to see a lock that is
+#: not excluding. Without mutual exclusion, two processes read the same value
+#: and the increments collide, so the total comes up short.
+COUNTER = """
+import sys, time
+sys.path.insert(0, %r)
+from yieldpoint import filelock
+path, rounds = sys.argv[1], int(sys.argv[2])
+for _ in range(rounds):
+    with filelock.exclusive(path):
+        with open(path) as handle:
+            value = int(handle.read() or 0)
+        time.sleep(0.001)          # widen the window a real race would need
+        with open(path, "w") as handle:
+            handle.write(str(value + 1))
 """ % str(ROOT)
 
 
@@ -109,6 +133,27 @@ class TestConcurrentWriters(unittest.TestCase):
         self.assertEqual(len(lines), workers * rounds)
         for line in lines:
             json.loads(line)  # raises here if two writes interleaved
+
+
+class TestTheLockExcludes(unittest.TestCase):
+    """The lock itself, separate from the ledger that depends on it."""
+
+    def test_no_two_processes_are_inside_at_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "counter.py"
+            script.write_text(COUNTER, encoding="utf-8")
+            counter = Path(tmp) / "count"
+            counter.write_text("0", encoding="utf-8")
+
+            workers, rounds = 8, 5
+            procs = [
+                subprocess.Popen([sys.executable, str(script), str(counter), str(rounds)])
+                for _ in range(workers)
+            ]
+            for proc in procs:
+                proc.wait(timeout=120)
+
+            self.assertEqual(int(counter.read_text()), workers * rounds)
 
 
 class TestRunningTotalStaysCheap(unittest.TestCase):

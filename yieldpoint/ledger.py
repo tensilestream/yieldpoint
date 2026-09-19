@@ -39,6 +39,8 @@ import time
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
+from . import filelock
+
 DEFAULT_PATH = ".yieldpoint/metrics.jsonl"
 _APPEND_LOCK = threading.Lock()
 
@@ -211,22 +213,35 @@ def stamp(event: Event) -> Event:
     return event if event.at else replace(event, at=int(time.time()))
 
 
+def _write_once(target: Path, line: str) -> None:
+    """One append, under the cross-process lock. Closed before the lock drops."""
+    with filelock.exclusive(target):
+        with target.open("a", encoding="utf-8") as handle:
+            handle.write(line)
+
+
 def _append(target: Path, line: str) -> None:
-    # On Windows, concurrent opens across threads/processes can raise
-    # PermissionError (sharing violation). A thread lock protects the
-    # in-process fan-out, and a retry loop handles cross-process contention.
+    """Add one line, losing nothing to a concurrent writer.
+
+    Two locks, because there are two kinds of race. ``_APPEND_LOCK`` serialises
+    the threads of this process; ``filelock.exclusive`` serialises the processes on
+    this machine. The handle is closed inside the lock, so the bytes have reached the
+    operating system before the next writer is admitted.
+
+    The retry is a backstop for a genuine sharing violation — a virus scanner
+    holding the file open for a moment — and nothing more. It deliberately no
+    longer carries the weight of correctness: a lost append raises nothing, so a
+    race that retries can never have been fixed by retrying.
+    """
     with _APPEND_LOCK:
-        for attempt in range(500):
+        for attempt in range(50):
             try:
-                with target.open("a", encoding="utf-8") as handle:
-                    handle.write(line)
+                _write_once(target, line)
                 return
             except (PermissionError, FileNotFoundError):
-                if attempt == 499:
+                if attempt == 49:
                     raise
-                jitter = 0.005 * ((os.getpid() + attempt) % 7 + 1)
-                backoff = min(0.08, 0.005 * (1.15 ** min(attempt, 20)))
-                time.sleep(backoff + jitter)
+                time.sleep(min(0.05, 0.002 * (1.3 ** attempt)))
 
 
 def record(event: Event, path: str | Path = DEFAULT_PATH) -> bool:
