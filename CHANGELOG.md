@@ -10,6 +10,19 @@ package version is not.
 
 ## [Unreleased]
 
+## [0.1.3] — unreleased
+
+### Added
+
+- **Developer evaluation walkthrough.** The README and getting-started page now show a
+  disposable-repository smoke test: establish a baseline, weaken an assertion, and see
+  both `yieldpoint review` and the pre-commit gate reject it.
+- **Search discovery files for the documentation site.** The docs build now publishes
+  `robots.txt` and a sitemap for the public GitHub Pages URLs, along with per-page
+  canonical URLs, descriptions, sharing metadata, and homepage software metadata.
+- **Google Search Console verification file** at the documentation-site root, retained
+  after verification so ownership remains valid.
+
 ## [0.1.2] — unreleased
 
 ### Added
