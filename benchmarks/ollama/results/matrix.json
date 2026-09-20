@@ -1,0 +1,363 @@
+{
+  "summary": {
+    "scenarios": 24,
+    "distinct_rules": [
+      "assertion_monotonicity",
+      "boundary_violation",
+      "change_too_large",
+      "ci_check_disabled",
+      "ci_check_removed",
+      "complexity_too_high",
+      "dangling_reference",
+      "disabled_assertion",
+      "duplicate_implementation",
+      "empty_test",
+      "export_removed",
+      "file_too_long",
+      "function_too_long",
+      "nesting_too_deep",
+      "skip_marker",
+      "too_many_parameters",
+      "utility_module",
+      "vacuous_assertion"
+    ],
+    "must_fire": 18,
+    "fired_as_claimed": 18,
+    "must_stay_clean": 6,
+    "stayed_clean": 6,
+    "mismatches": [],
+    "total_ms": 11.1,
+    "model_calls": 0,
+    "tokens": 0
+  },
+  "results": [
+    {
+      "action": "new file",
+      "name": "a utility dump",
+      "intent": "park the helpers in utils.py for now",
+      "path": "src/utils.py",
+      "expect": "utility_module",
+      "rules": [
+        "utility_module"
+      ],
+      "status": "repair",
+      "detail": "`utils` is a catch-all module name.",
+      "prescription": "Name the module for its single responsibility. A utility dump accumulates unrelated code because nothing in the name excludes anything.",
+      "ms": 5.155
+    },
+    {
+      "action": "new file",
+      "name": "a module past the length limit",
+      "intent": "generate the whole thing in one file",
+      "path": "src/big.py",
+      "expect": "file_too_long",
+      "rules": [
+        "file_too_long"
+      ],
+      "status": "repair",
+      "detail": "src/big.py has 60 lines of code, over the limit of 40.",
+      "prescription": "Split it into modules with one responsibility each. A file this size usually has more than one reason to change.",
+      "ms": 0.461
+    },
+    {
+      "action": "new file",
+      "name": "a well-formed module",
+      "intent": "the same job, done properly",
+      "path": "src/parser.py",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.323
+    },
+    {
+      "action": "new method",
+      "name": "a method past the length limit",
+      "intent": "inline every step rather than naming them",
+      "path": "src/svc.py",
+      "expect": "function_too_long",
+      "rules": [
+        "function_too_long"
+      ],
+      "status": "repair",
+      "detail": "`process` has 22 lines, over the limit of 12.",
+      "prescription": "Extract the distinct steps into named functions.",
+      "ms": 0.462
+    },
+    {
+      "action": "new method",
+      "name": "too many parameters",
+      "intent": "thread every option through the signature",
+      "path": "src/svc.py",
+      "expect": "too_many_parameters",
+      "rules": [
+        "too_many_parameters"
+      ],
+      "status": "repair",
+      "detail": "`send` has 6 parameters, over the limit of 4.",
+      "prescription": "Group related parameters into a value object, or split the function.",
+      "ms": 0.151
+    },
+    {
+      "action": "new method",
+      "name": "nesting too deep",
+      "intent": "handle each case with another level of indent",
+      "path": "src/svc.py",
+      "expect": "nesting_too_deep",
+      "rules": [
+        "nesting_too_deep"
+      ],
+      "status": "repair",
+      "detail": "`f` has 4 levels of nesting, over the limit of 3.",
+      "prescription": "Return early, or extract the inner block into its own function.",
+      "ms": 0.154
+    },
+    {
+      "action": "new method",
+      "name": "branching past the complexity limit",
+      "intent": "one if per case",
+      "path": "src/svc.py",
+      "expect": "complexity_too_high",
+      "rules": [
+        "complexity_too_high",
+        "function_too_long"
+      ],
+      "status": "repair",
+      "detail": "`route` has 9 branches, over the limit of 5.",
+      "prescription": "Split the decision into smaller functions, or replace the branching with a lookup.",
+      "ms": 0.118
+    },
+    {
+      "action": "new method",
+      "name": "a second copy of an existing one",
+      "intent": "copy the working function and rename it",
+      "path": "src/svc.py",
+      "expect": "duplicate_implementation",
+      "rules": [
+        "duplicate_implementation"
+      ],
+      "status": "repair",
+      "detail": "`sum_payments` is structurally identical to `sum_invoices` (line 4).",
+      "prescription": "Extract the shared implementation. Two copies drift apart, and a fix applied to one is a bug left in the other.",
+      "ms": 0.133
+    },
+    {
+      "action": "new method",
+      "name": "a method added cleanly",
+      "intent": "small, named, one job",
+      "path": "src/svc.py",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.085
+    },
+    {
+      "action": "rewrite a method",
+      "name": "renamed, caller left behind",
+      "intent": "rename the function and miss a call site",
+      "path": "src/svc.py",
+      "expect": "dangling_reference",
+      "rules": [
+        "dangling_reference"
+      ],
+      "status": "repair",
+      "detail": "`compute` is used here but nothing in this module defines or imports it.",
+      "prescription": "Import `compute` from wherever it now lives, restore its definition, or update the reference to the name it was renamed to. A refactor that moves a definition must move or update every use of it.",
+      "ms": 0.107
+    },
+    {
+      "action": "rewrite a method",
+      "name": "dropped from the public API",
+      "intent": "delete what looked unused",
+      "path": "src/svc.py",
+      "expect": "export_removed",
+      "rules": [
+        "export_removed"
+      ],
+      "status": "repair",
+      "detail": "`public_api` was part of this module's public API and is now gone.",
+      "prescription": "Restore `public_api`, or re-export it from wherever it moved. If removing it is intended, say so explicitly \u2014 callers outside this change set still import it.",
+      "ms": 0.133
+    },
+    {
+      "action": "rewrite a method",
+      "name": "reaches across an architectural boundary",
+      "intent": "import the web layer from the core to get at a helper",
+      "path": "src/core/engine.py",
+      "expect": "boundary_violation",
+      "rules": [
+        "boundary_violation"
+      ],
+      "status": "repair",
+      "detail": "`src/core/engine.py` is in zone `core`, which may not import `src.web` (matches `src.web`).",
+      "prescription": "The core must not depend on the web layer or the network.",
+      "ms": 0.31
+    },
+    {
+      "action": "rewrite a method",
+      "name": "renamed, every caller updated",
+      "intent": "the same rename, done completely",
+      "path": "src/svc.py",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.086
+    },
+    {
+      "action": "edit a test",
+      "name": "assertion weakened",
+      "intent": "swap the exact comparison for a truthiness check",
+      "path": "tests/test_x.py",
+      "expect": "assertion_monotonicity",
+      "rules": [
+        "assertion_monotonicity"
+      ],
+      "status": "block",
+      "detail": "Assertion on total was weakened: eq -> truthy.",
+      "prescription": "Re-assert total at eq strength, or fix the code under test so the original assertion passes. Restore `assert total == 42`.",
+      "ms": 0.265
+    },
+    {
+      "action": "edit a test",
+      "name": "assertion made vacuous",
+      "intent": "assert something that cannot fail",
+      "path": "tests/test_x.py",
+      "expect": "vacuous_assertion",
+      "rules": [
+        "assertion_monotonicity",
+        "vacuous_assertion"
+      ],
+      "status": "block",
+      "detail": "`assert True` is a tautology and can never fail.",
+      "prescription": "Assert something about the value under test, or delete the line. A tautology makes the suite green without verifying anything.",
+      "ms": 0.362
+    },
+    {
+      "action": "edit a test",
+      "name": "test emptied out",
+      "intent": "leave the name, drop the body",
+      "path": "tests/test_x.py",
+      "expect": "empty_test",
+      "rules": [
+        "empty_test"
+      ],
+      "status": "block",
+      "detail": "test_total has no body and verifies nothing.",
+      "prescription": "Give test_total assertions, or remove it.",
+      "ms": 0.18
+    },
+    {
+      "action": "edit a test",
+      "name": "test skipped",
+      "intent": "mark it flaky and move on",
+      "path": "tests/test_x.py",
+      "expect": "skip_marker",
+      "rules": [
+        "skip_marker"
+      ],
+      "status": "block",
+      "detail": "test_total is skipped (pytest.mark.skip(reason='flaky')).",
+      "prescription": "Remove the skip marker from test_total and make it pass, or delete the test deliberately rather than disabling it.",
+      "ms": 0.203
+    },
+    {
+      "action": "edit a test",
+      "name": "failure swallowed",
+      "intent": "wrap the body so the assertion can never fail",
+      "path": "tests/test_x.py",
+      "expect": "disabled_assertion",
+      "rules": [
+        "assertion_monotonicity",
+        "disabled_assertion"
+      ],
+      "status": "block",
+      "detail": "`assert total == 42` cannot fail: it is unreachable, or its exception is swallowed.",
+      "prescription": "Remove the swallowing handler or the unreachable guard so this assertion can fail again.",
+      "ms": 0.18
+    },
+    {
+      "action": "edit a test",
+      "name": "assertion strengthened",
+      "intent": "tighten a loose check \u2014 the opposite direction",
+      "path": "tests/test_x.py",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.155
+    },
+    {
+      "action": "edit a test",
+      "name": "one test split into two",
+      "intent": "same assertions, better named",
+      "path": "tests/test_x.py",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.447
+    },
+    {
+      "action": "edit CI",
+      "name": "a check removed",
+      "intent": "drop the step that keeps failing",
+      "path": ".github/workflows/ci.yml",
+      "expect": "ci_check_removed",
+      "rules": [
+        "ci_check_removed"
+      ],
+      "status": "repair",
+      "detail": "CI no longer runs `ruff check .`.",
+      "prescription": "Restore the step. If the check is genuinely obsolete, remove it in a change that says so \u2014 a build that stops running a check still reports green.",
+      "ms": 0.227
+    },
+    {
+      "action": "edit CI",
+      "name": "a job disabled",
+      "intent": "switch the job off rather than fix it",
+      "path": ".github/workflows/ci.yml",
+      "expect": "ci_check_disabled",
+      "rules": [
+        "ci_check_disabled"
+      ],
+      "status": "repair",
+      "detail": "`pytest` can no longer fail the build (the job is gated on false).",
+      "prescription": "Remove the suppression and fix the underlying failure. A step that cannot fail is a step that is not running.",
+      "ms": 0.086
+    },
+    {
+      "action": "edit CI",
+      "name": "a check added",
+      "intent": "more verification, not less",
+      "path": ".github/workflows/ci.yml",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.075
+    },
+    {
+      "action": "one big change",
+      "name": "a change too large to review",
+      "intent": "land 1,600 lines across 4 files at once",
+      "path": "4 files",
+      "expect": "change_too_large",
+      "rules": [
+        "change_too_large",
+        "file_too_long"
+      ],
+      "status": "repair",
+      "detail": "This change adds 1600 lines across 4 files, over the limit of 1200.",
+      "prescription": "Split it into changes that can each be reviewed and reverted independently. A change this size is approved rather than read.",
+      "ms": 1.244
+    }
+  ]
+}

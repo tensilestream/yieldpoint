@@ -1,0 +1,165 @@
+{
+  "repository": "yieldpoint",
+  "commits_replayed": 44,
+  "commits_flagged": 17,
+  "commits_a_correctness_rule_would_have_stopped": 7,
+  "seconds": 5.5,
+  "model_calls": 0,
+  "tokens": 0,
+  "stopped": [
+    {
+      "sha": "9e3cd97d13",
+      "subject": "[feat] Verify linters",
+      "rules": [
+        "skip_marker"
+      ],
+      "findings": [
+        {
+          "rule": "skip_marker",
+          "file": "tests/test_linters.py",
+          "line": 172,
+          "detail": "TestVerifyIntegration.test_ruff_findings_are_external_and_advisory is skipped (unittest.skipIf(shutil.which('ruff') is None, 'ruff not installed')).",
+          "before": "unittest.skipIf(shutil.which('ruff') is None, 'ruff not installed')",
+          "prescription": "Remove the skip marker from TestVerifyIntegration.test_ruff_findings_are_external_and_advisory and make it pass, or delete the test deliberately rather than disabling it."
+        },
+        {
+          "rule": "skip_marker",
+          "file": "tests/test_linters.py",
+          "line": 182,
+          "detail": "TestVerifyIntegration.test_clean_file_produces_no_lint_findings is skipped (unittest.skipIf(shutil.which('ruff') is None, 'ruff not installed')).",
+          "before": "unittest.skipIf(shutil.which('ruff') is None, 'ruff not installed')",
+          "prescription": "Remove the skip marker from TestVerifyIntegration.test_clean_file_produces_no_lint_findings and make it pass, or delete the test deliberately rather than disabling it."
+        },
+        {
+          "rule": "skip_marker",
+          "file": "tests/test_linters.py",
+          "line": 187,
+          "detail": "TestVerifyIntegration.test_lint_and_test_contract_findings_coexist is skipped (unittest.skipIf(shutil.which('ruff') is None, 'ruff not installed')).",
+          "before": "unittest.skipIf(shutil.which('ruff') is None, 'ruff not installed')",
+          "prescription": "Remove the skip marker from TestVerifyIntegration.test_lint_and_test_contract_findings_coexist and make it pass, or delete the test deliberately rather than disabling it."
+        }
+      ]
+    },
+    {
+      "sha": "e15957ecd5",
+      "subject": "[feat]  LangGraph node",
+      "rules": [
+        "empty_test"
+      ],
+      "findings": [
+        {
+          "rule": "empty_test",
+          "file": "tests/test_langgraph.py",
+          "line": 50,
+          "detail": "TestNode.test_state_is_serialisable_for_checkpointers runs code but asserts nothing.",
+          "before": null,
+          "prescription": "Add an assertion to TestNode.test_state_is_serialisable_for_checkpointers that can fail."
+        }
+      ]
+    },
+    {
+      "sha": "97b91c8185",
+      "subject": "[feat] core metrics",
+      "rules": [
+        "assertion_monotonicity"
+      ],
+      "findings": [
+        {
+          "rule": "assertion_monotonicity",
+          "file": "tests/test_linters.py",
+          "line": 195,
+          "detail": "Assertion on _lint_rule(item) was removed.",
+          "before": "self.assertEqual(_lint_rule(item), 'lint.ruff-format.format')",
+          "prescription": "Re-assert _lint_rule(item) at eq strength, or fix the code under test so the original assertion passes. Restore `self.assertEqual(_lint_rule(item), 'lint.ruff-format.format')`."
+        },
+        {
+          "rule": "assertion_monotonicity",
+          "file": "tests/test_verify_diff.py",
+          "line": 75,
+          "detail": "Assertion on verify_diff('', root=self.root, policy=Policy()).status was removed.",
+          "before": "self.assertIs(verify_diff('', root=self.root, policy=Policy()).status, Status.PASS)",
+          "prescription": "Re-assert verify_diff('', root=self.root, policy=Policy()).status at eq strength, or fix the code under test so the original assertion passes. Restore `self.assertIs(verify_diff('', root=self.root, policy=Policy()).status, Status.PASS)`."
+        }
+      ]
+    },
+    {
+      "sha": "d9f514758f",
+      "subject": "[feat] release checklist and tests",
+      "rules": [
+        "ci_check_disabled"
+      ],
+      "findings": []
+    },
+    {
+      "sha": "0ba4a22e42",
+      "subject": "[feat] cli and mcp",
+      "rules": [
+        "empty_test"
+      ],
+      "findings": [
+        {
+          "rule": "empty_test",
+          "file": "tests/test_mcp.py",
+          "line": 150,
+          "detail": "TestResilience.test_stdout_carries_only_protocol runs code but asserts nothing.",
+          "before": null,
+          "prescription": "Add an assertion to TestResilience.test_stdout_carries_only_protocol that can fail."
+        }
+      ]
+    },
+    {
+      "sha": "076c9e695d",
+      "subject": "[feat ] Added middleware, routing and fanout",
+      "rules": [
+        "assertion_monotonicity",
+        "empty_test",
+        "export_removed"
+      ],
+      "findings": [
+        {
+          "rule": "empty_test",
+          "file": "tests/test_examples.py",
+          "line": 53,
+          "detail": "TestIllustrativeExamples.test_they_parse runs code but asserts nothing.",
+          "before": null,
+          "prescription": "Add an assertion to TestIllustrativeExamples.test_they_parse that can fail."
+        },
+        {
+          "rule": "assertion_monotonicity",
+          "file": "tests/test_mcp.py",
+          "line": 174,
+          "detail": "Assertion on str(config_path(client)).endswith('.json') was removed.",
+          "before": "self.assertTrue(str(config_path(client)).endswith('.json'), client.key)",
+          "prescription": "Re-assert str(config_path(client)).endswith('.json') at truthy strength, or fix the code under test so the original assertion passes. Restore `self.assertTrue(str(config_path(client)).endswith('.json'), client.key)`."
+        },
+        {
+          "rule": "assertion_monotonicity",
+          "file": "tests/test_speech.py",
+          "line": 136,
+          "detail": "Assertion on self.confirmation.matches('anchor beacon cobalt dynamo') was removed.",
+          "before": "self.assertFalse(self.confirmation.matches('anchor beacon cobalt dynamo'))",
+          "prescription": "Re-assert self.confirmation.matches('anchor beacon cobalt dynamo') at truthy strength, or fix the code under test so the original assertion passes. Restore `self.assertFalse(self.confirmation.matches('anchor beacon cobalt dynamo'))`."
+        }
+      ]
+    },
+    {
+      "sha": "47eacd16cd",
+      "subject": "[feat] Renmaed to yieldpoint",
+      "rules": [
+        "ci_check_disabled",
+        "ci_check_removed",
+        "empty_test"
+      ],
+      "findings": [
+        {
+          "rule": "empty_test",
+          "file": "tests/test_branding.py",
+          "line": 98,
+          "detail": "TestTheCliStaysParseable.test_json_output_parses runs code but asserts nothing.",
+          "before": null,
+          "prescription": "Add an assertion to TestTheCliStaysParseable.test_json_output_parses that can fail."
+        }
+      ]
+    }
+  ]
+}

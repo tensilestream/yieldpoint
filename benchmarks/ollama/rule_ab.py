@@ -47,6 +47,18 @@ REJECTED = (
     "That change was rejected by the project's checks:\n\n{prescription}\n\n"
     "Fix it and reply with the complete files again, same format."
 )
+
+REPAIR = (
+    "This file was rejected by the project's checks.\n\n"
+    "=== FILE: {path} ===\n{body}=== END ===\n\n"
+    "{prescription}\n\n"
+    "Return only this file, corrected, in the same format."
+)
+"""Sent instead of the whole conversation.
+
+The transcript grows every turn, and the model re-emits files that were never
+in question. Neither is needed to fix one file: the repair needs the file and
+what is wrong with it, and nothing else."""
 UNPARSEABLE = ("That reply could not be parsed. Reply with each complete file "
                "preceded by `=== FILE: <path> ===`, and nothing else.")
 
@@ -97,23 +109,36 @@ def context(task: RuleTask) -> str:
         f"=== FILE: {path} ===\n{body}=== END ===\n" for path, body in shown.items())
 
 
-def inspect(task: RuleTask, written: dict[str, str]) -> tuple[list[str], str, str, float]:
+@dataclass
+class Report:
+    """What the checks said, and about which files."""
+
+    rules: list[str]
+    status: str
+    per_file: dict[str, str]
+    ms: float
+
+    @property
+    def prescription(self) -> str:
+        return "\n".join(self.per_file.values())
+
+
+def inspect(task: RuleTask, written: dict[str, str]) -> Report:
     """Verify every file the model wrote, against the full policy."""
     start = time.perf_counter()
     rules: set[str] = set()
     worst = Status.PASS
-    prescriptions: list[str] = []
+    per_file: dict[str, str] = {}
     for path, after in written.items():
-        before = task.files.get(path)
-        verdict = verify_change(before, after, path, POLICY)
+        verdict = verify_change(task.files.get(path), after, path, POLICY)
         rules.update(f.rule for f in verdict.findings)
         if verdict.findings:
-            prescriptions.append(verdict.prescription)
+            per_file[path] = verdict.prescription
         if verdict.status is Status.BLOCK or (
                 verdict.status is Status.REPAIR and worst is not Status.BLOCK):
             worst = verdict.status
-    elapsed = (time.perf_counter() - start) * 1000
-    return sorted(rules), worst.value, "\n".join(prescriptions), elapsed
+    return Report(sorted(rules), worst.value, per_file,
+                  (time.perf_counter() - start) * 1000)
 
 
 @dataclass(frozen=True)
@@ -123,6 +148,40 @@ class Settings:
     max_turns: int
     temperature: float
     seed: int
+    compact: bool = False
+    """Send only the broken file on a retry, instead of the whole transcript.
+
+    Off by default because it measured *worse*. On six retrying tasks with
+    gemma4 it cut retry prompt tokens by 37% (4,618 -> 2,905) and raised retry
+    output by 38% (6,328 -> 8,751), for +5% overall and no change in accuracy
+    or turns. A reasoning model keeps its own prior reasoning in the
+    transcript; take it away and it re-derives the file, which costs more than
+    the prompt saved. One model, one seed, six tasks — kept behind a flag so
+    the next model can be measured rather than assumed."""
+
+
+def _repair_prompt(settings, messages, reply, report, written) -> list[dict]:
+    """The next turn's messages.
+
+    Compact by default: a fresh, minimal request naming one broken file. The
+    growing-transcript form is kept behind a flag so the two can be compared
+    rather than asserted.
+    """
+    if report is None:
+        return messages + [{"role": "assistant", "content": reply.text},
+                           {"role": "user", "content": UNPARSEABLE}]
+    if not settings.compact:
+        return messages + [{"role": "assistant", "content": reply.text},
+                           {"role": "user", "content": REJECTED.format(
+                               prescription=report.prescription)}]
+
+    path = next(iter(report.per_file))
+    return [
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": REPAIR.format(
+            path=path, body=written.get(path, ""),
+            prescription=report.per_file[path])},
+    ]
 
 
 def run_arm(task: RuleTask, model: str, arm: str, settings: Settings) -> Arm:
@@ -147,8 +206,10 @@ def run_arm(task: RuleTask, model: str, arm: str, settings: Settings) -> Arm:
         produced = parse_files(reply.text)
         parsed = bool(produced)
         if parsed:
-            written = produced
-            rules, status, prescription, ms = inspect(task, written)
+            written.update(produced)          # keep files that already passed
+            report = inspect(task, written)
+            rules, status, prescription = report.rules, report.status, report.prescription
+            ms = report.ms
         else:
             rules, status, prescription, ms = [], "unverified", "", 0.0
         verdict_ms += ms
@@ -158,10 +219,8 @@ def run_arm(task: RuleTask, model: str, arm: str, settings: Settings) -> Arm:
         clean = parsed and not rules
         if arm == WITHOUT or clean or turn == settings.max_turns:
             break
-        messages.append({"role": "assistant", "content": reply.text})
-        messages.append({"role": "user", "content":
-                         UNPARSEABLE if not parsed
-                         else REJECTED.format(prescription=prescription)})
+        messages = _repair_prompt(settings, messages, reply, report if parsed else None,
+                                  written)
 
     return Arm(
         task=task.name, family=task.family, targets=task.targets, arm=arm,
@@ -261,6 +320,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--seed", type=int, default=5)
     parser.add_argument("--only", default="")
+    parser.add_argument("--compact-repair", action="store_true",
+                        help="retry with only the broken file instead of "
+                             "the transcript (measured slower on gemma4)")
     return parser
 
 
@@ -275,7 +337,8 @@ def main() -> int:
         model = resolve_model(args.model)
         print(f"model: {model}   tasks: {len(tasks)}   "
               f"turn budget: {args.max_turns} per arm\n")
-        settings = Settings(args.max_turns, args.temperature, args.seed)
+        settings = Settings(args.max_turns, args.temperature, args.seed,
+                            compact=args.compact_repair)
         pairs = [run_pair(task, model, settings) for task in tasks]
     except OllamaUnavailable as exc:
         print(f"\nerror: {exc}", file=sys.stderr)
