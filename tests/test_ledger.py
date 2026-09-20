@@ -172,6 +172,38 @@ class TestCompactionWording(unittest.TestCase):
         self.assertNotIn("0.0x smaller", text)
 
 
+class TestCompactionCountsOnlyComparableWork(unittest.TestCase):
+    """A clean verdict must not make the critique look more compact.
+
+    Pooling every analysed character against only the characters of critique
+    credits the prescription with describing code it never mentioned, and the
+    ratio then improves the more clean code happens to be verified alongside.
+    """
+
+    def _events(self, clean: int):
+        flagged = ledger.observe(_verdict(), "review", analysed_chars=1_000)
+        quiet = ledger.observe(
+            Verdict.of([], checked=["src/quiet.py"]), "review", analysed_chars=50_000)
+        return [flagged] + [quiet] * clean
+
+    def test_a_clean_verdict_does_not_inflate_the_ratio(self):
+        alone = summarise(self._events(0))
+        alongside = summarise(self._events(20))
+        self.assertGreater(alone.compaction, 0)
+        self.assertEqual(alone.compaction, alongside.compaction)
+
+    def test_analysed_chars_still_counts_everything_looked_at(self):
+        summary = summarise(self._events(2))
+        self.assertEqual(summary.analysed_chars, 1_000 + 2 * 50_000)
+        self.assertEqual(summary.prescribed_chars, 1_000)
+
+    def test_the_ratio_is_prescribed_chars_over_critique(self):
+        summary = summarise(self._events(5))
+        self.assertAlmostEqual(
+            summary.compaction,
+            summary.prescribed_chars / summary.prescription_chars)
+
+
 class TestItDoesNotPolluteTheRepository(unittest.TestCase):
     def test_the_ledger_directory_ignores_itself(self):
         with tempfile.TemporaryDirectory() as tmp:

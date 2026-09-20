@@ -211,6 +211,24 @@ def _ms(value: int) -> str:
     return f"{value / 1000:.1f} s"
 
 
+def _architectural_dict(summary: Summary) -> dict:
+    """What is true by construction, plus how the ratio was derived.
+
+    The basis is stated in the payload rather than left to the reader: pooling
+    clean verdicts into the numerator inflates it, and a consumer cannot tell
+    which convention produced a bare number.
+    """
+    return {
+        "model_calls_made": 0,
+        "prescriptions_assembled": summary.findings,
+        "compaction_ratio": round(summary.compaction, 1),
+        "_compaction_basis": "prescribed_chars / prescription_chars; "
+                             "clean verdicts are excluded from the numerator",
+        "prescribed_chars": summary.prescribed_chars,
+        "prescription_chars": summary.prescription_chars,
+    }
+
+
 def to_dict(summary: Summary) -> dict:
     """The machine-readable form, tiered the same way as the report."""
     return {
@@ -245,11 +263,7 @@ def to_dict(summary: Summary) -> dict:
             "findings_recurring": summary.recurring,
             "fix_rate": round(summary.fix_rate, 3),
         },
-        "architectural": {
-            "model_calls_made": 0,
-            "prescriptions_assembled": summary.findings,
-            "compaction_ratio": round(summary.compaction, 1),
-        },
+        "architectural": _architectural_dict(summary),
         "estimated": {
             "assumption": f"{CHARS_PER_TOKEN} characters per token",
             "llm_judge_model_calls": summary.verdicts,

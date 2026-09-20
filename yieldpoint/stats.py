@@ -31,6 +31,15 @@ class Summary:
     surfaces: tuple[tuple[str, int], ...] = ()
     prescription_chars: int = 0
     analysed_chars: int = 0
+
+    prescribed_chars: int = 0
+    """Analysed characters from the verdicts that actually produced a critique.
+
+    Separate from ``analysed_chars`` because the two answer different questions.
+    A clean verdict contributes characters to the first and nothing to the
+    second, so dividing the pooled totals credits the critique with describing
+    code it never mentioned — and the more clean verdicts a ledger holds, the
+    better that ratio looks. See ``compaction``."""
     files_checked: int = 0
     files_skipped: int = 0
     total_ms: int = 0
@@ -88,14 +97,19 @@ class Summary:
 
     @property
     def compaction(self) -> float:
-        """Analysed characters per prescription character.
+        """Analysed characters per prescription character, on comparable work.
 
-        How much smaller the instruction is than the code it describes — the
-        honest version of "prompt compaction". 0.0 when nothing was prescribed.
+        How much smaller the instruction is than the code it describes. The
+        numerator counts only the verdicts that produced a critique: a file
+        nothing was said about is not code the critique compressed, and
+        including it inflates the ratio in proportion to how much clean code
+        happened to be verified alongside (RULES.md section 5).
+
+        0.0 when nothing was prescribed.
         """
         if not self.prescription_chars:
             return 0.0
-        return self.analysed_chars / self.prescription_chars
+        return self.prescribed_chars / self.prescription_chars
 
 
 #: Rules that mean the suite lost verification strength rather than shape.
@@ -126,6 +140,8 @@ def _sums(events: list[Event]) -> dict:
         "findings": sum(e.findings for e in events),
         "prescription_chars": sum(e.prescription_chars for e in events),
         "analysed_chars": sum(e.analysed_chars for e in events),
+        "prescribed_chars": sum(
+            e.analysed_chars for e in events if e.prescription_chars),
         "files_checked": sum(e.files_checked for e in events),
         "files_skipped": sum(e.files_skipped for e in events),
         "acknowledged": sum(e.acknowledged for e in events),
