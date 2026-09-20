@@ -23,6 +23,10 @@ from yieldpoint.verify import verify_change
 POLICY = {"test_contract": {"protected_patterns": [
     "**/*.test.ts", "**/*.test.js", "**/*.spec.ts",
     "**/*Test.java", "**/*Test.kt", "**/*_test.go",
+    # Added as each language was: a pattern missing here reads as the rule
+    # failing, when in fact the file was never protected.
+    "**/*_test.rs", "**/*Test.cs", "**/*_test.rb", "**/*Test.php",
+    "**/*Tests.swift", "**/*_test.exs",
 ]}}
 
 JEST = 'it("totals", () => {\n  expect(invoice.total).toBe(42);\n});\n'
@@ -221,3 +225,76 @@ class TestItIsTimid(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestContractRulesReachEveryLanguage(unittest.TestCase):
+    """Three of the four integrity rules need no control flow.
+
+    Restricting them to Python meant they reached one language of twelve for a
+    reason that only ever applied to the fourth. `disabled_assertion` still
+    does, because it asks whether a failure can propagate.
+    """
+
+    def _rules(self, path: str, before: str, after: str):
+        verdict = verify_change(before, after, path, POLICY)
+        return sorted({f.rule for f in verdict.findings})
+
+    def test_an_emptied_test_is_reported_in_every_language(self):
+        for path, before, after in (
+            ("a.test.js", "test('t', () => {\n  expect(x).toBe(1);\n});\n",
+             "test('t', () => {\n});\n"),
+            ("ATest.java", "class A {\n  @Test void t() {\n    assertEquals(1, x);\n  }\n}\n",
+             "class A {\n  @Test void t() {\n  }\n}\n"),
+            ("a_test.go", 'func TestT(t *testing.T) {\n\tif x != 1 {\n\t\tt.Fatal("b")\n\t}\n}\n',
+             "func TestT(t *testing.T) {\n}\n"),
+            ("a_test.rs", "#[test]\nfn t() {\n    assert_eq!(x, 1);\n}\n",
+             "#[test]\nfn t() {\n}\n"),
+        ):
+            with self.subTest(path=path):
+                self.assertIn("empty_test", self._rules(path, before, after))
+
+    def test_a_newly_skipped_test_is_reported_in_every_language(self):
+        for path, before, after in (
+            ("a.test.js", "test('t', () => {\n  expect(x).toBe(1);\n});\n",
+             "test.skip('t', () => {\n  expect(x).toBe(1);\n});\n"),
+            ("ATest.java", "class A {\n  @Test void t() {\n    assertEquals(1, x);\n  }\n}\n",
+             "class A {\n  @Disabled\n  @Test void t() {\n    assertEquals(1, x);\n  }\n}\n"),
+            ("a_test.go", 'func TestT(t *testing.T) {\n\tif x != 1 {\n\t\tt.Fatal("b")\n\t}\n}\n',
+             'func TestT(t *testing.T) {\n\tt.Skip("flaky")\n\tif x != 1 {\n\t\tt.Fatal("b")\n\t}\n}\n'),
+        ):
+            with self.subTest(path=path):
+                self.assertIn("skip_marker", self._rules(path, before, after))
+
+    def test_a_tautology_is_reported_in_every_language(self):
+        for path, before, after in (
+            ("a.test.js", "test('t', () => {\n  expect(x).toBe(1);\n});\n",
+             "test('t', () => {\n  expect(true).toBe(true);\n});\n"),
+            ("ATest.java", "class A {\n  @Test void t() {\n    assertEquals(1, x);\n  }\n}\n",
+             "class A {\n  @Test void t() {\n    assertTrue(true);\n  }\n}\n"),
+        ):
+            with self.subTest(path=path):
+                self.assertIn("vacuous_assertion", self._rules(path, before, after))
+
+    def test_a_literal_expectation_is_not_a_tautology(self):
+        """`expect(ok).toBe(true)` pins ok. Only a literal *subject* is vacuous."""
+        same = "test('t', () => {\n  expect(ok).toBe(true);\n});\n"
+        self.assertEqual(self._rules("a.test.js", same, same), [])
+
+    def test_an_expression_subject_is_not_a_constant(self):
+        same = "test('t', () => {\n  expect(items.length > 0).toBe(true);\n});\n"
+        self.assertEqual(self._rules("a.test.js", same, same), [])
+
+    def test_a_pre_existing_offence_is_not_blamed_on_this_change(self):
+        before = "test.skip('t', () => {\n  expect(x).toBe(1);\n});\n"
+        self.assertEqual(self._rules("a.test.js", before, before + "// note\n"), [])
+
+    def test_none_of_these_may_block_a_build(self):
+        """Lexical analysis advises. A regex must not stop someone's build."""
+        verdict = verify_change("test('t', () => {\n  expect(x).toBe(1);\n});\n",
+                                "test('t', () => {\n});\n", "a.test.js", POLICY)
+        # `empty_test` is the specific finding here; monotonicity defers to it
+        # rather than also reporting the assertion that went with the body.
+        self.assertEqual(sorted({f.rule for f in verdict.findings}), ["empty_test"])
+        self.assertEqual({f.confidence for f in verdict.findings},
+                         {Confidence.LEXICAL})
+        self.assertNotIn(Status.BLOCK, {f.status for f in verdict.findings})

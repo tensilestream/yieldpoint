@@ -106,6 +106,33 @@ ELIXIR_RELATIONS = {
     " in ": Relation.MEMBERSHIP,
 }
 
+#: Disabling a test is an annotation or a call, not control flow, so it has a
+#: shape a regular expression can see. One entry per ecosystem; a spelling not
+#: listed yields nothing rather than a guess.
+SKIP_MARKERS = (
+    re.compile(r"\b(?:it|test|describe|context)\s*\.\s*(?:skip|todo)\b"),
+    re.compile(r"@(?:Disabled|Ignore|Ignored)\b"),          # JUnit, TestNG
+    re.compile(r"#\[ignore\]"),                             # Rust
+    re.compile(r"\bt\s*\.\s*(?:Skip|Skipf|SkipNow)\s*\("),  # Go
+    re.compile(r"\[\w+\s*\(\s*Skip\s*="),                   # xUnit [Fact(Skip=)]
+    re.compile(r"\[Ignore\b"),                               # NUnit, MSTest
+    re.compile(r"\bXCTSkip\b"),                             # Swift
+    re.compile(r"@(?:skip|skipIf|skipUnless)\b"),            # PHPUnit attributes
+    re.compile(r"\bmarkTestSkipped\s*\("),                  # PHPUnit call
+    re.compile(r"@tag\s+:skip\b"),                          # ExUnit
+    re.compile(r"\bskip\s+['\"]"),                           # Minitest / RSpec
+)
+
+#: Subjects that are constants, not values the code produced. An assertion
+#: about one of these cannot fail however the code behaves, whatever relation
+#: it is dressed in: ``expect(true).toBe(true)``, ``assertTrue(true)``.
+#: Distinct from an *expectation* that is a literal — ``expect(x).toBe(true)``
+#: pins x, and is a normal assertion.
+CONSTANT_SUBJECTS = frozenset({
+    "true", "false", "True", "False", "nil", "null", "None", "undefined",
+    ":ok", "TRUE", "FALSE",
+})
+
 MAX_SUBJECT = 120
 
 
@@ -133,6 +160,7 @@ RUBY_OPENERS = ("def ", "if ", "unless ", "case ", "begin", "while ", "until ",
 
 
 __all__ = [
+    "CONSTANT_SUBJECTS", "SKIP_MARKERS",
     "CALL", "ELIXIR_ASSERT", "ELIXIR_RELATIONS", "FLUENT",
     "GO_GUARD", "GO_INVERSE", "MAX_SUBJECT",
     "NAME_GROUPS", "RUBY_CALL", "RUBY_OPENERS", "SUBJECT_FIRST",

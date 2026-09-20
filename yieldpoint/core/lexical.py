@@ -31,7 +31,7 @@ from .relation import Relation
 from .testpatterns import (
     CALL, ELIXIR_ASSERT, ELIXIR_RELATIONS, FLUENT, GO_GUARD, GO_INVERSE,
     MAX_SUBJECT, NAME_GROUPS, RUBY_CALL, RUBY_OPENERS, SUBJECT_FIRST,
-    SUFFIXES, TEST_DECL,
+    CONSTANT_SUBJECTS, SKIP_MARKERS, SUFFIXES, TEST_DECL,
 )
 from .spellings import FLUENT_RELATIONS, METHOD_RELATIONS, NEGATIONS, fold
 
@@ -55,13 +55,19 @@ def extract(source: str, *, filename: str = "<source>") -> tuple:
     understood = False
     for name, start, body, line in blocks:
         assertions = tuple(_assertions(body, line, filename))
-        understood = understood or bool(assertions)
+        # A body with nothing in it is *recognised*, not unrecognised. Timidity
+        # exists so a file written in an assertion style this build cannot read
+        # is never accused of being empty — but an empty body is unambiguous in
+        # every language, and treating it as "not understood" meant `empty_test`
+        # reached Python and nowhere else.
+        understood = understood or bool(assertions) or not body.strip()
         cases.append(TestCase(
             qualname=name,
             line=line,
             assertions=assertions,
             is_empty=not body.strip(),
             body_hash=_shape(body),
+            skip_markers=_skips(source, match_start=start, body=body),
         ))
     del start
     return tuple(cases), understood
@@ -120,6 +126,20 @@ def _ended(source: str, start: int) -> str | None:
     return None
 
 
+def _skips(source: str, *, match_start: int, body: str) -> tuple[str, ...]:
+    """Skip markers on or inside this test.
+
+    Annotations sit *above* the declaration, so a short window before it is
+    searched as well as the body. Bounded deliberately: reading further up
+    would attribute the previous test's marker to this one.
+    """
+    window = source[max(0, match_start - 160):match_start] + body
+    return tuple(sorted({
+        match.group(0) for pattern in SKIP_MARKERS
+        for match in pattern.finditer(window)
+    }))
+
+
 def _braced(source: str, start: int) -> str | None:
     """Text inside the next balanced ``{...}``. None when it does not close.
 
@@ -162,7 +182,7 @@ def _fluent_assertions(body: str, base_line: int):
         if relation is None:
             continue
         yield Assertion(
-            subject=subject, relation=relation,
+            subject=subject, relation=_relation_for(subject, relation),
             line=base_line + body.count("\n", 0, match.start()),
             raw=_snippet(match.group(0)),
         )
@@ -196,7 +216,8 @@ def _elixir_assertions(body: str, base_line: int):
         cleaned = _clean(subject)
         if cleaned is None:
             continue
-        yield Assertion(subject=cleaned, relation=relation, line=line,
+        yield Assertion(subject=cleaned,
+                        relation=_relation_for(cleaned, relation), line=line,
                         raw=_snippet(match.group(0)))
 
 
@@ -225,7 +246,9 @@ def _from_go_guard(match, body: str, base_line: int):
         subject = _clean(condition[1:])
         if subject is None:
             return None
-        return Assertion(subject=subject, relation=Relation.TRUTHY, line=line,
+        return Assertion(subject=subject,
+                         relation=_relation_for(subject, Relation.TRUTHY),
+                         line=line,
                          raw=_snippet(match.group(0)))
 
     for operator, relation in GO_INVERSE.items():
@@ -235,7 +258,8 @@ def _from_go_guard(match, body: str, base_line: int):
         subject = _clean(left)
         if subject is None:
             return None
-        return Assertion(subject=subject, relation=relation, line=line,
+        return Assertion(subject=subject,
+                         relation=_relation_for(subject, relation), line=line,
                          expected=_clean(right), raw=_snippet(match.group(0)))
     return None
 
@@ -283,7 +307,7 @@ def _from_call(match, body: str, base_line: int) -> Assertion | None:
     if subject is None:
         return None
     return Assertion(
-        subject=subject, relation=relation,
+        subject=subject, relation=_relation_for(subject, relation),
         line=base_line + body.count("\n", 0, match.start()),
         raw=_snippet(match.group(0)),
     )
@@ -308,6 +332,15 @@ def _last_argument(args: str) -> str:
             continue
         parts[-1] += char
     return parts[-1].strip()
+
+
+def _relation_for(subject: str, relation: Relation) -> Relation:
+    """A constant subject makes any relation vacuous.
+
+    ``expect(true).toBe(true)`` reads as an equality until you notice nothing
+    about the code under test appears in it.
+    """
+    return Relation.VACUOUS if subject in CONSTANT_SUBJECTS else relation
 
 
 def _clean(text: str | None) -> str | None:
