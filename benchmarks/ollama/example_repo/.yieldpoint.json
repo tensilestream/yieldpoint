@@ -1,0 +1,11 @@
+{
+  "version": "1.0",
+  "project": { "name": "Example Cart", "languages": ["python"] },
+  "test_contract": {
+    "protected_patterns": ["**/tests/**", "**/test_*.py"],
+    "assertion_monotonicity": "block",
+    "forbid_vacuous_assertions": "block",
+    "forbid_new_skip_markers": "block",
+    "forbid_swallowed_exceptions": "block"
+  }
+}
