@@ -1,0 +1,512 @@
+{
+  "summary": {
+    "weakenings": 37,
+    "caught": 6,
+    "missed": 31,
+    "incidental_findings": 3,
+    "coverage": 0.162,
+    "artifacts": 12,
+    "artifacts_fully_covered": [
+      "test"
+    ],
+    "artifacts_with_no_coverage": [
+      "concurrency",
+      "config",
+      "dependencies",
+      "error handling",
+      "infrastructure",
+      "observability",
+      "schema",
+      "security",
+      "source guard",
+      "types"
+    ],
+    "by_artifact": {
+      "test": {
+        "total": 4,
+        "caught": 4
+      },
+      "source guard": {
+        "total": 4,
+        "caught": 0
+      },
+      "error handling": {
+        "total": 3,
+        "caught": 0
+      },
+      "types": {
+        "total": 3,
+        "caught": 0
+      },
+      "dependencies": {
+        "total": 3,
+        "caught": 0
+      },
+      "config": {
+        "total": 3,
+        "caught": 0
+      },
+      "security": {
+        "total": 4,
+        "caught": 0
+      },
+      "schema": {
+        "total": 3,
+        "caught": 0
+      },
+      "infrastructure": {
+        "total": 3,
+        "caught": 0
+      },
+      "ci": {
+        "total": 3,
+        "caught": 2
+      },
+      "observability": {
+        "total": 2,
+        "caught": 0
+      },
+      "concurrency": {
+        "total": 2,
+        "caught": 0
+      }
+    },
+    "surprises": [],
+    "rules_that_fired": {
+      "assertion_monotonicity": 3,
+      "dangling_reference": 2,
+      "ci_check_disabled": 2,
+      "skip_marker": 1,
+      "disabled_assertion": 1,
+      "ci_check_removed": 1
+    }
+  },
+  "rows": [
+    {
+      "incidental": false,
+      "artifact": "test",
+      "name": "assertion downgraded",
+      "path": "tests/test_a.py",
+      "claimed_covered": true,
+      "caught": true,
+      "status": "block",
+      "rules": [
+        "assertion_monotonicity"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "test",
+      "name": "assertion deleted",
+      "path": "tests/test_a.py",
+      "claimed_covered": true,
+      "caught": true,
+      "status": "block",
+      "rules": [
+        "assertion_monotonicity"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "test",
+      "name": "test skipped",
+      "path": "tests/test_a.py",
+      "claimed_covered": true,
+      "caught": true,
+      "status": "block",
+      "rules": [
+        "skip_marker"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "test",
+      "name": "failure swallowed",
+      "path": "tests/test_a.py",
+      "claimed_covered": true,
+      "caught": true,
+      "status": "block",
+      "rules": [
+        "assertion_monotonicity",
+        "disabled_assertion"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "source guard",
+      "name": "precondition deleted",
+      "path": "src/bank.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "source guard",
+      "name": "input validation deleted",
+      "path": "src/users.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "source guard",
+      "name": "authorisation check deleted",
+      "path": "src/views.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "source guard",
+      "name": "assert removed from source",
+      "path": "src/calc.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "error handling",
+      "name": "except narrowed to broad",
+      "path": "src/io.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "error handling",
+      "name": "raise replaced by return None",
+      "path": "src/api.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": true,
+      "artifact": "error handling",
+      "name": "error logged instead of raised",
+      "path": "src/job.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "repair",
+      "rules": [
+        "dangling_reference"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "types",
+      "name": "annotations removed",
+      "path": "src/calc.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "types",
+      "name": "narrow type widened to Any",
+      "path": "src/calc.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "types",
+      "name": "TypeScript strict escape hatch",
+      "path": "src/calc.ts",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "dependencies",
+      "name": "pin loosened to a range",
+      "path": "requirements.txt",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "dependencies",
+      "name": "npm exact pin loosened",
+      "path": "package.json",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "dependencies",
+      "name": "lockfile deleted",
+      "path": "poetry.lock",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "config",
+      "name": "timeout removed",
+      "path": "src/client.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "config",
+      "name": "retry limit raised to infinite",
+      "path": "config/app.yaml",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "config",
+      "name": "debug enabled in production",
+      "path": "config/app.yaml",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "security",
+      "name": "TLS verification disabled",
+      "path": "src/http.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "security",
+      "name": "secret hard-coded",
+      "path": "src/config.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "security",
+      "name": "CORS opened to everything",
+      "path": "src/app.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": true,
+      "artifact": "security",
+      "name": "password hashing weakened",
+      "path": "src/auth.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "repair",
+      "rules": [
+        "dangling_reference"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "schema",
+      "name": "NOT NULL dropped",
+      "path": "migrations/003.sql",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "schema",
+      "name": "unique constraint dropped",
+      "path": "migrations/004.sql",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "schema",
+      "name": "foreign key removed",
+      "path": "migrations/005.sql",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "infrastructure",
+      "name": "container runs as root",
+      "path": "Dockerfile",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "infrastructure",
+      "name": "resource limits removed",
+      "path": "k8s/deploy.yaml",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "infrastructure",
+      "name": "health probe removed",
+      "path": "k8s/deploy.yaml",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "unverified",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "ci",
+      "name": "check removed",
+      "path": ".github/workflows/ci.yml",
+      "claimed_covered": true,
+      "caught": true,
+      "status": "repair",
+      "rules": [
+        "ci_check_removed"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "ci",
+      "name": "job disabled",
+      "path": ".github/workflows/ci.yml",
+      "claimed_covered": true,
+      "caught": true,
+      "status": "repair",
+      "rules": [
+        "ci_check_disabled"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": true,
+      "artifact": "ci",
+      "name": "failure suppressed",
+      "path": ".github/workflows/ci.yml",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "repair",
+      "rules": [
+        "ci_check_disabled"
+      ],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "observability",
+      "name": "logging removed",
+      "path": "src/job.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "observability",
+      "name": "metric emission removed",
+      "path": "src/job.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "concurrency",
+      "name": "lock removed",
+      "path": "src/cache.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    },
+    {
+      "incidental": false,
+      "artifact": "concurrency",
+      "name": "transaction removed",
+      "path": "src/repo.py",
+      "claimed_covered": false,
+      "caught": false,
+      "status": "pass",
+      "rules": [],
+      "agrees": true
+    }
+  ]
+}
