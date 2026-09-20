@@ -174,9 +174,20 @@ def check_diff(args) -> int:
     return _exit_for(verdict, policy)
 
 
-def hook_command(args) -> int:
+def _handoff(args) -> int | None:
+    """Other hook events share this entry point; ``None`` means PreToolUse."""
     if getattr(args, "stop", False):
         return stop_command(args)
+    if getattr(args, "post", False):
+        from .posthook import post_command
+        return post_command(args)
+    return None
+
+
+def hook_command(args) -> int:
+    routed = _handoff(args)
+    if routed is not None:
+        return routed
 
     from .ledger import Timer
 
@@ -278,31 +289,6 @@ def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> in
     if utterance.confirmation:
         print(f"\n  {utterance.confirmation.question}")
     return _exit_for(verdict, policy)
-
-
-def brief_command(args) -> int:
-    """Say what is true about these files before anything is edited.
-
-    The cheapest verdict is the one that never has to be issued. Everything
-    here is read off the syntax tree — no model call, no network.
-    """
-    import json as _json
-
-    from .brief import brief
-    from .briefing import render, to_dict
-
-    try:
-        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
-    except (OSError, ValueError) as exc:
-        print(f"yieldpoint: {exc}", file=sys.stderr)
-        return EXIT_ERROR
-
-    report = brief(args.paths, policy, args.root)
-    if args.json:
-        print(_json.dumps(to_dict(report), indent=2))
-    else:
-        print(render(report))
-    return EXIT_OK
 
 
 def scan_command(args) -> int:

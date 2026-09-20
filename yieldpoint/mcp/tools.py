@@ -218,15 +218,7 @@ def _name(status) -> str:
     return status.value if status is not None else "off"
 
 
-def _compact(arguments: dict, policy: Policy):
-    from ..contextrecording import compact_and_record
-
-    result, _ = compact_and_record(arguments["text"], root=arguments.get("root") or ".", policy=policy)
-    return result.text, {}, False
-
-
 _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
-    "yieldpoint_compact": _compact,
     "yieldpoint_verify_change": _verify_change,
     "yieldpoint_verify_diff": _verify_diff,
     "yieldpoint_review": _review,

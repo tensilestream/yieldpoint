@@ -69,7 +69,7 @@ class TestToolListing(unittest.TestCase):
         names = {tool["name"] for tool in request("tools/list")["result"]["tools"]}
         self.assertEqual(names, {
             "yieldpoint_verify_change", "yieldpoint_verify_diff", "yieldpoint_review",
-            "yieldpoint_brief", "yieldpoint_compact",
+            "yieldpoint_brief",
             "yieldpoint_scan", "yieldpoint_assess", "yieldpoint_stats", "yieldpoint_policy"})
 
     def test_schemas_are_well_formed(self):

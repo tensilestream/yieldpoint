@@ -23,6 +23,7 @@ from .core import glob
 from .core.assertions import extract
 from .core.metrics import measure
 from .core.policy import Policy
+from .history import History, fold, stale
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,19 @@ class FileBrief:
     forbidden_imports: tuple[str, ...] = ()
     unreadable: str = ""
 
+    repeats: tuple[tuple[str, int], ...] = ()
+    """Rules that have already fired on this path, commonest first. The
+    cheapest prediction there is: it is not a guess about what might go wrong
+    here, it is a record of what did."""
+
+    unchecked: bool = False
+    """The file changed after the last time anything analysed it, so any
+    finding the ledger holds for it may be stale in either direction."""
+
+    never_checked: bool = False
+    """Nothing has ever analysed this path. Not the same as analysed-and-clean,
+    and must not be rendered as though it were (RULES.md section 5)."""
+
     @property
     def headroom(self) -> int:
         return max(0, self.line_limit - self.lines)
@@ -68,7 +82,13 @@ class Brief:
 
     @property
     def anything_to_say(self) -> bool:
+        """Whether a brief is worth sending at all.
+
+        A file nothing has ever analysed counts. Saying "nothing to watch"
+        about it would report an absence of looking as an absence of problems.
+        """
         return any(f.protected or f.crowded or f.forbidden_imports or f.unreadable
+                   or f.repeats or f.unchecked or (f.never_checked and f.exists)
                    for f in self.files)
 
 
@@ -119,23 +139,39 @@ def _zone(path: str, policy: Policy) -> tuple[str, tuple[str, ...]]:
     return "", ()
 
 
-def for_file(path: str, policy: Policy, root: Path) -> FileBrief:
+def for_file(path: str, policy: Policy, root: Path,
+             record: History | None = None) -> FileBrief:
     """Everything decidable about one file before it is edited."""
     target = root / path
     zone, forbidden = _zone(path, policy)
     protected = policy.protects(path)
+    # ``None`` means no ledger to consult, which is not the same as a ledger
+    # that has never seen this path. Only the second is worth reporting.
+    past = record or History()
+    seen = {"repeats": past.repeats, "unchecked": stale(past, target),
+            "never_checked": record is not None and not past.seen}
 
     if not target.is_file():
         # A file that does not exist yet still has a budget and a zone, and
         # those are exactly what a new file tends to break.
         return FileBrief(path=path, exists=False, protected=protected,
                          line_limit=policy.structure.max_file_lines,
-                         zone=zone, forbidden_imports=forbidden)
+                         zone=zone, forbidden_imports=forbidden, **seen)
 
     try:
         source = target.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
-        return FileBrief(path=path, exists=True, unreadable=str(exc))
+        return FileBrief(path=path, exists=True, unreadable=str(exc), **seen)
+
+    if not path.endswith(".py"):
+        # Saying "could not parse" about a file no analyser claims reports a
+        # gap in coverage as a defect in the file. They are not the same. Other
+        # rules (CI, boundaries) may still apply here, so this is a note about
+        # structural measurement only, not a verdict on the file.
+        return FileBrief(path=path, exists=True, protected=protected, zone=zone,
+                         forbidden_imports=forbidden,
+                         unreadable="size and complexity not measured for this "
+                                    "file type", **seen)
 
     module = measure(source, filename=path)
     return FileBrief(
@@ -149,7 +185,22 @@ def for_file(path: str, policy: Policy, root: Path) -> FileBrief:
         zone=zone,
         forbidden_imports=forbidden,
         unreadable="" if module.ok else (module.error or ""),
+        **seen,
     )
+
+
+def _past(policy: Policy, root: Path) -> dict[str, History]:
+    """What the ledger holds, or nothing if it cannot be read.
+
+    A missing or corrupt ledger must not stop a brief: the rest of it is read
+    from the files and is useful on its own.
+    """
+    from .ledger import load
+    from .recording import path_for
+    try:
+        return fold(load(path_for(policy, root)))
+    except (OSError, ValueError):
+        return {}
 
 
 def brief(paths, policy: Policy | str | dict | None = None,
@@ -157,9 +208,12 @@ def brief(paths, policy: Policy | str | dict | None = None,
     """Brief an agent on the files it is about to touch."""
     resolved = Policy.load(policy)
     base = Path(root)
+    past = _past(resolved, base)
     return Brief(
         project=resolved.project_name,
-        files=tuple(for_file(str(p), resolved, base) for p in paths),
+        files=tuple(for_file(str(p), resolved, base,
+                             past.get(str(p), History()) if past else None)
+                    for p in paths),
         change_budget=resolved.structure.max_change_lines,
     )
 

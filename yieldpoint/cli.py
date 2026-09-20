@@ -15,7 +15,6 @@ import sys
 
 from . import __version__
 from .commands import (
-    brief_command,
     EXIT_ERROR,
     EXIT_FINDINGS,
     EXIT_UNVERIFIED,
@@ -161,6 +160,9 @@ def _add_setup_commands(sub) -> None:
     mcp_install.set_defaults(handler=install_mcp)
 
     install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
+    install_cmd.add_argument(
+        "--compact", action="store_true",
+        help="also compact JSON tool output before the model reads it")
     install_cmd.add_argument("--root", default=".", help="repository to gate commits in")
     install_cmd.add_argument("--no-git", action="store_true",
                              help="do not install the commit gate")
@@ -212,6 +214,10 @@ def _add_gate_commands(sub) -> None:
     hook_cmd.add_argument(
         "--stop", action="store_true",
         help="run as a Stop hook: verify the whole working tree, whatever edited it")
+    hook_cmd.add_argument(
+        "--post", action="store_true",
+        help="run as a PostToolUse hook: losslessly compact JSON tool output "
+             "before the model reads it")
     hook_cmd.add_argument("--root", default=".", help="repository directory (with --stop)")
     hook_cmd.add_argument(
         "--json-decision", action="store_true",
@@ -227,6 +233,7 @@ def _add_gate_commands(sub) -> None:
     brief_cmd.add_argument("--root", default=".", help="repository root")
     brief_cmd.add_argument("--policy", help="path to .yieldpoint.json")
     brief_cmd.add_argument("--json", action="store_true")
+    from .briefing import brief_command
     brief_cmd.set_defaults(handler=brief_command)
 
     scan_cmd = sub.add_parser("scan", help="audit a repository as it stands")

@@ -149,14 +149,33 @@ class TestAccounting(AccountingFixture):
         self.assertEqual(out.getvalue(), '')
         self.assertFalse(self.path.exists())
 
-    def test_mcp_returns_only_compacted_output_and_records_it(self):
-        request = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {
-            'name': 'yieldpoint_compact', 'arguments': {'text': '[ 1, 2 ]', 'root': str(self.root)}}}
-        result = handle(json.dumps(request), self.policy)['result']
-        self.assertFalse(result['isError'])
-        self.assertEqual(result['content'], [{'type': 'text', 'text': '[1,2]'}])
-        self.assertNotIn('structuredContent', result)
+    # The yieldpoint_compact MCP tool was withdrawn because calling it required
+    # the agent to already hold the text, so it could never save context. The
+    # test that covered it went with it; its coverage did not. This test makes
+    # the same assertion at eq strength against the hook that replaced it, and
+    # test_the_withdrawn_mcp_tool_is_gone asserts the tool is really gone.
+    # yieldpoint: allow assertion_monotonicity - moved to the two tests below
+    def test_the_post_tool_use_hook_compacts_and_records_it(self):
+        """Compaction lives where the saving still exists: before the model reads.
+
+        The MCP tool this replaced required the agent to pass the text in, so
+        the context was already spent by the time it was called.
+        """
+        from yieldpoint.posthook import replacement
+
+        reply = replacement({'tool_response': '[ 1, 2 ]'},
+                            root=str(self.root), policy=self.policy)
+        self.assertEqual(reply, {'hookSpecificOutput': {
+            'hookEventName': 'PostToolUse', 'updatedToolOutput': '[1,2]'}})
         self.assertEqual(len(load(self.path)), 1)
+
+    def test_the_withdrawn_mcp_tool_is_gone(self):
+        """It could never save context: calling it required already holding the text."""
+        from yieldpoint.mcp.schemas import TOOLS
+        from yieldpoint.mcp.tools import _HANDLERS
+
+        self.assertNotIn('yieldpoint_compact', {tool['name'] for tool in TOOLS})
+        self.assertNotIn('yieldpoint_compact', _HANDLERS)
 
     def test_corrupt_record_does_not_destroy_valid_accounting(self):
         compact_and_record('[ 1 ]', root=self.root, policy=self.policy)

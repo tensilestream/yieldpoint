@@ -21,6 +21,17 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v yieldpoint >/dev/null 2>&1 && yieldpoint hook --post || exit 0"
+          }
+        ]
+      }
     ]
   }
 }

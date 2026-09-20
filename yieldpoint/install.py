@@ -99,8 +99,25 @@ def _verify_each_turn(hooks: dict, *, advisory: bool, report: bool = True) -> No
         "matcher": "",
         "hooks": [{"type": "command", "command": c} for c in commands],
     }
-    stop = hooks.setdefault("Stop", [])
-    stop[:] = [e for e in stop if not _is_yieldpoint(e)] + [entry]
+    _register(hooks, "Stop", entry)
+
+
+def _register(hooks: dict, event: str, entry: dict) -> None:
+    """Put one Yieldpoint entry on an event, replacing any earlier one."""
+    current = hooks.setdefault(event, [])
+    current[:] = [e for e in current if not _is_yieldpoint(e)] + [entry]
+
+
+def _compact_tool_output(hooks: dict) -> None:
+    """Shrink JSON tool results before the model reads them.
+
+    ``PostToolUse`` is the only place this saves anything: the tool has
+    returned but the result has not entered the prompt yet. Opt-in, because
+    rewriting every tool result is a bigger thing to switch on by default than
+    a gate that only ever reads.
+    """
+    _register(hooks, "PostToolUse", {"matcher": "", "hooks": [
+        {"type": "command", "command": command_line("hook", "--post")}]})
 
 
 def _list_clients() -> int:
@@ -154,11 +171,11 @@ def install_hook(args) -> int:
     entry = {"matcher": HOOK_MATCHER, "hooks": [{"type": "command", "command": command}]}
 
     hooks = settings.setdefault("hooks", {})
-    pre = hooks.setdefault("PreToolUse", [])
-    pre[:] = [e for e in pre if not _is_yieldpoint(e)] + [entry]
-
+    _register(hooks, "PreToolUse", entry)
     _verify_each_turn(hooks, advisory=args.advisory,
                       report=not getattr(args, "no_report", False))
+    if getattr(args, "compact", False):
+        _compact_tool_output(hooks)
 
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
     mode = "advisory" if args.advisory else "blocking"
@@ -353,14 +370,6 @@ class _HookArgs:
 
 # ------------------------------------------------------------------- helpers
 
-
-def _is_yieldpoint(entry: object) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    return any(
-        isinstance(h, dict) and "yieldpoint" in str(h.get("command", ""))
-        for h in entry.get("hooks", [])
-    )
 
 
 def _is_yieldpoint(entry: object) -> bool:

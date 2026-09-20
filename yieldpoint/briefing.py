@@ -14,6 +14,27 @@ from __future__ import annotations
 from .brief import Brief, FileBrief
 
 MAX_ASSERTIONS_SHOWN = 8
+MAX_REPEATS_SHOWN = 3
+
+
+def _history(entry: FileBrief) -> list[str]:
+    """What has already gone wrong here, and what nothing has looked at.
+
+    A path with no recorded finding is not a safe path — it may simply never
+    have been analysed. Those two states read identically unless one of them
+    says so (RULES.md section 5).
+    """
+    out = []
+    if entry.repeats:
+        worst = ", ".join(f"{rule} x{count}"
+                          for rule, count in entry.repeats[:MAX_REPEATS_SHOWN])
+        out.append(f"    has tripped before: {worst} — expect the same again")
+    if entry.unchecked:
+        out.append("    changed since anything last analysed it")
+    elif entry.never_checked and entry.exists:
+        out.append("    never analysed — no findings here means nobody looked, "
+                   "not that it is clean")
+    return out
 
 
 def _crowding(entry: FileBrief) -> list[str]:
@@ -44,13 +65,17 @@ def _protected(entry: FileBrief) -> list[str]:
 
 
 def _file_lines(entry: FileBrief) -> list[str]:
-    if entry.unreadable:
-        return [f"  {entry.path}", f"    cannot analyse: {entry.unreadable[:70]}"]
-
     out = [f"  {entry.path}" + ("  (new file)" if not entry.exists else "")]
+    if entry.unreadable:
+        # Not a short circuit: what the ledger already knows about this path is
+        # still true, and is the most useful thing to say about a file nothing
+        # can measure.
+        out.append(f"    {entry.unreadable[:70]}")
+        return out + _history(entry)
     if entry.line_limit:
         out.append(f"    room: {entry.headroom} more lines of code "
                    f"({entry.lines}/{entry.line_limit})")
+    out.extend(_history(entry))
     out.extend(_crowding(entry))
     if entry.forbidden_imports:
         out.append(f"    zone `{entry.zone}` may not import: "
@@ -98,10 +123,40 @@ def to_dict(report: Brief) -> dict:
                 "zone": f.zone,
                 "forbidden_imports": list(f.forbidden_imports),
                 "unreadable": f.unreadable,
+                "rules_that_fired_here_before": [
+                    {"rule": rule, "times": times} for rule, times in f.repeats],
+                "changed_since_last_analysed": f.unchecked,
+                "never_analysed": f.never_checked,
             }
             for f in report.files
         ],
     }
 
 
-__all__ = ["render", "to_dict"]
+def brief_command(args) -> int:
+    """Say what is true about these files before anything is edited.
+
+    The cheapest verdict is the one that never has to be issued. Everything
+    here is read off the syntax tree and the ledger — no model call, no network.
+
+    Lives here rather than in commands.py for the same reason ``compact_command``
+    lives with compaction: a command and the thing it presents change together.
+    """
+    import json
+    import sys
+
+    from .brief import brief
+    from .core.policy import Policy
+
+    try:
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
+    except (OSError, ValueError) as exc:
+        print(f"yieldpoint: {exc}", file=sys.stderr)
+        return 2
+
+    report = brief(args.paths, policy, args.root)
+    print(json.dumps(to_dict(report), indent=2) if args.json else render(report))
+    return 0
+
+
+__all__ = ["render", "to_dict", "brief_command"]
