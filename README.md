@@ -23,7 +23,8 @@
        exists they render as red "package or version not found". -->
   <img alt="Python versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg">
   <a href="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
+  <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg"></a>
+  <a href="./COMMERCIAL.md"><img alt="Free tier" src="https://img.shields.io/badge/free-teams%20under%2010-brightgreen.svg"></a>
   <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
 
@@ -1195,13 +1196,27 @@ Start with [CONTRIBUTING.md](./CONTRIBUTING.md) and [RULES.md](./RULES.md).
 | [SECURITY.md](./.github/SECURITY.md) | Threat model and reporting |
 | [Documentation site](https://tensilestream.github.io/yieldpoint/) | Generated from `scripts/build_docs.py` |
 | [TRADEMARK.md](./TRADEMARK.md) | What the licence covers, and what the name does not |
+| [COMMERCIAL.md](./COMMERCIAL.md) | Who pays, who does not, in one table |
+| [CLA.md](./CLA.md) | What a contribution grants, and why it is needed |
 
 ## License
 
-[Apache-2.0](./LICENSE). Use it commercially, fork it, ship it inside something you sell —
-the licence asks only that you keep the copyright notices and include
-[`NOTICE`](./NOTICE) when you redistribute.
+[Business Source License 1.1](./LICENSE) — source-available, and Apache-2.0 on a clock.
 
-The **name and mark are not covered by the licence**, which is ordinary for Apache-2.0
-(section 6) and is written out in [TRADEMARK.md](./TRADEMARK.md): fork it freely, give
-your fork its own name.
+**Free in production** for individuals, for teams of fewer than ten people who write or
+review software, and for charities, schools and OSI-licensed open source projects. **Free
+without limit, for everyone**, for evaluation, development and testing. Production use
+above that needs a commercial licence — see [COMMERCIAL.md](./COMMERCIAL.md), which is one
+table and no sales copy.
+
+You get the whole source either way. There is no crippled build and no feature withheld
+from the free tier.
+
+**Every release becomes Apache-2.0 four years after it ships** — written into the licence,
+and not withdrawable. If this project is abandoned or the terms later change in a way you
+dislike, the version you hold today still opens on schedule.
+
+The **name and mark are not licensed with the code**, which is ordinary, and is written
+out in [TRADEMARK.md](./TRADEMARK.md): fork it freely, give your fork its own name.
+
+Contributions need a `Signed-off-by` line — see [CLA.md](./CLA.md).
