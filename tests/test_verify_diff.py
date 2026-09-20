@@ -74,8 +74,27 @@ class TestChangeSet(DiffCase):
         self.assertIs(verdict.status, Status.PASS)
         self.assertEqual(len(verdict.checked), 2)
 
-    def test_empty_diff_passes(self):
-        self.assertIs(verify_diff("", root=self.root, policy=Policy.from_dict(STRUCTURE_OFF)).status, Status.PASS)
+    def test_an_empty_diff_is_unverified_not_clean(self):
+        """Nothing to analyse is not a clean result.
+
+        This asserted PASS until it was noticed that `verify_node` returns
+        UNVERIFIED for the same situation, and that RULES.md section 5 names a
+        green result for an unperformed check as the most serious defect this
+        project can ship. An agent harness calling `verify_diff` on `git diff`
+        with no edits was being told its work was fine.
+        """
+        verdict = verify_diff("", root=self.root,
+                              policy=Policy.from_dict(STRUCTURE_OFF))
+        self.assertIs(verdict.status, Status.UNVERIFIED)
+        self.assertFalse(verdict.findings)
+        self.assertFalse(bool(verdict), "UNVERIFIED must be falsey")
+        self.assertTrue(any("nothing was verified" in reason
+                            for reason in verdict.skipped), verdict.skipped)
+
+    def test_text_that_is_not_a_diff_is_also_unverified(self):
+        verdict = verify_diff("not a diff at all\n", root=self.root,
+                              policy=Policy.from_dict(STRUCTURE_OFF))
+        self.assertIs(verdict.status, Status.UNVERIFIED)
 
 
 class TestUnreadableChanges(DiffCase):

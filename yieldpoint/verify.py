@@ -134,7 +134,17 @@ def verify_diff(
     base = Path(root)
     fetch = read or (lambda rel: _read_file(base / rel))
 
-    states, verdict = _collect(diffmod.parse(diff_text), fetch, resolved)
+    parsed = diffmod.parse(diff_text)
+    if not parsed:
+        # Nothing to analyse is not a clean result. An empty diff reaching a
+        # caller as `pass` is the green banner in its quietest form: a surface
+        # that verified nothing reporting that everything is fine
+        # (RULES.md section 5). The caller decides what to do about it.
+        return Verdict.of([], skipped=[
+            "no file changes found in this diff; nothing was verified"
+        ])
+
+    states, verdict = _collect(parsed, fetch, resolved)
     covered = _pool(states, resolved)
     defined = _pool_definitions(states)
 
