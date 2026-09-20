@@ -1,0 +1,43 @@
+You are building a benchmark inside the Yieldpoint repository at
+/Users/kumudham/workspace/yieldpoint.
+
+Read specs/AGENT_HARNESS_BENCHMARK.md first, completely, before writing any
+code. It is the specification. Follow it in the order it gives.
+
+Build the four deliverables it lists, in order. After each one, stop and prove
+it works by running it — do not write all four and test at the end.
+
+Rules that matter more than finishing:
+
+1. Report what actually happened. If the gated arm costs more tokens, print
+   that. If a task never provokes its rule, list it under
+   targets_not_provoked. Never tune the tasks until the numbers look better.
+
+2. Do not guess at an API. The spec names the file to read for every
+   integration point. Read it. `verify_node` expects a specific state shape;
+   it is written down in yieldpoint/langgraph/node.py.
+
+3. Use the shipped integration, not a copy of it. Import verify_node and
+   make_router from yieldpoint.langgraph. The point of this benchmark is to
+   test what ships.
+
+4. Exit code 3 from the CLI means "nothing could be analysed". It is not a
+   pass. Treating it as one is the worst defect this project can have.
+
+5. Before editing any file, run:
+       python -m yieldpoint brief <the files you are about to touch>
+   It tells you the line budget left, which functions are already at their
+   limit, and which assertions must not get weaker. It costs nothing and it
+   will save you a rejected edit.
+
+6. This repository enforces its own limits: 300 lines per file, 50 per
+   function, complexity 10, 5 parameters. Check with:
+       python -m unittest discover -s tests -t . -q
+       python -m yieldpoint review
+
+Start with deliverable 1 and only three tasks. Three that run are worth more
+than thirty that do not.
+
+When you are done, say plainly which parts of the definition-of-done checklist
+you completed and which you did not. An honest partial result is more useful
+than a claim of completion I have to go and check.
