@@ -221,6 +221,21 @@ These are enforced; code that breaks them is rejected by the commit gate.
   an import there
 - Every new test must assert a value, not just that something is truthy
 
+## A trap that has already cost two runs
+
+A model can emit a perfectly formed tool call as **text in `content`** rather
+than in the structured `tool_calls` field. Ollama does this for
+qwen2.5-coder, and so does LangChain's `ChatOllama`:
+
+```
+reply.tool_calls -> []
+reply.content    -> '{"name": "read_file", "arguments": {"path": "..."}}'
+```
+
+Reading only the structured field makes a model that called a tool correctly
+indistinguishable from one that answered in prose — and those need opposite
+fixes. Parse both. `tool_calls_of` in `langgraph_agent.py` does.
+
 ## Where to look before asking
 
 | question | file |

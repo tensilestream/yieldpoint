@@ -31,6 +31,7 @@ class ArmResult:
     baseline_failed: bool
     tests_pass: bool
     rules: list[str]
+    verification_status: str
     turns: int
     tool_calls: int
     prompt_tokens: int
@@ -141,7 +142,7 @@ def _run_arm(task: RepoTask, model: str, arm: str, max_turns: int, seed: int) ->
         diff = _command("git", "diff", cwd=checkout)
         verdict = verify_diff(diff, root=str(checkout))
         rules = sorted({finding.rule for finding in verdict.findings})
-        return ArmResult(arm, True, True, test.returncode == 0, rules, int(state.get("turns", 0)),
+        return ArmResult(arm, True, True, test.returncode == 0, rules, verdict.status.value, int(state.get("turns", 0)),
                          int(state.get("tool_calls", 0)), int(state.get("prompt_tokens", 0)),
                          int(state.get("output_tokens", 0)), round(time.perf_counter() - start, 3),
                          list(state.get("history", [])))
@@ -226,12 +227,13 @@ def main() -> int:
               f"`{skipped['command']}`")
     if report.get("unrunnable"):
         print()
-    print("task                 arm       tests  turns  tools  prompt  output  seconds  rules")
+    print("task                 arm       tests  turns  tools  prompt  output  seconds  verdict     rules")
     for row in report["results"]:
         for arm in row["arms"]:
             print(f"{row['task']['name'][:20]:20} {arm['arm']:9} {str(arm['tests_pass']):5} "
                   f"{arm['turns']:5} {arm['tool_calls']:6} {arm['prompt_tokens']:7} "
-                  f"{arm['output_tokens']:7} {arm['seconds']:7.2f} {','.join(arm['rules']) or '-'}")
+                  f"{arm['output_tokens']:7} {arm['seconds']:7.2f} {arm['verification_status']:11} "
+                  f"{','.join(arm['rules']) or '-'}")
     print(f"targets_not_provoked: {', '.join(report['targets_not_provoked']) or '-'}")
     return 0
 

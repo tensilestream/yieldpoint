@@ -269,8 +269,11 @@ def init(args) -> int:
 
     _report_git_gate(root, skip=bool(getattr(args, "no_git", False)))
 
+    hooked = client.key == "claude-code" and not args.no_hook
     if args.no_hook:
         print("  hook     skipped (--no-hook); nothing will enforce, only explain")
+    elif not hooked:
+        print(f"  hook     no native hook for {client.label}; MCP advises and git gates commits")
     else:
         hook_args = _HookArgs(
             settings=str(root / ".claude" / "settings.json"),
@@ -279,7 +282,7 @@ def init(args) -> int:
         )
         install_hook(hook_args)
 
-    _next_steps(args.enforce, not args.no_hook)
+    _next_steps(args.enforce, hooked)
     return EXIT_OK
 
 
@@ -318,11 +321,12 @@ def _report_git_gate(root: Path, *, skip: bool) -> None:
 
 def _next_steps(enforce: bool, hooked: bool) -> None:
     """What to do now. Separated so ``init`` stays readable as a sequence."""
-    print("\nThree doors, deliberately:")
-    print("  per-edit hook   catches an edit before it lands — Claude Code only,")
-    print("                  and only for edits made with its file-edit tools")
-    print("  Stop gate       catches everything that hook cannot see, including")
-    print("                  edits written through the shell")
+    print("\nThree doors, deliberately:" if hooked else "\nTwo doors, deliberately:")
+    if hooked:
+        print("  per-edit hook   catches an edit before it lands — Claude Code only,")
+        print("                  and only for edits made with its file-edit tools")
+        print("  Stop gate       catches everything that hook cannot see, including")
+        print("                  edits written through the shell")
     print("  pre-commit      holds for every other provider, because a commit is")
     print("                  where all of their work arrives")
 

@@ -6,6 +6,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from yieldpoint.core.verdict import SCHEMA_VERSION
 from contextlib import redirect_stderr, redirect_stdout
@@ -288,6 +289,15 @@ class TestInit(CliCase):
         self.assertFalse((root / ".claude" / "settings.json").exists())
         self.assertIn("only explain", out)
 
+    def test_opencode_setup_does_not_write_claude_hooks(self):
+        root = self._repo()
+        with patch("yieldpoint.mcp.clients.config_path", return_value=root / "opencode.json"):
+            code, out, _ = run(["init", "--root", str(root), "--client", "opencode"])
+        self.assertEqual(code, EXIT_OK)
+        self.assertTrue((root / "opencode.json").is_file())
+        self.assertFalse((root / ".claude" / "settings.json").exists())
+        self.assertIn("no native hook", out)
+
 
 class TestTurnEndReport(CliCase):
     """One file, refreshed in place at the end of every turn.
@@ -352,4 +362,3 @@ class TestTurnEndReport(CliCase):
 
 if __name__ == "__main__":
     unittest.main()
-

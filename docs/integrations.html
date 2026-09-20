@@ -25,10 +25,10 @@ moment in the loop.</p>
 <p>Runs before an agent's edit lands, and can refuse it. This is the only surface that
 prevents a weakening rather than reporting one afterwards.</p>
 <pre><code>yieldpoint install-hook --advisory   <span class="c"># reports only</span>
-yieldpoint install-hook --enforce    <span class="c"># blocks</span></code></pre>
+yieldpoint install-hook              <span class="c"># blocks (the default)</span></code></pre>
 
 <h2>MCP server &mdash; so the agent can ask</h2>
-<p>Registers seven tools, including a zero-argument <code>yieldpoint_review</code> the
+<p>Registers eight tools, including a zero-argument <code>yieldpoint_review</code> the
 agent can call after finishing a set of edits.</p>
 <pre><code>yieldpoint install-mcp --client cursor</code></pre>
 

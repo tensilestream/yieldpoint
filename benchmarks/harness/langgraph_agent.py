@@ -18,7 +18,7 @@ sys.path[:0] = (str(ROOT), str(ROOT / "benchmarks" / "ollama"))
 
 from ollama_client import HOST, OllamaUnavailable  # noqa: E402
 from yieldpoint.langgraph import (  # noqa: E402
-    ESCALATE, PASS, REPAIR, UNVERIFIED, make_router, repair_context, verdict_from, verify_node,
+    BLOCK, ESCALATE, PASS, REPAIR, UNVERIFIED, make_router, repair_context, verdict_from, verify_node,
 )
 
 SYSTEM = (
@@ -154,7 +154,39 @@ class CheckoutTools:
     def __init__(self, checkout: str, test_command: str):
         self.root, self.test_command = Path(checkout).resolve(), test_command
 
+    @property
+    def _spellings(self) -> tuple[str, ...]:
+        """Every way this checkout's path can be written.
+
+        macOS resolves /var to /private/var, so a tool that prints an
+        unresolved path would slip past a single replacement. Longest first,
+        or the shorter form leaves a fragment of the longer one behind.
+        """
+        root = str(self.root)
+        candidates = {root, str(Path(self.root).absolute())}
+        if root.startswith("/private/"):
+            candidates.add(root[len("/private"):])
+        return tuple(sorted(candidates, key=len, reverse=True))
+
+    def _stable(self, text: str) -> str:
+        """Replace the checkout path with a fixed placeholder.
+
+        Each arm runs in a fresh temp directory whose name is random, and that
+        name appears in pytest output, tracebacks and import errors. It reaches
+        the model through tool results, so the context differs between runs and
+        two runs of the same seed diverge from the first failure onward. The
+        benchmark was not reproducible, and a benchmark that is not
+        reproducible cannot support a claim.
+        """
+        for spelling in self._spellings:
+            text = text.replace(spelling, "/workspace")
+        return text
+
     def call(self, name: str, arguments: dict[str, Any], changes: list[dict]) -> str:
+        return self._stable(self._dispatch(name, arguments, changes))
+
+    def _dispatch(self, name: str, arguments: dict[str, Any],
+                  changes: list[dict]) -> str:
         if name == "read_file":
             return self._read(str(arguments.get("path", "")))
         if name == "write_file":
@@ -212,19 +244,19 @@ class CheckoutTools:
                               capture_output=True, check=True).stdout
         verdict = verify_diff(diff, root=str(self.root))
         return {"status": verdict.status.value,
-                "rules": sorted({item.rule for item in verdict.findings})}
+                "rules": sorted({item.rule for item in verdict.findings}), "skipped": list(verdict.skipped)}
 
 
 class AgentRuntime:
     def __init__(self, settings: AgentSettings):
         self.settings = settings
         self.tools = CheckoutTools(settings.checkout, settings.test_command)
-        self.router = make_router(max_repairs=settings.max_turns)
+        self.router = make_router(max_repairs=3)
 
     def agent(self, state: State) -> dict:
         messages = list(state["messages"])
         attempts = int(state.get("yieldpoint_attempts", 0))
-        if self.settings.gated and attempts > int(state.get("repair_seen", 0)):
+        if self.settings.gated and attempts > int(state.get("repair_seen", 0)) and repair_context(state):
             messages.append({"role": "user", "content": self.feedback(state)})
         reply = _reply(self.settings.model, messages, self.settings.temperature,
                        self.settings.seed + int(state.get("turns", 0)) + 1)
@@ -288,7 +320,7 @@ class AgentRuntime:
 
     def after_verify(self, state: State) -> str:
         route = self.router(state)
-        if route == ESCALATE or int(state.get("turns", 0)) >= self.settings.max_turns:
+        if route in (BLOCK, ESCALATE) or int(state.get("turns", 0)) >= self.settings.max_turns:
             return "end"
         return "agent"
 

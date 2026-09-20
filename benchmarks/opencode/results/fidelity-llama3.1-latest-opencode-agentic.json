@@ -1,0 +1,105 @@
+{
+  "model": "llama3.1:latest",
+  "results": [
+    {
+      "tools_offered": 1,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:write",
+        "structured:write",
+        "structured:write"
+      ]
+    },
+    {
+      "tools_offered": 2,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:write",
+        "structured:write",
+        "structured:write"
+      ]
+    },
+    {
+      "tools_offered": 3,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:read,bash,write",
+        "structured:read,bash,write",
+        "structured:read,bash,write"
+      ]
+    },
+    {
+      "tools_offered": 4,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    },
+    {
+      "tools_offered": 5,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    },
+    {
+      "tools_offered": 6,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    },
+    {
+      "tools_offered": 7,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    },
+    {
+      "tools_offered": 8,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    },
+    {
+      "tools_offered": 9,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    },
+    {
+      "tools_offered": 10,
+      "structured": 3,
+      "repeats": 3,
+      "verdicts": [
+        "structured:edit",
+        "structured:edit",
+        "structured:edit"
+      ]
+    }
+  ]
+}
