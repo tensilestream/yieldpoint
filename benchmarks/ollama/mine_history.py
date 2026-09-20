@@ -29,22 +29,48 @@ from yieldpoint.verify import verify_diff  # noqa: E402
 RESULTS = Path(__file__).resolve().parent / "results"
 CACHE = Path(__file__).resolve().parent / ".repos"
 
-#: Python projects with real test suites and enough history to be worth reading.
-PUBLIC = (
-    "https://github.com/psf/requests",
-    "https://github.com/pallets/click",
-    "https://github.com/Textualize/rich",
-    "https://github.com/pallets/flask",
-    "https://github.com/psf/black",
-)
+#: Projects with real test suites and enough history to be worth reading, one
+#: group per language. Chosen for size: a repository nobody can clone in a
+#: minute is a benchmark nobody reproduces.
+PUBLIC_BY_LANGUAGE = {
+    "python": (
+        "https://github.com/psf/requests",
+        "https://github.com/pallets/click",
+    ),
+    "go": (
+        "https://github.com/spf13/cobra",
+        "https://github.com/gorilla/mux",
+    ),
+    "rust": (
+        "https://github.com/clap-rs/clap",
+    ),
+    "javascript": (
+        "https://github.com/axios/axios",
+        "https://github.com/expressjs/express",
+    ),
+    "java": (
+        "https://github.com/google/gson",
+    ),
+    "ruby": (
+        "https://github.com/sinatra/sinatra",
+    ),
+}
+
+PUBLIC = tuple(url for group in PUBLIC_BY_LANGUAGE.values() for url in group)
 
 #: Every rule the engine can fire, so a mine says something about all of them
 #: rather than only the test contract. Structure limits are the project's own
 #: defaults; a repository with different conventions would set its own.
 POLICY = {
     "test_contract": {
-        "protected_patterns": ["**/tests/**", "**/test/**", "**/test_*.py",
-                               "**/*_test.py"],
+        # Every language's test-file convention, not only Python's. Mining
+        # with Python patterns against a Go repository finds nothing and
+        # reads as "Go is clean".
+        "protected_patterns": [
+            "**/tests/**", "**/test/**", "**/spec/**", "**/__tests__/**",
+            "**/test_*.py", "**/*_test.*", "**/*.test.*", "**/*Test.*",
+            "**/*Tests.*", "**/*Spec.*", "**/*_spec.rb",
+        ],
         "assertion_monotonicity": "repair",
         "forbid_vacuous_assertions": "repair",
         "forbid_new_skip_markers": "repair",
@@ -73,9 +99,17 @@ ALL_RULES = (
 )
 
 
+#: Which language set a repository came from, for the report.
+LANGUAGE_OF = {
+    url.rstrip("/").split("/")[-1]: language
+    for language, urls in PUBLIC_BY_LANGUAGE.items() for url in urls
+}
+
+
 @dataclass(frozen=True)
 class Candidate:
     repo: str
+    language: str
     sha: str
     subject: str
     author_date: str
@@ -134,7 +168,8 @@ def harvest(repo: Path, sha: str, policy: Policy) -> list[Candidate]:
     when = meta[1] if len(meta) > 1 else ""
 
     return [
-        Candidate(repo=repo.name, sha=sha[:12], subject=subject, author_date=when,
+        Candidate(repo=repo.name, language=LANGUAGE_OF.get(repo.name, "unknown"),
+                  sha=sha[:12], subject=subject, author_date=when,
                   file=f.file, line=f.line, rule=f.rule, detail=f.detail,
                   before=f.before, after=f.after, symbol=f.symbol)
         for f in verdict.findings
@@ -161,6 +196,10 @@ def summarise(candidates: list[Candidate], repos: int) -> dict:
     return {
         "repositories": repos,
         "candidates": len(candidates),
+        "by_language": {
+            language: len([c for c in candidates if c.language == language])
+            for language in sorted({c.language for c in candidates})
+        },
         "rules_with_a_real_instance": sorted(by_rule),
         "rules_with_none": sorted(r for r in ALL_RULES if r not in by_rule),
         "by_rule": dict(by_rule.most_common()),
@@ -174,7 +213,13 @@ def summarise(candidates: list[Candidate], repos: int) -> dict:
 
 def sources(args) -> list[Path]:
     if args.clone:
-        return [p for p in (clone(url) for url in PUBLIC) if p]
+        urls = (PUBLIC_BY_LANGUAGE.get(args.language, ()) if args.language
+                else PUBLIC)
+        if not urls:
+            print(f"error: no repositories for {args.language!r}; "
+                  f"known: {', '.join(sorted(PUBLIC_BY_LANGUAGE))}", file=sys.stderr)
+            return []
+        return [p for p in (clone(url) for url in urls) if p]
     return [Path(r).resolve() for r in args.repos]
 
 
@@ -183,6 +228,8 @@ def main() -> int:
     parser.add_argument("--repos", nargs="*", default=[], help="local git repos")
     parser.add_argument("--clone", action="store_true",
                         help=f"clone and mine {len(PUBLIC)} public projects")
+    parser.add_argument("--language", default="",
+                        help="clone only this language's set")
     parser.add_argument("--limit", type=int, default=2000,
                         help="commits per repository (default: %(default)s)")
     parser.add_argument("--out", default=str(RESULTS / "candidates.jsonl"))

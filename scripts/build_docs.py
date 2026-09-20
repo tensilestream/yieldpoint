@@ -110,6 +110,12 @@ RULES = {
     "vacuous_assertion": (CONTRACT, "repair", "Assertion that cannot fail",
         "<code>assert True</code>, <code>assert [1]</code>, <code>assert x or True</code> "
         "— an assertion whose truth does not depend on the code under test."),
+    "weak_new_test": (CONTRACT, "repair", "New test that only checks existence",
+        "A test added by this change whose every assertion is a not-null or truthiness "
+        "check. Monotonicity cannot see this — there is no earlier version to be weaker "
+        "than — yet the test passes whatever value the code returns. This is the shape "
+        "an agent produces when asked to add a feature <em>with tests</em>. Advisory by "
+        "default: a smoke test that asserts a call returns something is legitimate."),
     "empty_test": (CONTRACT, "repair", "Test with nothing left in it",
         "A test function whose body asserts nothing: a <code>pass</code>, a docstring, "
         "or setup with no check at the end. It runs, it is counted, it verifies nothing."),

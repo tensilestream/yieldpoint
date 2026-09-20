@@ -22,6 +22,7 @@ EXACT_SUFFIXES = (".py",)
 _OFFENCE_POLICY = {
     testintegrity.VACUOUS_ASSERTION: "forbid_vacuous_assertions",
     testintegrity.EMPTY_TEST: "forbid_vacuous_assertions",
+    testintegrity.WEAK_NEW_TEST: "forbid_weak_new_tests",
     testintegrity.SKIP_MARKER: "forbid_new_skip_markers",
     testintegrity.DISABLED_ASSERTION: "forbid_swallowed_exceptions",
 }

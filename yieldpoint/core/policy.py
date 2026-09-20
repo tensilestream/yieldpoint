@@ -38,6 +38,10 @@ class TestContract:
     forbid_new_skip_markers: Status | None = Status.REPAIR
     forbid_swallowed_exceptions: Status | None = Status.REPAIR
 
+    forbid_weak_new_tests: Status | None = Status.REPAIR
+    """A new test whose every assertion only checks existence. Advisory by
+    default: a smoke test asserting a call returns *something* is legitimate."""
+
 
 DEFAULT_IGNORE = (
     "**/node_modules/**", "**/.git/**", "**/dist/**", "**/build/**",

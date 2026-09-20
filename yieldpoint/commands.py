@@ -277,6 +277,31 @@ def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> in
     return _exit_for(verdict, policy)
 
 
+def brief_command(args) -> int:
+    """Say what is true about these files before anything is edited.
+
+    The cheapest verdict is the one that never has to be issued. Everything
+    here is read off the syntax tree — no model call, no network.
+    """
+    import json as _json
+
+    from .brief import brief
+    from .briefing import render, to_dict
+
+    try:
+        policy = Policy.load(args.policy)
+    except (OSError, ValueError) as exc:
+        print(f"yieldpoint: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    report = brief(args.paths, policy, args.root)
+    if args.json:
+        print(_json.dumps(to_dict(report), indent=2))
+    else:
+        print(render(report))
+    return EXIT_OK
+
+
 def scan_command(args) -> int:
     from .scan import scan
 

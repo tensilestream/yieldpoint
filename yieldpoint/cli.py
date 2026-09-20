@@ -15,6 +15,7 @@ import sys
 
 from . import __version__
 from .commands import (
+    brief_command,
     EXIT_ERROR,
     EXIT_FINDINGS,
     EXIT_UNVERIFIED,
@@ -213,6 +214,14 @@ def _add_gate_commands(sub) -> None:
         "--advisory", action="store_true",
         help="report findings but never deny an edit")
     hook_cmd.set_defaults(handler=hook_command)
+
+    brief_cmd = sub.add_parser(
+        "brief", help="what to know before editing these files")
+    brief_cmd.add_argument("paths", nargs="+", help="files a task is about to touch")
+    brief_cmd.add_argument("--root", default=".", help="repository root")
+    brief_cmd.add_argument("--policy", help="path to .yieldpoint.json")
+    brief_cmd.add_argument("--json", action="store_true")
+    brief_cmd.set_defaults(handler=brief_command)
 
     scan_cmd = sub.add_parser("scan", help="audit a repository as it stands")
     scan_cmd.add_argument("path", nargs="?", default=".", help="directory or file to audit")

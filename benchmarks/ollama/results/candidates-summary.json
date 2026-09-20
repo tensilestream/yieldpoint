@@ -1,6 +1,9 @@
 {
   "repositories": 1,
-  "candidates": 71,
+  "candidates": 22,
+  "by_language": {
+    "unknown": 22
+  },
   "rules_with_a_real_instance": [
     "assertion_monotonicity",
     "change_too_large",
@@ -11,7 +14,6 @@
     "empty_test",
     "export_removed",
     "function_too_long",
-    "skip_marker",
     "too_many_parameters"
   ],
   "rules_with_none": [
@@ -20,24 +22,24 @@
     "disabled_assertion",
     "file_too_long",
     "nesting_too_deep",
+    "skip_marker",
     "utility_module",
     "vacuous_assertion"
   ],
   "by_rule": {
-    "complexity_too_high": 19,
-    "function_too_long": 17,
-    "too_many_parameters": 8,
-    "change_too_large": 7,
-    "empty_test": 4,
-    "assertion_monotonicity": 4,
+    "function_too_long": 5,
+    "change_too_large": 4,
     "ci_check_removed": 3,
-    "duplicate_implementation": 3,
-    "skip_marker": 3,
-    "ci_check_disabled": 2,
+    "empty_test": 2,
+    "duplicate_implementation": 2,
+    "assertion_monotonicity": 2,
+    "ci_check_disabled": 1,
+    "too_many_parameters": 1,
+    "complexity_too_high": 1,
     "export_removed": 1
   },
-  "carry_the_removed_text": 7,
-  "distinct_commits": 17,
+  "carry_the_removed_text": 2,
+  "distinct_commits": 6,
   "labelled": 0,
   "note": "candidates, not labels. Whether each removal was legitimate is a judgement mining cannot make."
 }
