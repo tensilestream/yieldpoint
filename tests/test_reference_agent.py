@@ -11,7 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = (str(ROOT / "benchmarks" / "harness"),
                 str(ROOT / "benchmarks" / "ollama"), str(ROOT))
 
-from langchain_core.messages import AIMessage  # noqa: E402
+try:
+    from langchain_core.messages import AIMessage  # noqa: E402
+except ModuleNotFoundError:
+    raise unittest.SkipTest(
+        "reference-agent tests require the optional LangChain/LangGraph stack"
+    )
+
 from langgraph_agent import AgentRuntime, AgentSettings  # noqa: E402
 from reference_agent import lift_text_tool_calls  # noqa: E402
 from yieldpoint.core.verdict import Status, Verdict  # noqa: E402
