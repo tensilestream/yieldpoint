@@ -149,3 +149,80 @@ def matrix_block(m: dict) -> str:
         "matter as much as the others: a checker that fires on real work is one "
         "people turn off.</p>")
     return f"<table class='rows'>{head}{''.join(body)}</table>{note}"
+
+
+def headline_block(data: dict) -> str:
+    """The three numbers that decide whether this is worth installing.
+
+    Accuracy, tokens, turns — and the ratio between them, because the raw token
+    count on its own reads as a straight loss and the raw accuracy on its own
+    reads as a free win. Neither is true alone.
+    """
+    s = data["summary"]
+    a, b = s["without"], s["with"]
+    per_a = a["tokens"] // a["clean"] if a["clean"] else None
+    per_b = b["tokens"] // b["clean"] if b["clean"] else None
+
+    def row(label: str, left, right, note: str = "") -> str:
+        extra = f"<p class='fix'>{note}</p>" if note else ""
+        return (f"<tr><th>{label}{extra}</th>"
+                f"<td class='num'>{left}</td><td class='num'>{right}</td></tr>")
+
+    body = (
+        row("code with no problems",
+            f"<b>{a['clean']}/{a['tasks']}</b>", f"<b>{b['clean']}/{b['tasks']}</b>",
+            "the point of the whole thing") +
+        row("tokens spent", f"{a['tokens']:,}", f"{b['tokens']:,}",
+            "more, because bad work gets redone") +
+        row("turns taken", a["turns"], b["turns"]) +
+        row("tokens per good answer",
+            f"{per_a:,}" if per_a else "&mdash;",
+            f"{per_b:,}" if per_b else "&mdash;",
+            "the honest comparison") +
+        row("cost of the check itself", "&mdash;",
+            f"0 tokens, {b['verdict_ms']:.0f} ms",
+            "no model call, ever"))
+
+    return (
+        "<table class='rows'><tr><th></th><th>without Yieldpoint</th>"
+        f"<th>with Yieldpoint</th></tr>{body}</table>"
+        "<p class='lead'>You pay about the same per answer you can trust, and "
+        "you get more of them. It is not a way to spend less &mdash; the check "
+        "is free, fixing what it finds is not.</p>")
+
+
+def history_block(data: dict) -> str:
+    """Real commits from a real repository. No model, no fixtures."""
+    rows_ = rows("", [
+        ("commits replayed", f"{data['commits_replayed']}"),
+        ("commits a correctness rule would have stopped",
+         f"<b>{data['commits_a_correctness_rule_would_have_stopped']}</b>"),
+        ("time taken", f"{data['seconds']}s"),
+        ("model calls", f"{data['model_calls']}"),
+        ("tokens", f"{data['tokens']}"),
+    ])
+
+    commits = []
+    for commit in data["stopped"]:
+        items = []
+        for f in commit["findings"]:
+            removed = (f"<pre class='code'>{html.escape(f['before'])}</pre>"
+                       if f["before"] else "")
+            items.append(
+                f"<li><span class='rule'>{html.escape(f['rule'])}</span> "
+                f"{html.escape(f['file'])}:{f['line']}{removed}</li>")
+        commits.append(
+            f"<h3><code>{html.escape(commit['sha'])}</code> "
+            f"{html.escape(commit['subject'][:60])}</h3>"
+            f"<ul class='findings'>{''.join(items)}</ul>")
+
+    return (
+        "<p class='lead'>Every commit in this repository, re-verified as the "
+        "change it was when it was made. These are assertions that were "
+        "silently deleted from real tests, by real people, and merged.</p>"
+        + rows_ + "".join(commits) +
+        "<p class='lead'>Yieldpoint cannot tell you which of these were "
+        "wrong &mdash; that judgement is the point of running it on your own "
+        "history rather than on a demo. Run "
+        "<code>python benchmarks/ollama/history_proof.py --repo /path/to/yours</code> "
+        "and read what it finds.</p>")

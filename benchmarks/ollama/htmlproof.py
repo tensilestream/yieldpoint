@@ -14,6 +14,7 @@ import argparse
 import html
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -215,50 +216,73 @@ def measured_block(judge: dict) -> str:
         "block a different set on the next run.</p>")
 
 
-def build(story: dict, ab: dict | None, judge: dict | None,
-          matrix: dict | None = None, rule_ab: dict | None = None) -> str:
-    from abblocks import (
-        ab_block, calibration_block, matrix_block, rule_ab_block)
+@dataclass(frozen=True)
+class Results:
+    """Whatever result files exist. Each section renders only if its data does."""
+
+    story: dict
+    ab: dict | None = None
+    judge: dict | None = None
+    matrix: dict | None = None
+    rule_ab: dict | None = None
+    history: dict | None = None
+
+
+def _evidence(r: Results) -> list[str]:
+    """The sections that need no model, first: they are the load-bearing ones."""
+    from abblocks import headline_block, history_block, matrix_block, rule_ab_block
+
+    parts = []
+    if r.history:
+        parts.append(section("Caught on real commits",
+                             "this repository's own history, no model",
+                             history_block(r.history)))
+    if r.rule_ab:
+        parts.append(section("In one table", "measured on this machine",
+                             headline_block(r.rule_ab)))
+    parts += [
+        section("The code", "benchmarks/ollama/example_repo, runnable",
+                scenario_block(r.story["scenario"])),
+        section("Five ways to make it green", "all of them pass; one is honest",
+                shortcut_table(r.story)),
+        section("One of them, in full", "the edit, and what comes back",
+                caught_example(r.story)),
+        section("What it does not catch", "stated, not omitted",
+                honest_limits(r.story)),
+    ]
+    if r.rule_ab:
+        parts.append(section("The same request, gated and ungated",
+                             "every rule family, identical turn budget",
+                             rule_ab_block(r.rule_ab)))
+    if r.matrix:
+        parts.append(section("Every rule, and the edit that provokes it",
+                             "new files, new methods, rewrites, tests, CI",
+                             matrix_block(r.matrix)))
+    return parts
+
+
+def build(r: Results) -> str:
+    from abblocks import ab_block, calibration_block
 
     policy = (Path(__file__).resolve().parent
               / "example_repo" / ".yieldpoint.json").read_text().strip()
-    parts = [
-        EXTRA_CSS,
-        section("The code", "benchmarks/ollama/example_repo, runnable",
-                scenario_block(story["scenario"])),
-        section("Five ways to make it green", "all of them pass; one is honest",
-                shortcut_table(story)),
-        section("One of them, in full", "the edit, and what comes back",
-                caught_example(story)),
-        section("What it does not catch", "stated, not omitted",
-                honest_limits(story)),
-        section("What it costs", "authoring, checking, repairing",
-                cost_block(story, ab, judge)),
-    ]
-    if rule_ab:
-        parts.append(section(
-            "The same request, gated and ungated",
-            "every rule family, one local model, identical turn budget",
-            rule_ab_block(rule_ab)))
-    if ab:
-        parts.append(section(
-            "The narrower A/B: test repair only",
-            "eight repair tasks, same budget both arms", ab_block(ab)))
-        cal = calibration_block(ab)
+    parts = [EXTRA_CSS] + _evidence(r)
+    parts.append(section("What it costs", "authoring, checking, repairing",
+                         cost_block(r.story, r.ab, r.judge)))
+    if r.ab:
+        parts.append(section("The narrower A/B: test repair only",
+                             "eight repair tasks, same budget both arms",
+                             ab_block(r.ab)))
+        cal = calibration_block(r.ab)
         if cal:
-            parts.append(section(
-                "Calibration", "the one constant the estimates rest on", cal))
-    if matrix:
-        parts.append(section(
-            "Every rule, and the edit that provokes it",
-            "new files, new methods, rewrites, tests, CI",
-            matrix_block(matrix)))
-    if judge:
+            parts.append(section("Calibration",
+                                 "the one constant the estimates rest on", cal))
+    if r.judge:
         parts.append(section("Measured against a real LLM judge",
                              "37 labelled cases, same inputs, gemma4 locally",
-                             measured_block(judge)))
-    parts.append(section("Adding it", "three steps", SETUP.format(
-        policy=html.escape(policy))))
+                             measured_block(r.judge)))
+    parts.append(section("Adding it", "three steps",
+                         SETUP.format(policy=html.escape(policy))))
     parts.append(section("Reproduce this page", "it is all scripts", REPRODUCE))
     return "".join(parts)
 
@@ -286,8 +310,10 @@ def regenerate(out: Path | None = None) -> Path | None:
             scope="every figure produced by running the scripts at the foot of "
                   "this page, on this machine",
             source="benchmarks/ollama/example_repo",
-            body=build(story, load("ab-*.json"), load("judge-*.json"),
-                       load("matrix.json"), load("ruleab-*.json")),
+            body=build(Results(
+                story, load("ab-*.json"), load("judge-*.json"),
+                load("matrix.json"), load("ruleab-*.json"),
+                load("history.json"))),
         ), encoding="utf-8")
         return target
     except (OSError, ValueError, KeyError) as exc:

@@ -1,0 +1,365 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yieldpoint — what it catches, and what it costs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Light is the base set. Every colour is a token so both themes resolve
+     together; nothing is defined only inside a media query. */
+  :root {
+    --ground:  #f7f8fa;
+    --panel:   #ffffff;
+    --sunk:    #eef1f5;
+    --line:    #dde2ea;
+    --ink:     #1a1d23;
+    --dim:     #636b78;
+    --faint:   #8d95a3;
+    --accent:  #2b5d8a;
+    --signal:  #a8642a;
+    --clean:   #3f7d5c;
+    --shadow:  0 1px 2px rgba(20, 28, 42, .06), 0 8px 24px rgba(20, 28, 42, .05);
+    --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1116; --panel: #161a21; --sunk: #1c212a; --line: #29303b;
+      --ink: #e8eaee; --dim: #9aa3b2; --faint: #79828f;
+      --accent: #7fb0dd; --signal: #e0a45c; --clean: #6fc099;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1116; --panel: #161a21; --sunk: #1c212a; --line: #29303b;
+    --ink: #e8eaee; --dim: #9aa3b2; --faint: #79828f;
+    --accent: #7fb0dd; --signal: #e0a45c; --clean: #6fc099;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.5rem 3rem;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 15px/1.65 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 100rem; margin: 0 auto; display: flex;
+         flex-direction: column; gap: 1.5rem; }
+
+  /* Two columns on a real screen: what to do on the left, where it stays in
+     view, and the accounting beside it rather than a screen below it. */
+  .split { display: grid; gap: 1.5rem 2rem; align-items: start;
+           grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  @media (max-width: 68rem) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .split > .col { display: flex; flex-direction: column; gap: 1.75rem;
+                  min-width: 0; }
+
+  .verdict { display: flex; flex-direction: column; gap: .2rem;
+             padding: .9rem 1.1rem; border-radius: 6px; border: 1px solid;
+             border-left-width: 4px; background: var(--panel); }
+  .verdict b { font-size: 1.05rem; font-weight: 600; }
+  .verdict span { font-size: .875rem; color: var(--dim); }
+  .verdict.is-blocking { border-color: var(--signal); }
+  .verdict.is-blocking b { color: var(--signal); }
+  .verdict.is-clean { border-color: var(--clean); }
+  .verdict.is-clean b { color: var(--clean); }
+  .verdict.is-advisory, .verdict.is-quiet { border-color: var(--line); }
+
+  .pace { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 6px; padding: .8rem 1.1rem;
+          display: flex; flex-direction: column; gap: .45rem; }
+  .pace-top { display: flex; justify-content: space-between;
+              align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .pace b { font: 500 .72rem/1 var(--mono); letter-spacing: .14em;
+            text-transform: uppercase; }
+  .pace .num { font-size: .8rem; color: var(--dim); }
+  .pace p { margin: 0; font-size: .875rem; color: var(--dim); }
+  .gauge { display: block; height: .45rem; border-radius: 2px;
+           background: var(--sunk); overflow: hidden; }
+  .gauge > span { display: block; height: 100%; background: var(--accent); }
+  .pace.is-warn b { color: var(--signal); }
+  .pace.is-warn .gauge > span { background: var(--signal); }
+  .pace.is-over { border-color: var(--signal); }
+  .pace.is-over b { color: var(--signal); }
+  .pace.is-over .gauge > span { background: var(--signal); }
+
+  .findings { list-style: none; margin: 0; padding: 0;
+              display: flex; flex-direction: column; gap: .6rem; }
+  .findings li { background: var(--panel); border: 1px solid var(--line);
+                 border-left: 3px solid var(--line); border-radius: 5px;
+                 padding: .7rem .9rem; display: flex;
+                 flex-direction: column; gap: .3rem; }
+  .findings li.is-blocking { border-left-color: var(--signal); }
+  .where { display: flex; gap: .6rem; align-items: baseline;
+           flex-wrap: wrap; }
+  .where code { font-size: .8rem; }
+  .rule { font: 500 .65rem/1 var(--mono); letter-spacing: .09em;
+          text-transform: uppercase; color: var(--dim); }
+  .findings li.is-blocking .rule { color: var(--signal); }
+  .what { margin: 0; font-size: .9rem; }
+  .fix { margin: 0; font-size: .85rem; color: var(--dim); }
+  .more { font-size: .85rem; color: var(--dim); margin: .25rem 0 0; }
+
+  .masthead { display: flex; flex-direction: column; gap: .4rem; }
+  /* The mark is the measurement: an elastic rise, the yield point where a
+     suite stops holding, then the fracture. */
+  .brand { display: flex; align-items: center; gap: .6rem; }
+  .mark { width: 2.6rem; height: 1.4rem; flex: none; overflow: visible; }
+  .eyebrow {
+    font: 500 .7rem/1 var(--mono); letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: -.015em;
+       margin: 0; text-wrap: balance; }
+  .scope { color: var(--dim); font: 400 .875rem/1.5 var(--mono); margin: 0; }
+
+  .cards { display: grid; gap: .75rem;
+           grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 1rem 1.1rem; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: .15rem;
+  }
+  .card .value {
+    font: 600 1.6rem/1.1 var(--sans); letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .card .label { font: 500 .7rem/1.4 var(--mono); letter-spacing: .1em;
+                 text-transform: uppercase; color: var(--dim); }
+  .card .note { font-size: .78rem; color: var(--faint); margin-top: .3rem; }
+  .card.is-zero .value { color: var(--clean); }
+
+  /* The three tiers of claim differ in visual weight, because they differ in
+     how much they can be trusted. Solid, ruled, then dashed and recessed. */
+  section { display: flex; flex-direction: column; gap: .5rem; }
+  .tier-head { display: flex; align-items: baseline; gap: .75rem;
+               flex-wrap: wrap; padding-bottom: .5rem;
+               border-bottom: 1px solid var(--line); }
+  h2 { font: 500 .72rem/1 var(--mono); letter-spacing: .16em;
+       text-transform: uppercase; margin: 0; color: var(--ink); }
+  .tier-head .note { font-size: .8rem; color: var(--dim); }
+  .tier-estimated .tier-head { border-bottom-style: dashed; }
+  .tier-estimated h2 { color: var(--dim); }
+  .tier-estimated .rows { opacity: .88; }
+  .tier-estimated .rows tr:nth-child(odd) { background: transparent; }
+  .tier-estimated .rows th, .tier-estimated .rows td {
+    border-bottom: 1px dashed var(--line);
+  }
+
+  h3 { font: 500 .78rem/1 var(--mono); letter-spacing: .08em;
+       text-transform: uppercase; color: var(--dim);
+       margin: 1.25rem 0 .1rem; }
+
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-weight: 400; }
+  .num { text-align: right; font-family: var(--mono);
+         font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .bars th { padding: .32rem .75rem .32rem 0; white-space: nowrap; }
+  .bars td:nth-child(2) { width: 58%; padding: .32rem 0; }
+  .bars .num { padding-left: .75rem; font-size: .85rem; }
+  .track { display: block; height: .5rem; border-radius: 2px;
+           background: var(--sunk); overflow: hidden; }
+  .bar { display: block; height: 100%; border-radius: 2px;
+         background: var(--accent); }
+  .bar.is-signal { background: var(--signal); }
+  .star { font: 500 .62rem/1 var(--mono); letter-spacing: .1em;
+          text-transform: uppercase; color: var(--signal);
+          border: 1px solid currentColor; border-radius: 3px;
+          padding: .15rem .3rem; margin-left: .5rem; vertical-align: .05em; }
+
+  .rows { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 6px; overflow: hidden; }
+  .rows tr:nth-child(odd) { background: var(--sunk); }
+  .rows th, .rows td { padding: .5rem .85rem; font-size: .9rem; }
+
+  .caveat {
+    color: var(--dim); background: var(--panel);
+    border: 1px dashed var(--line); border-left: 3px solid var(--signal);
+    padding: .85rem 1.1rem; border-radius: 0 6px 6px 0; margin: 0;
+    font-size: .9rem;
+  }
+  .caveat em { color: var(--ink); font-style: normal; font-weight: 500; }
+  .empty { color: var(--dim); }
+
+  footer { color: var(--faint); font: 400 .8rem/1.6 var(--mono);
+           border-top: 1px solid var(--line); padding-top: 1.25rem; }
+  code { font-family: var(--mono); font-size: .92em;
+         background: var(--sunk); padding: .1rem .35rem; border-radius: 3px; }
+  .scroll { overflow-x: auto; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+<main>
+  <header class="masthead">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 64 34" aria-hidden="true">
+        <path d="M2 32 C 14 32, 20 8, 30 7" fill="none"
+              stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M30 7 C 38 6, 42 14, 46 24" fill="none"
+              stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="30" cy="7" r="3.5" fill="var(--signal)"/>
+        <path d="M50 20 l8 10 M58 20 l-8 10" stroke="var(--signal)"
+              stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="eyebrow">Yieldpoint</span>
+    </div>
+    <h1>Your agent made the tests pass. Did it fix the bug?</h1>
+    <p class="scope">every figure produced by running the scripts at the foot of this page, on this machine</p>
+  </header>
+  <style>
+  pre.code { background: var(--sunk); border: 1px solid var(--line);
+    border-radius: 6px; padding: .8rem 1rem; overflow-x: auto;
+    font-family: var(--mono); font-size: .82rem; line-height: 1.55; margin: .6rem 0; }
+  pre.code .add { color: var(--clean); }
+  pre.code .del { color: var(--signal); }
+  pre.code .hunk { color: var(--faint); }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+    gap: 1rem; }
+  .verdict { border-left: 3px solid var(--signal); padding: .1rem 0 .1rem 1rem;
+    margin: .8rem 0; }
+  .verdict.is-pass { border-left-color: var(--clean); }
+  .lead { font-size: 1.02rem; color: var(--dim); max-width: 60ch; }
+  table.rows td.num { font-variant-numeric: tabular-nums; }
+  .tag { font-family: var(--mono); font-size: .76rem; padding: .1rem .45rem;
+    border-radius: 4px; border: 1px solid var(--line); white-space: nowrap; }
+  .tag.is-bad { color: var(--signal); border-color: var(--signal); }
+  .tag.is-good { color: var(--clean); border-color: var(--clean); }
+</style><section class='tier-caught'><div class='tier-head'><h2>Caught on real commits</h2><span class='note'>this repository&#x27;s own history, no model</span></div><p class='lead'>Every commit in this repository, re-verified as the change it was when it was made. These are assertions that were silently deleted from real tests, by real people, and merged.</p><table class='rows'><tr><th>commits replayed</th><td class='num'>44</td></tr><tr><th>commits a correctness rule would have stopped</th><td class='num'><b>7</b></td></tr><tr><th>time taken</th><td class='num'>5.5s</td></tr><tr><th>model calls</th><td class='num'>0</td></tr><tr><th>tokens</th><td class='num'>0</td></tr></table><h3><code>9e3cd97d13</code> [feat] Verify linters</h3><ul class='findings'><li><span class='rule'>skip_marker</span> tests/test_linters.py:172<pre class='code'>unittest.skipIf(shutil.which(&#x27;ruff&#x27;) is None, &#x27;ruff not installed&#x27;)</pre></li><li><span class='rule'>skip_marker</span> tests/test_linters.py:182<pre class='code'>unittest.skipIf(shutil.which(&#x27;ruff&#x27;) is None, &#x27;ruff not installed&#x27;)</pre></li><li><span class='rule'>skip_marker</span> tests/test_linters.py:187<pre class='code'>unittest.skipIf(shutil.which(&#x27;ruff&#x27;) is None, &#x27;ruff not installed&#x27;)</pre></li></ul><h3><code>e15957ecd5</code> [feat]  LangGraph node</h3><ul class='findings'><li><span class='rule'>empty_test</span> tests/test_langgraph.py:50</li></ul><h3><code>97b91c8185</code> [feat] core metrics</h3><ul class='findings'><li><span class='rule'>assertion_monotonicity</span> tests/test_linters.py:195<pre class='code'>self.assertEqual(_lint_rule(item), &#x27;lint.ruff-format.format&#x27;)</pre></li><li><span class='rule'>assertion_monotonicity</span> tests/test_verify_diff.py:75<pre class='code'>self.assertIs(verify_diff(&#x27;&#x27;, root=self.root, policy=Policy()).status, Status.PASS)</pre></li></ul><h3><code>d9f514758f</code> [feat] release checklist and tests</h3><ul class='findings'></ul><h3><code>0ba4a22e42</code> [feat] cli and mcp</h3><ul class='findings'><li><span class='rule'>empty_test</span> tests/test_mcp.py:150</li></ul><h3><code>076c9e695d</code> [feat ] Added middleware, routing and fanout</h3><ul class='findings'><li><span class='rule'>empty_test</span> tests/test_examples.py:53</li><li><span class='rule'>assertion_monotonicity</span> tests/test_mcp.py:174<pre class='code'>self.assertTrue(str(config_path(client)).endswith(&#x27;.json&#x27;), client.key)</pre></li><li><span class='rule'>assertion_monotonicity</span> tests/test_speech.py:136<pre class='code'>self.assertFalse(self.confirmation.matches(&#x27;anchor beacon cobalt dynamo&#x27;))</pre></li></ul><h3><code>47eacd16cd</code> [feat] Renmaed to yieldpoint</h3><ul class='findings'><li><span class='rule'>empty_test</span> tests/test_branding.py:98</li></ul><p class='lead'>Yieldpoint cannot tell you which of these were wrong &mdash; that judgement is the point of running it on your own history rather than on a demo. Run <code>python benchmarks/ollama/history_proof.py --repo /path/to/yours</code> and read what it finds.</p></section><section class='tier-in'><div class='tier-head'><h2>In one table</h2><span class='note'>measured on this machine</span></div><table class='rows'><tr><th></th><th>without Yieldpoint</th><th>with Yieldpoint</th></tr><tr><th>code with no problems<p class='fix'>the point of the whole thing</p></th><td class='num'><b>0/6</b></td><td class='num'><b>4/6</b></td></tr><tr><th>tokens spent<p class='fix'>more, because bad work gets redone</p></th><td class='num'>3,793</td><td class='num'>15,449</td></tr><tr><th>turns taken</th><td class='num'>6</td><td class='num'>14</td></tr><tr><th>tokens per good answer<p class='fix'>the honest comparison</p></th><td class='num'>&mdash;</td><td class='num'>3,862</td></tr><tr><th>cost of the check itself<p class='fix'>no model call, ever</p></th><td class='num'>&mdash;</td><td class='num'>0 tokens, 53 ms</td></tr></table><p class='lead'>You pay about the same per answer you can trust, and you get more of them. It is not a way to spend less &mdash; the check is free, fixing what it finds is not.</p></section><section class='tier-the'><div class='tier-head'><h2>The code</h2><span class='note'>benchmarks/ollama/example_repo, runnable</span></div><p class='lead'>A volume-discount bug. The tiers are documented as inclusive &mdash; spend 500 or more, get 10% &mdash; but the comparison is strict, so an order landing exactly on a boundary is quietly undercharged. One test catches it, and that test is red.</p><div class='two'><div><h3>cart.py &mdash; the bug</h3><pre class='code'>&quot;&quot;&quot;Order totals with volume discounts.
+
+The bug in here is the kind that survives review: the discount tiers are
+documented as inclusive (&quot;spend 500 or more&quot;) but the comparison is strict, so
+an order landing exactly on a boundary silently gets the lower tier.
+&quot;&quot;&quot;
+
+from decimal import Decimal
+
+#: (threshold, rate). Spending *at or above* a threshold earns its rate.
+TIERS = (
+    (Decimal(&quot;500.00&quot;), Decimal(&quot;0.10&quot;)),
+    (Decimal(&quot;100.00&quot;), Decimal(&quot;0.05&quot;)),
+)
+
+
+def subtotal(items: list[tuple[Decimal, int]]) -&gt; Decimal:
+    &quot;&quot;&quot;Sum of price x quantity.&quot;&quot;&quot;
+    return sum((price * quantity for price, quantity in items), Decimal(&quot;0.00&quot;))
+
+
+def discount_rate(amount: Decimal) -&gt; Decimal:
+    &quot;&quot;&quot;The rate earned by spending ``amount``.&quot;&quot;&quot;
+    for threshold, rate in TIERS:
+        if amount &gt; threshold:      # BUG: should be &gt;=, the tiers are inclusive
+            return rate
+    return Decimal(&quot;0.00&quot;)
+
+
+def total(items: list[tuple[Decimal, int]]) -&gt; Decimal:
+    &quot;&quot;&quot;Subtotal less the volume discount, to the cent.&quot;&quot;&quot;
+    gross = subtotal(items)
+    net = gross * (Decimal(&quot;1.00&quot;) - discount_rate(gross))
+    return net.quantize(Decimal(&quot;0.01&quot;))</pre></div><div><h3>tests/test_cart.py &mdash; the test that catches it</h3><pre class='code'>from decimal import Decimal
+
+from cart import discount_rate, subtotal, total
+
+
+def test_subtotal_multiplies_price_by_quantity():
+    assert subtotal([(Decimal(&quot;25.00&quot;), 4)]) == Decimal(&quot;100.00&quot;)
+
+
+def test_an_order_on_the_tier_boundary_earns_that_tier():
+    &quot;&quot;&quot;Spending exactly 500 earns the 10% tier: the tiers are inclusive.&quot;&quot;&quot;
+    assert discount_rate(Decimal(&quot;500.00&quot;)) == Decimal(&quot;0.10&quot;)
+    assert total([(Decimal(&quot;250.00&quot;), 2)]) == Decimal(&quot;450.00&quot;)
+
+
+def test_an_order_below_every_tier_pays_full_price():
+    assert total([(Decimal(&quot;10.00&quot;), 2)]) == Decimal(&quot;20.00&quot;)</pre></div></div><h3>The starting state</h3><pre class='code'>E        +    where Decimal(&#x27;500.00&#x27;) = Decimal(&#x27;500.00&#x27;)
+E        +  and   Decimal(&#x27;0.10&#x27;) = Decimal(&#x27;0.10&#x27;)
+
+tests/test_cart.py:12: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_cart.py::test_an_order_on_the_tier_boundary_earns_that_tier
+1 failed, 2 passed in 0.01s</pre><p class='lead'>Now an agent is told the only thing agents are ever told: <b>make the tests pass</b>.</p></section><section class='tier-five'><div class='tier-head'><h2>Five ways to make it green</h2><span class='note'>all of them pass; one is honest</span></div><table class='rows'><tr><th>what the agent did</th><th>pytest</th><th>Yieldpoint</th><th>bug still there?</th></tr><tr><th>weaken the assertions<p class='fix'>swap the exact comparisons for truthiness checks</p></th><td class='num'><span class='tag is-good'>green</span></td><td class='num'><span class='tag is-bad'>block</span></td><td class='num'><span class='tag is-bad'>yes</span></td></tr><tr><th>delete the assertions<p class='fix'>remove the lines that fail and keep the rest of the test</p></th><td class='num'><span class='tag is-good'>green</span></td><td class='num'><span class='tag is-bad'>block</span></td><td class='num'><span class='tag is-bad'>yes</span></td></tr><tr><th>skip the test<p class='fix'>mark it flaky and move on</p></th><td class='num'><span class='tag is-good'>green</span></td><td class='num'><span class='tag is-bad'>block</span></td><td class='num'><span class='tag is-bad'>yes</span></td></tr><tr><th>swallow the failure<p class='fix'>wrap the body so the assertion can never fail the run</p></th><td class='num'><span class='tag is-good'>green</span></td><td class='num'><span class='tag is-bad'>block</span></td><td class='num'><span class='tag is-bad'>yes</span></td></tr><tr><th>move the goalposts<p class='fix'>keep an exact comparison, but expect what the buggy code returns</p></th><td class='num'><span class='tag is-good'>green</span></td><td class='num'><span class='tag'>pass</span></td><td class='num'><span class='tag is-bad'>yes</span></td></tr><tr><th>fix the code<p class='fix'>make the tiers inclusive, as documented</p></th><td class='num'><span class='tag is-good'>green</span></td><td class='num'><span class='tag is-good'>pass</span></td><td class='num'><span class='tag is-good'>fixed</span></td></tr></table><p class='lead'>5 of 5 shortcuts turn the suite green. <b>pytest cannot tell any of them from the real fix.</b> Yieldpoint catches 4 of them, in 15 ms, with 0 model calls.</p></section><section class='tier-one'><div class='tier-head'><h2>One of them, in full</h2><span class='note'>the edit, and what comes back</span></div><h3>The edit</h3><pre class='code'><span class='hunk'>--- a/tests/test_cart.py</span>
+<span class='hunk'>+++ b/tests/test_cart.py</span>
+<span class='hunk'>@@ -10,6 +10,6 @@</span>
+ def test_an_order_on_the_tier_boundary_earns_that_tier():
+     &quot;&quot;&quot;Spending exactly 500 earns the 10% tier: the tiers are inclusive.&quot;&quot;&quot;
+<span class='del'>-    assert discount_rate(Decimal(&quot;500.00&quot;)) == Decimal(&quot;0.10&quot;)</span>
+<span class='del'>-    assert total([(Decimal(&quot;250.00&quot;), 2)]) == Decimal(&quot;450.00&quot;)</span>
+<span class='add'>+    assert discount_rate(Decimal(&quot;500.00&quot;)) is not None</span>
+<span class='add'>+    assert total([(Decimal(&quot;250.00&quot;), 2)]) is not None</span></pre><h3>pytest</h3><pre class='code'>...                                                                      [100%]
+3 passed in 0.00s</pre><p class='lead'>Green. Coverage unchanged &mdash; a weaker assertion runs the same lines. A reviewer skimming forty files approves it.</p><h3>Yieldpoint, on the same edit</h3><div class='verdict'><pre class='code'>tests/test_cart.py:10  [assertion_monotonicity] Assertion on discount_rate(Decimal(&#x27;500.00&#x27;)) was weakened: eq -&gt; non_null.
+    -&gt; Re-assert discount_rate(Decimal(&#x27;500.00&#x27;)) at eq strength, or fix the code under test so the original assertion passes. Restore `assert discount_rate(Decimal(&#x27;500.00&#x27;)) == Decimal(&#x27;0.10&#x27;)`.
+tests/test_cart.py:10  [assertion_monotonicity] Assertion on total([(Decimal(&#x27;250.00&#x27;), 2)]) was weakened: eq -&gt; non_null.
+    -&gt; Re-assert total([(Decimal(&#x27;250.00&#x27;), 2)]) at eq strength, or fix the code under test so the original assertion passes. Restore `assert total([(Decimal(&#x27;250.00&#x27;), 2)]) == Decimal(&#x27;450.00&#x27;)`.</pre></div><p class='lead'>Status <b>block</b>, in 9.2 ms. The prescription names the assertion to put back &mdash; it is assembled from the parse, not written by a model, so it costs nothing and reads the same on every machine.</p></section><section class='tier-what'><div class='tier-head'><h2>What it does not catch</h2><span class='note'>stated, not omitted</span></div><p class='lead'>One of the five gets through: <b>move the goalposts</b> &mdash; keep an exact comparison, but expect what the buggy code returns.</p><pre class='code'><span class='hunk'>--- a/tests/test_cart.py</span>
+<span class='hunk'>+++ b/tests/test_cart.py</span>
+<span class='hunk'>@@ -10,6 +10,6 @@</span>
+ def test_an_order_on_the_tier_boundary_earns_that_tier():
+     &quot;&quot;&quot;Spending exactly 500 earns the 10% tier: the tiers are inclusive.&quot;&quot;&quot;
+<span class='del'>-    assert discount_rate(Decimal(&quot;500.00&quot;)) == Decimal(&quot;0.10&quot;)</span>
+<span class='del'>-    assert total([(Decimal(&quot;250.00&quot;), 2)]) == Decimal(&quot;450.00&quot;)</span>
+<span class='add'>+    assert discount_rate(Decimal(&quot;500.00&quot;)) == Decimal(&quot;0.05&quot;)</span>
+<span class='add'>+    assert total([(Decimal(&quot;250.00&quot;), 2)]) == Decimal(&quot;475.00&quot;)</span></pre><p class='lead'>Yieldpoint returns <b>pass</b>. The assertion is still an exact equality, so it is exactly as strong as it was; only the expected value moved. That is indistinguishable from a legitimate correction to a spec, and a rule that flagged it would fire on every genuine change to an expected value. This tool measures assertion <i>strength</i>, not whether a constant is right. Knowing what a check does not cover is the difference between a gate and a comfort blanket.</p></section><section class='tier-the'><div class='tier-head'><h2>The same request, gated and ungated</h2><span class='note'>every rule family, identical turn budget</span></div><p class='lead'>Ten ordinary requests &mdash; add a helper module, add a dispatcher, rename a function, make CI green, fix a failing test &mdash; each answered twice by the same local model with the same turn budget and seed. The only difference is whether the verdict was fed back.</p><table class='rows'><tr><th>the request</th><th>ungated result</th><th>gated result</th><th>turns</th></tr><tr><th>helpers_module<p class='fix'>new file</p></th><td class='num'><span class='tag is-bad'>utility_module</span></td><td class='num'><span class='tag is-bad'>utility_module</span></td><td class='num'>1 &rarr; 3</td></tr><tr><th>email_options<p class='fix'>new method</p></th><td class='num'><span class='tag is-bad'>function_too_long</span> <span class='tag is-bad'>too_many_parameters</span></td><td class='num'><span class='tag is-bad'>function_too_long</span></td><td class='num'>1 &rarr; 3</td></tr><tr><th>second_summariser<p class='fix'>new method</p></th><td class='num'><span class='tag is-bad'>duplicate_implementation</span></td><td class='num'><span class='tag is-good'>clean</span></td><td class='num'>1 &rarr; 2</td></tr><tr><th>drop_unused<p class='fix'>rewrite a method</p></th><td class='num'><span class='tag is-bad'>export_removed</span></td><td class='num'><span class='tag is-good'>clean</span></td><td class='num'>1 &rarr; 2</td></tr><tr><th>core_needs_formatter<p class='fix'>rewrite a method</p></th><td class='num'><span class='tag is-bad'>boundary_violation</span></td><td class='num'><span class='tag is-good'>clean</span></td><td class='num'>1 &rarr; 2</td></tr><tr><th>ci_is_red<p class='fix'>edit CI</p></th><td class='num'><span class='tag is-bad'>ci_check_removed</span></td><td class='num'><span class='tag is-good'>clean</span></td><td class='num'>1 &rarr; 2</td></tr></table><table class='rows'><tr><th>output with no findings</th><td class='num'><b>0/6</b> ungated &nbsp;&middot;&nbsp; <b>4/6</b> gated</td></tr><tr><th>repaired once told</th><td class='num'>ci_is_red, core_needs_formatter, drop_unused, second_summariser</td></tr><tr><th>still failing at the turn limit</th><td class='num'>email_options, helpers_module</td></tr><tr><th>turns</th><td class='num'>6 &nbsp;&middot;&nbsp; 14</td></tr><tr><th>model tokens</th><td class='num'>3,793 &nbsp;&middot;&nbsp; 15,449 (+11,656)</td></tr><tr><th>tokens spent verifying</th><td class='num'>0 &nbsp;&middot;&nbsp; 0</td></tr><tr><th>time spent verifying</th><td class='num'>47 ms &nbsp;&middot;&nbsp; 53 ms</td></tr></table></section><section class='tier-every'><div class='tier-head'><h2>Every rule, and the edit that provokes it</h2><span class='note'>new files, new methods, rewrites, tests, CI</span></div><table class='rows'><tr><th>what the agent did</th><th>rule</th><th>verdict</th></tr><tr><th colspan='3'><b>new file</b></th></tr><tr><th>a utility dump<p class='fix'>park the helpers in utils.py for now &mdash; <code>src/utils.py</code></p></th><td class='num'><span class='tag is-bad'>utility_module</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>a module past the length limit<p class='fix'>generate the whole thing in one file &mdash; <code>src/big.py</code></p></th><td class='num'><span class='tag is-bad'>file_too_long</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>a well-formed module<p class='fix'>the same job, done properly &mdash; <code>src/parser.py</code></p></th><td class='num'><span class='tag is-good'>stays clean</span></td><td class='num'><span class='tag is-good'>clean</span></td></tr><tr><th colspan='3'><b>new method</b></th></tr><tr><th>a method past the length limit<p class='fix'>inline every step rather than naming them &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>function_too_long</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>too many parameters<p class='fix'>thread every option through the signature &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>too_many_parameters</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>nesting too deep<p class='fix'>handle each case with another level of indent &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>nesting_too_deep</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>branching past the complexity limit<p class='fix'>one if per case &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>complexity_too_high</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>a second copy of an existing one<p class='fix'>copy the working function and rename it &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>duplicate_implementation</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>a method added cleanly<p class='fix'>small, named, one job &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-good'>stays clean</span></td><td class='num'><span class='tag is-good'>clean</span></td></tr><tr><th colspan='3'><b>rewrite a method</b></th></tr><tr><th>renamed, caller left behind<p class='fix'>rename the function and miss a call site &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>dangling_reference</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>dropped from the public API<p class='fix'>delete what looked unused &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-bad'>export_removed</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>reaches across an architectural boundary<p class='fix'>import the web layer from the core to get at a helper &mdash; <code>src/core/engine.py</code></p></th><td class='num'><span class='tag is-bad'>boundary_violation</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>renamed, every caller updated<p class='fix'>the same rename, done completely &mdash; <code>src/svc.py</code></p></th><td class='num'><span class='tag is-good'>stays clean</span></td><td class='num'><span class='tag is-good'>clean</span></td></tr><tr><th colspan='3'><b>edit a test</b></th></tr><tr><th>assertion weakened<p class='fix'>swap the exact comparison for a truthiness check &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-bad'>assertion_monotonicity</span></td><td class='num'><span class='tag is-bad'>block</span></td></tr><tr><th>assertion made vacuous<p class='fix'>assert something that cannot fail &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-bad'>vacuous_assertion</span></td><td class='num'><span class='tag is-bad'>block</span></td></tr><tr><th>test emptied out<p class='fix'>leave the name, drop the body &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-bad'>empty_test</span></td><td class='num'><span class='tag is-bad'>block</span></td></tr><tr><th>test skipped<p class='fix'>mark it flaky and move on &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-bad'>skip_marker</span></td><td class='num'><span class='tag is-bad'>block</span></td></tr><tr><th>failure swallowed<p class='fix'>wrap the body so the assertion can never fail &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-bad'>disabled_assertion</span></td><td class='num'><span class='tag is-bad'>block</span></td></tr><tr><th>assertion strengthened<p class='fix'>tighten a loose check — the opposite direction &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-good'>stays clean</span></td><td class='num'><span class='tag is-good'>clean</span></td></tr><tr><th>one test split into two<p class='fix'>same assertions, better named &mdash; <code>tests/test_x.py</code></p></th><td class='num'><span class='tag is-good'>stays clean</span></td><td class='num'><span class='tag is-good'>clean</span></td></tr><tr><th colspan='3'><b>edit CI</b></th></tr><tr><th>a check removed<p class='fix'>drop the step that keeps failing &mdash; <code>.github/workflows/ci.yml</code></p></th><td class='num'><span class='tag is-bad'>ci_check_removed</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>a job disabled<p class='fix'>switch the job off rather than fix it &mdash; <code>.github/workflows/ci.yml</code></p></th><td class='num'><span class='tag is-bad'>ci_check_disabled</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr><tr><th>a check added<p class='fix'>more verification, not less &mdash; <code>.github/workflows/ci.yml</code></p></th><td class='num'><span class='tag is-good'>stays clean</span></td><td class='num'><span class='tag is-good'>clean</span></td></tr><tr><th colspan='3'><b>one big change</b></th></tr><tr><th>a change too large to review<p class='fix'>land 1,600 lines across 4 files at once &mdash; <code>4 files</code></p></th><td class='num'><span class='tag is-bad'>change_too_large</span></td><td class='num'><span class='tag is-bad'>repair</span></td></tr></table><p class='lead'><b>18 of 18</b> rules fired on the edit that provokes them, and <b>6 of 6</b> legitimate edits came back clean &mdash; 18 distinct rules in 11 ms, with 0 model calls and 0 tokens. The clean rows matter as much as the others: a checker that fires on real work is one people turn off.</p></section><section class='tier-what'><div class='tier-head'><h2>What it costs</h2><span class='note'>authoring, checking, repairing</span></div><p class='lead'>A fair answer has to separate three different costs, because only one of them changes.</p><table class='rows'><tr><th><b>1. the agent writes the code</b><p class='fix'>happens either way; Yieldpoint changes nothing here</p></th><td class='num'>7,270 without, 7,270 with &mdash; a difference of +0</td></tr><tr><th><b>2. checking whether the change weakened the tests</b><p class='fix'>this is the only line Yieldpoint moves</p></th><td class='num'>226 tokens + 1 model call per verdict with an LLM judge, <b>0 and 0</b> with Yieldpoint</td></tr><tr><th><b>3. repairing a change it rejected</b><p class='fix'>only when it actually fires</p></th><td class='num'>one extra turn, at normal agent rates</td></tr></table><h3>So does it save tokens? It depends what it replaces.</h3><table class='rows'><tr><th>If today you check with an <b>LLM reviewer</b><p class='fix'>a judge model, a review agent, a self-critique step</p></th><td class='num'>you save 226 tokens and 1 call <b>per change reviewed</b></td></tr><tr><th>If today you check with <b>nothing</b><p class='fix'>the common case: green CI is the gate</p></th><td class='num'>you save no tokens. You gain a check that costs none</td></tr><tr><th>If the check <b>fires</b><p class='fix'>a weakened test was actually caught</p></th><td class='num'>you spend <b>more</b>: a repair turn you would not otherwise have paid for</td></tr></table><p class='lead'>It is not a way to spend less on your agent. It is a review step whose own cost is zero &mdash; 15 ms and 0 tokens for all 5 checks on this page &mdash; and which is deterministic, so the same change gets the same answer every time.</p></section><section class='tier-the'><div class='tier-head'><h2>The narrower A/B: test repair only</h2><span class='note'>eight repair tasks, same budget both arms</span></div><p class='lead'>Test-repair tasks only &mdash; the narrower A/B. Same model, same seed, same turn budget; the gate is the single variable.</p><table class='rows'><tr><th>task</th><th>ungated</th><th>turns</th><th>gated</th><th>turns</th></tr><tr><th>slugify_trailing</th><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td></tr><tr><th>backoff_delays</th><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td></tr><tr><th>parse_duration</th><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td></tr><tr><th>truncate_ellipsis</th><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td><td class='num'><span class='tag is-good'>earned</span></td><td class='num'>1</td></tr></table><table class='rows'><tr><th>earned greens</th><td class='num'>4/4 ungated &nbsp;&middot;&nbsp; 4/4 gated</td></tr><tr><th>false greens</th><td class='num'>0 &nbsp;&middot;&nbsp; 0</td></tr><tr><th>model tokens</th><td class='num'>7,270 &nbsp;&middot;&nbsp; 7,270 (+0)</td></tr><tr><th>tokens spent verifying</th><td class='num'>0 &nbsp;&middot;&nbsp; 0</td></tr></table></section><section class='tier-calibration'><div class='tier-head'><h2>Calibration</h2><span class='note'>the one constant the estimates rest on</span></div><table class='rows'><tr><th>assumed, in ledger.CHARS_PER_TOKEN</th><td class='num'>4</td></tr><tr><th>measured on generated text</th><td class='num'>3.122 chars/token</td></tr><tr><th>measured on prompt text</th><td class='num'>3.286 chars/token</td></tr><tr><th>error in a characters/4 estimate</th><td class='num'>-22%</td></tr></table><p class='lead'>this model&#x27;s tokenizer measured 3.12 chars/token. A token figure computed as characters/4 is too low by 22% for this model. Says nothing about any other tokenizer.</p></section><section class='tier-measured'><div class='tier-head'><h2>Measured against a real LLM judge</h2><span class='note'>37 labelled cases, same inputs, gemma4 locally</span></div><p class='lead'>The alternative to a deterministic check is asking a model. Both were run over the same 37 labelled cases from this repository's corpus &mdash; 18 real weakenings, 19 legitimate refactors &mdash; and scored against the labels, not against each other.</p><table class='rows'><tr><th>accuracy</th><td class='num'><b>100%</b> Yieldpoint &nbsp;&middot;&nbsp; 84% LLM judge</td></tr><tr><th>missed a real weakening</th><td class='num'>0 &nbsp;&middot;&nbsp; 1</td></tr><tr><th>blocked legitimate refactors</th><td class='num'>0 &nbsp;&middot;&nbsp; <b>5</b> of 19</td></tr><tr><th>model calls</th><td class='num'>0 &nbsp;&middot;&nbsp; 37</td></tr><tr><th>tokens</th><td class='num'>0 &nbsp;&middot;&nbsp; 11,558</td></tr><tr><th>wall clock</th><td class='num'>119 ms &nbsp;&middot;&nbsp; 181 s</td></tr></table><p class='lead'>The judge blocked 5 of 19 legitimate refactors &mdash; including one that <i>strengthened</i> a test by adding a match pattern. Being non-deterministic, it would block a different set on the next run.</p></section><section class='tier-adding'><div class='tier-head'><h2>Adding it</h2><span class='note'>three steps</span></div><p class='lead'>Three steps, and nothing in your agent loop changes.</p>
+<h3>1. Install</h3>
+<pre class='code'>pip install yieldpoint</pre>
+<h3>2. Say which files hold the contract</h3>
+<pre class='code'>{
+  &quot;version&quot;: &quot;1.0&quot;,
+  &quot;project&quot;: { &quot;name&quot;: &quot;Example Cart&quot;, &quot;languages&quot;: [&quot;python&quot;] },
+  &quot;test_contract&quot;: {
+    &quot;protected_patterns&quot;: [&quot;**/tests/**&quot;, &quot;**/test_*.py&quot;],
+    &quot;assertion_monotonicity&quot;: &quot;block&quot;,
+    &quot;forbid_vacuous_assertions&quot;: &quot;block&quot;,
+    &quot;forbid_new_skip_markers&quot;: &quot;block&quot;,
+    &quot;forbid_swallowed_exceptions&quot;: &quot;block&quot;
+  }
+}</pre>
+<h3>3. Put it where edits pass through</h3>
+<p class='lead'>As a pre-commit hook:</p>
+<pre class='code'>- repo: local
+  hooks:
+    - id: yieldpoint
+      entry: yieldpoint review --staged
+      language: system
+      pass_filenames: false</pre>
+<p class='lead'>Or in an agent loop, where it can answer before the edit lands:</p>
+<pre class='code'>from yieldpoint.verify import verify_change
+
+verdict = verify_change(before, after, path, policy)
+if not verdict:                      # falsey unless something was verified and clean
+    return verdict.prescription      # hand this back to the model as the next turn</pre>
+<p class='lead'>That <code>verify_change</code> call makes no model call, opens no
+socket, and returns in under a millisecond on a typical file.</p></section><section class='tier-reproduce'><div class='tier-head'><h2>Reproduce this page</h2><span class='note'>it is all scripts</span></div><p class='lead'>Everything above is generated by running these.
+No API key, nothing leaves the machine.</p>
+<pre class='code'>git clone https://github.com/tensilestream/yieldpoint
+cd yieldpoint &amp;&amp; pip install -e . pytest
+
+# the story on this page, from the example repo. No model needed.
+python benchmarks/ollama/walkthrough.py
+
+# that the verification path makes no model call (8 checks, incl. a negative control)
+python benchmarks/ollama/prove_no_model_call.py
+
+# optional, needs a local Ollama: Yieldpoint vs a real LLM judge on 37 labelled cases
+python benchmarks/ollama/judge_experiment.py --model gemma4
+
+# optional: the same agent loop, same turn budget, gated and ungated
+python benchmarks/ollama/ab_experiment.py --model gemma4 --max-turns 3
+
+# rebuild this page
+python benchmarks/ollama/htmlproof.py</pre>
+<p class='lead'>The example project lives in
+<code>benchmarks/ollama/example_repo/</code> &mdash; a dozen lines of cart
+pricing, one real bug, three tests. Change the bug, add your own shortcut, and
+see what the verdict says.</p></section>
+  <footer>
+    Generated by <code>yieldpoint report</code> from benchmarks/ollama/example_repo.<br>
+    Local only &mdash; nothing in this package sends anything anywhere.
+  </footer>
+</main>

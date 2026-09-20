@@ -1,3 +1,47 @@
+# Proof
+
+The headline evidence needs no model, no network, and no fixtures.
+
+```bash
+python benchmarks/ollama/history_proof.py                    # this repo
+python benchmarks/ollama/history_proof.py --repo /path/to/yours
+```
+
+It replays every commit in a repository and re-verifies each one as the change
+it was when it was made. On this repository, out of 44 commits:
+
+- **17** flagged
+- **7** a correctness rule would have stopped
+- **5.6 seconds**, 0 model calls, 0 tokens
+
+Real assertions that were deleted from real tests and merged:
+
+```python
+self.assertEqual(_lint_rule(item), 'lint.ruff-format.format')
+self.assertIs(verify_diff('', root=self.root, policy=Policy()).status, Status.PASS)
+self.assertTrue(str(config_path(client)).endswith('.json'), client.key)
+self.assertFalse(self.confirmation.matches('anchor beacon cobalt dynamo'))
+```
+
+Yieldpoint cannot tell you which of those were wrong. That judgement is the
+point of running it on your own history rather than on a demo.
+
+## Committed results
+
+`results/` holds the deterministic evidence, so it can be read without running
+anything:
+
+| file | what it is |
+|---|---|
+| `history.json` | the replay above, with every finding |
+| `matrix.json` | all 18 rules against the edit that provokes each |
+| `story.json` | five shortcuts against the example repo |
+| `proof.html` | all of it, rendered |
+
+Model-dependent output (`ab-*`, `ruleab-*`, `judge-*`, `integration-*`) is
+gitignored — those numbers depend on which model you have and should be
+regenerated, not trusted from someone else's machine.
+
 # Local-model repair benchmark
 
 Measures one thing: when a local coding model is told "make the tests pass,"
