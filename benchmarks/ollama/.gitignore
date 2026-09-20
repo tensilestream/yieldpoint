@@ -1,1 +1,10 @@
-results/
+# Model-dependent run output: regenerate with the scripts, do not commit.
+results/ab-*.json
+results/ab-*.md
+results/ruleab-*.json
+results/judge-*.json
+results/integration-*.json
+
+# Cloned repositories for mining. Large, and not ours.
+.repos/
+results/candidates*.jsonl
