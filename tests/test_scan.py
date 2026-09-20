@@ -79,9 +79,16 @@ class TestAbsoluteEvaluation(ScanCase):
     """Differential rules must not go silent just because there is no before."""
 
     def test_structure_limits_apply_without_a_previous_state(self):
+        """The point is that a scan evaluates absolutely, not that this
+        particular limit is on by default — `max_file_lines` is opt-in."""
         self.write("src/big.py", LONG_MODULE)
-        result = scan(self.root, Policy())
+        policy = Policy.from_dict({"structure": {"max_file_lines": 300}})
+        result = scan(self.root, policy)
         self.assertIn("file_too_long", result.by_rule())
+
+    def test_an_opt_in_limit_stays_silent_until_asked_for(self):
+        self.write("src/big.py", LONG_MODULE)
+        self.assertNotIn("file_too_long", scan(self.root, Policy()).by_rule())
 
     def test_boundary_violations_are_reported(self):
         self.write("app/core/x.py", "import requests\n")

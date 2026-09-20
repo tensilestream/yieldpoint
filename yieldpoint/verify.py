@@ -150,7 +150,16 @@ def verify_diff(
             for path, before, after in states
         ),
         _change_size(states, resolved),
+        _duplication(states, resolved),
     ])
+
+
+def _duplication(states, policy: Policy) -> Verdict:
+    """DRY across the change set, which one file at a time cannot see."""
+    from .core import duplication
+
+    return Verdict.of(
+        duplication.check(states, policy.structure.duplicate_implementation))
 
 
 def _change_size(states, policy: Policy) -> Verdict:

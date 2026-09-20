@@ -82,9 +82,29 @@ _FUNCTION_LIMITS = (
 )
 
 
+def excluded(path: str, config) -> bool:
+    """Is this file exempt from the maintainability limits?
+
+    Matched as globs, so a directory, an exact filename and an extension are
+    all expressible. Generated code, vendored trees and migrations are the
+    cases this exists for: files nobody chose the shape of.
+    """
+    from . import glob
+
+    return bool(config.exclude) and glob.matches_any(config.exclude, path)
+
+
 def check(before: str | None, after: str | None, path: str, config) -> tuple[list[Finding], list[str]]:
-    """Apply the maintainability rules to one file."""
+    """Apply the maintainability rules to one file.
+
+    Exclusions are honoured here and nowhere else: a file exempt from the
+    length limit is still checked for a weakened test contract. Letting a path
+    switch that off would make the contract optional, which is the one thing
+    it must not be.
+    """
     if after is None or config.severity is None:
+        return [], []
+    if excluded(path, config):
         return [], []
 
     now = measure(after, filename=path)

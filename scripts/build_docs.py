@@ -154,6 +154,11 @@ RULES = {
         "Default 4 levels."),
     "complexity_too_high": (STRUCTURE, "repair", "Too many branches",
         "Default 10."),
+    "duplicate_across_files": (STRUCTURE, "repair", "The same implementation in two files",
+        "A function structurally identical to one in another file changed by the same "
+        "commit. Shape is compared, not text, so a copy-paste that renamed its "
+        "variables is still found. The within-file case belongs to "
+        "<code>duplicate_implementation</code>; this is the one neither reader can see."),
     "duplicate_implementation": (STRUCTURE, "repair", "Structurally identical code",
         "Two functions with the same shape. Two copies drift apart, and a fix applied "
         "to one is a bug left in the other."),

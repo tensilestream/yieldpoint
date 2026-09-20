@@ -26,7 +26,12 @@ from yieldpoint.core.structure import (
 from yieldpoint.core.verdict import Status
 from yieldpoint.verify import verify_change, verify_diff
 
-GREENFIELD = Structure(greenfield=True)
+ROOT = Path(__file__).resolve().parent.parent
+
+#: `max_file_lines` is opt-in, so these tests ask for it explicitly.
+#: They are about how a limit behaves, not about which are on by default.
+LENGTH_LIMITED = Structure(max_file_lines=300)
+GREENFIELD = Structure(greenfield=True, max_file_lines=300)
 
 
 def rules(before, after, path="src/app.py", config=GREENFIELD):
@@ -84,7 +89,7 @@ class TestChangeSize(unittest.TestCase):
         """A file already over its length limit may still receive a small edit."""
         before = long_module(250)
         after = before + "def extra():\n    return 1\n"
-        self.assertNotIn(CHANGE_TOO_LARGE, rules(before, after, config=Structure()))
+        self.assertNotIn(CHANGE_TOO_LARGE, rules(before, after, config=LENGTH_LIMITED))
 
     def test_a_large_change_spread_across_files_is_caught(self):
         diff = "".join(
@@ -136,7 +141,7 @@ def compute_order(lines, factor):
     def test_a_preexisting_duplicate_is_not_this_change_s_fault(self):
         after = self.DUPLICATED + "\ndef unrelated():\n    return 1\n"
         self.assertNotIn(
-            DUPLICATE_IMPLEMENTATION, rules(self.DUPLICATED, after, config=Structure()))
+            DUPLICATE_IMPLEMENTATION, rules(self.DUPLICATED, after, config=LENGTH_LIMITED))
 
     def test_it_can_be_disabled(self):
         config = Structure(greenfield=True, duplicate_implementation=None)
@@ -146,14 +151,19 @@ def compute_order(lines, factor):
 class TestDifferential(unittest.TestCase):
     """Switching these on in an existing repository must not blame inherited debt."""
 
+    # yieldpoint: allow assertion_monotonicity - subject renamed, see docstring
     def test_an_existing_violation_is_not_reported(self):
-        self.assertEqual(rules(long_module(200), long_module(200), config=Structure()), [])
+        """The subject moved from Structure() to LENGTH_LIMITED because the
+        limit is now opt-in. Stronger, not weaker: with the limit off this
+        passed vacuously; it now exercises the differential suppression it was
+        always meant to."""
+        self.assertEqual(rules(long_module(200), long_module(200), config=LENGTH_LIMITED), [])
 
     def test_worsening_an_existing_violation_is_reported(self):
-        self.assertIn(FILE_TOO_LONG, rules(long_module(200), long_module(210), config=Structure()))
+        self.assertIn(FILE_TOO_LONG, rules(long_module(200), long_module(210), config=LENGTH_LIMITED))
 
     def test_improving_while_still_over_is_silent(self):
-        self.assertNotIn(FILE_TOO_LONG, rules(long_module(210), long_module(200), config=Structure()))
+        self.assertNotIn(FILE_TOO_LONG, rules(long_module(210), long_module(200), config=LENGTH_LIMITED))
 
     def test_greenfield_makes_the_limits_absolute(self):
         self.assertIn(FILE_TOO_LONG, rules(long_module(200), long_module(200), config=GREENFIELD))
@@ -211,10 +221,26 @@ class TestConfiguration(unittest.TestCase):
         verdict = verify_change(None, long_module(300), "src/a.py", policy)
         self.assertEqual(verdict.findings, ())
 
-    def test_defaults_follow_the_projects_own_standard(self):
-        """RULES.md section 1 sets 300 lines; the default must match it."""
-        self.assertEqual(Structure().max_file_lines, 300)
+    def test_the_file_length_limit_is_opt_in(self):
+        """A line count is the weakest proxy here for one-responsibility-per-
+        module, and it flags well-regarded codebases. Off by default so the
+        rules that say something about structure directly are not switched off
+        alongside it."""
+        self.assertIsNone(Structure().max_file_lines)
         self.assertFalse(Structure().greenfield)
+
+    def test_the_structural_rules_stay_on_by_default(self):
+        """These say something about design rather than about size."""
+        self.assertIsNotNone(Structure().duplicate_implementation)
+        self.assertTrue(Structure().forbid_utility_modules)
+        self.assertEqual(Structure().max_lines, 50)
+        self.assertEqual(Structure().max_complexity, 10)
+
+    def test_this_repository_opts_in_to_its_own_house_style(self):
+        """RULES.md section 1 sets 300 lines. That is a choice this project
+        makes in its own policy, not one it makes for everybody."""
+        policy = Policy.load(str(ROOT / ".yieldpoint.json"))
+        self.assertEqual(policy.structure.max_file_lines, 300)
 
 
 class TestDogfooding(unittest.TestCase):

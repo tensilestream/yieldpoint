@@ -41,6 +41,13 @@
         "forbid_import": "requests",
         "message": "The verification core must never reach the network. See RULES.md section 4."
       }
+    ],
+    "_exclude_comment": "Paths the maintainability limits do not apply to, as globs. A directory (migrations/**), an exact file (src/legacy.py) and an extension (**/*_pb2.py) are all expressible. Only maintainability is skipped: an excluded file is still checked for a weakened test contract.",
+    "exclude": [
+      "**/*_pb2.py",
+      "**/migrations/**",
+      "**/vendor/**",
+      "**/*.generated.py"
     ]
   },
   "refactor": {
