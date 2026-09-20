@@ -16,6 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .starter import STARTER_CONFIG
 from .mcp.clients import (
     BY_KEY, CLIENTS, UnwritableFormat, command_line, config_path,
     install as install_client, snippet,
@@ -47,7 +48,7 @@ def install_mcp(args) -> int:
     if getattr(args, "show", False):
         print(f"# {client.label}  ->  {override or config_path(client)}")
         print(snippet(client))
-        return EXIT_OK
+        return EXIT_OK          # nothing installed, so nothing to gate
 
     try:
         path, backup = install_client(client, path=override)
@@ -60,11 +61,17 @@ def install_mcp(args) -> int:
         print(f"yieldpoint: could not write configuration: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    _report_registration(client, path, backup)
+    _gate_alongside(Path(getattr(args, "root", None) or "."),
+                    bool(getattr(args, "no_git", False)))
+    print("Restart the editor for it to connect.")
+    return EXIT_OK
+
+
+def _report_registration(client, path, backup) -> None:
     if backup:
         print(f"backed up existing configuration to {backup}")
     print(f"registered the Yieldpoint MCP server for {client.label} in {path}")
-    print("Restart the editor for it to connect.")
-    return EXIT_OK
 
 
 def _verify_each_turn(hooks: dict, *, advisory: bool, report: bool = True) -> None:
@@ -162,6 +169,8 @@ def install_hook(args) -> int:
         print(f"registered '{command_line('report')}' on Stop, so "
               ".yieldpoint/report.html")
         print("  refreshes at the end of every turn")
+    _gate_alongside(Path(getattr(args, "root", None) or "."),
+                    bool(getattr(args, "no_git", False)))
     print("Restart Claude Code, or start a new session, for it to take effect.")
     return EXIT_OK
 
@@ -227,24 +236,6 @@ def install_git_gate(root: Path) -> tuple[Path | None, str]:
     return path, note
 
 
-STARTER_CONFIG = {
-    "version": 1,
-    "test_contract": {
-        "_comment": "Severities: repair (send the agent back), escalate (ask a "
-                    "human), block (refuse), or null to switch a rule off.",
-        "assertion_monotonicity": "repair",
-        "forbid_vacuous_assertions": "repair",
-        "forbid_new_skip_markers": "repair",
-        "forbid_swallowed_exceptions": "repair",
-    },
-    "structure": {
-        "_comment": "Differential by default: a limit is reported only when this "
-                    "change introduced or worsened the violation, so existing debt "
-                    "is not blamed on the current edit.",
-        "greenfield": False,
-        "severity": "repair",
-    },
-}
 
 
 def init(args) -> int:
@@ -290,6 +281,25 @@ def init(args) -> int:
 
     _next_steps(args.enforce, not args.no_hook)
     return EXIT_OK
+
+
+def _gate_alongside(root: Path, skip: bool) -> None:
+    """Install the commit gate beside whatever else was just installed.
+
+    Every install route ends here, because the editor hook and the MCP server
+    both stop at the edge of the editor. Work arrives by other doors — a shell
+    script, a rebase, a teammate's branch — and only the commit gate sees
+    those. Installing the part that explains without the part that enforces is
+    how a project ends up believing it is covered.
+    """
+    if skip:
+        print("  git      skipped (--no-git); commits are not gated")
+        return
+    gate, note = install_git_gate(root)
+    if gate is None:
+        print(f"  git      no commit gate: {note}")
+    else:
+        print(f"  git      {note} {gate}")
 
 
 def _report_git_gate(root: Path, *, skip: bool) -> None:

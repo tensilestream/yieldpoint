@@ -150,6 +150,9 @@ def _add_setup_commands(sub) -> None:
     mcp_cmd.set_defaults(handler=mcp_command)
 
     mcp_install = sub.add_parser("install-mcp", help="register the MCP server with an editor")
+    mcp_install.add_argument("--root", default=".", help="repository to gate commits in")
+    mcp_install.add_argument("--no-git", action="store_true",
+                             help="do not install the commit gate")
     mcp_install.add_argument("--client", help="claude-code, cursor, vscode, ...")
     mcp_install.add_argument("--list", action="store_true", help="list supported clients")
     mcp_install.add_argument("--show", action="store_true", help="print the snippet, do not write")
@@ -158,6 +161,9 @@ def _add_setup_commands(sub) -> None:
     mcp_install.set_defaults(handler=install_mcp)
 
     install_cmd = sub.add_parser("install-hook", help="register the hook in .claude/settings.json")
+    install_cmd.add_argument("--root", default=".", help="repository to gate commits in")
+    install_cmd.add_argument("--no-git", action="store_true",
+                             help="do not install the commit gate")
     install_cmd.add_argument(
         "--no-report", action="store_true",
         help="do not refresh .yieldpoint/report.html at the end of each turn")
