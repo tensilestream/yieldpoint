@@ -18,7 +18,7 @@ from .relation import Relation
 
 #: Suffixes read lexically. Python is absent on purpose — it has an exact path.
 SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".java", ".kt", ".go",
-            ".rs", ".cs", ".rb", ".php", ".swift")
+            ".rs", ".cs", ".rb", ".php", ".swift", ".ex", ".exs")
 
 #: ``it("...")``, ``test("...")``, ``@Test void name()``, ``func TestName(``.
 TEST_DECL = re.compile(
@@ -34,6 +34,7 @@ TEST_DECL = re.compile(
       | \bfunc\s+(?P<swname>test\w+)\s*\(
       | \b(?:def)\s+(?P<rbname>test_\w+)
       | \bpublic\s+function\s+(?P<phpname>test\w+)\s*\(
+      | \btest\s+"(?P<exname>[^"]{1,200})"\s*(?:,[^\n]*?)?\s*do\b
     )""",
     re.VERBOSE,
 )
@@ -79,10 +80,31 @@ GO_INVERSE = {
 #: Ruby lets a method call omit its parentheses, and Minitest's own examples do:
 #: ``assert_equal 42, total``. Applied only to Ruby, because a bare word
 #: followed by arguments means something different in every other language here.
-_RUBYCALL = re.compile(
+RUBY_CALL = re.compile(
     r"^\s*(?P<name>assert_\w+|refute_\w+)\s+(?!\()(?P<args>[^\n]{1,200})$",
     re.MULTILINE,
 )
+
+#: Elixir asserts with a macro and no parentheses: ``assert total == 42``.
+#: The operator carries the strength, exactly as in Go's guards, except here
+#: it is stated directly rather than inverted.
+ELIXIR_ASSERT = re.compile(
+    r"^\s*(?P<negate>refute|assert)\s+(?!\()(?P<expr>[^\n]{1,200})$",
+    re.MULTILINE,
+)
+
+#: Comparison -> what it pins down. ``assert x`` with no operator is truthiness.
+ELIXIR_RELATIONS = {
+    "==": Relation.EQ,
+    "===": Relation.EQ,
+    "!=": Relation.COMPARISON,
+    "=~": Relation.MEMBERSHIP,
+    ">=": Relation.COMPARISON,
+    "<=": Relation.COMPARISON,
+    ">": Relation.COMPARISON,
+    "<": Relation.COMPARISON,
+    " in ": Relation.MEMBERSHIP,
+}
 
 MAX_SUBJECT = 120
 
@@ -90,7 +112,7 @@ MAX_SUBJECT = 120
 #: Declaration groups, in the order a name is looked for. One per language
 #: family; a match sets exactly one of them.
 NAME_GROUPS = ("name", "jname", "kname", "gname", "rname", "csname",
-                "swname", "rbname", "phpname")
+                "swname", "rbname", "phpname", "exname")
 
 
 #: Families that put the value under test *first*: ``assert_eq!(got, 42)``,
@@ -106,11 +128,13 @@ SUBJECT_FIRST = ("assert_eq", "assert_ne", "debug_assert", "assert_matches",
 #: Ruby keywords that open a block needing its own ``end``. ``do`` is matched
 #: separately because it may trail a method call on the same line.
 RUBY_OPENERS = ("def ", "if ", "unless ", "case ", "begin", "while ", "until ",
-                 "class ", "module ")
+                 "class ", "module ", "test ", "describe ", "setup ", "fn ",
+                 "with ", "for ", "receive ", "try ", "cond ", "quote ")
 
 
 __all__ = [
-    "CALL", "FLUENT", "GO_GUARD", "GO_INVERSE", "MAX_SUBJECT",
+    "CALL", "ELIXIR_ASSERT", "ELIXIR_RELATIONS", "FLUENT",
+    "GO_GUARD", "GO_INVERSE", "MAX_SUBJECT",
     "NAME_GROUPS", "RUBY_CALL", "RUBY_OPENERS", "SUBJECT_FIRST",
     "SUFFIXES", "TEST_DECL",
 ]

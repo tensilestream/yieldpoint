@@ -71,7 +71,7 @@ legitimate edit is not.
 | Ruby | Minitest | yes | yes | no — warns only |
 | PHP | PHPUnit | yes | yes | no — warns only |
 | Swift | XCTest | yes | yes | no — warns only |
-| Elixir | ExUnit | **no** — no analyser for this language yet | yes | no |
+| Elixir | ExUnit | yes | yes | no — warns only |
 
 **Exact** analysis parses the file and may block a commit. **Lexical** analysis
 matches shapes with regular expressions; it can tell an agent it weakened a

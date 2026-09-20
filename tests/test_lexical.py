@@ -211,11 +211,12 @@ class TestItIsTimid(unittest.TestCase):
 
     def test_it_only_claims_the_languages_it_reads(self):
         for supported in ("a.test.ts", "Foo_test.go", "a_test.rs", "ATest.cs",
-                          "a_test.rb", "ATest.php", "ATests.swift"):
+                          "a_test.rb", "ATest.php", "ATests.swift",
+                          "total_test.exs", "total_test.ex"):
             self.assertTrue(reads(supported), supported)
         self.assertFalse(reads("a.py"), "Python has an exact path")
         self.assertFalse(reads("a.txt"))
-        self.assertFalse(reads("a.ex"), "Elixir is not read yet")
+        self.assertFalse(reads("a.hs"), "Haskell is not read yet")
 
 
 if __name__ == "__main__":

@@ -29,9 +29,9 @@ import re
 from .recognise import Assertion
 from .relation import Relation
 from .testpatterns import (
-    CALL, GO_GUARD, GO_INVERSE, NAME_GROUPS, _RUBYCALL,
-    RUBY_OPENERS, SUBJECT_FIRST, TEST_DECL, FLUENT, MAX_SUBJECT,
-    SUFFIXES,
+    CALL, ELIXIR_ASSERT, ELIXIR_RELATIONS, FLUENT, GO_GUARD, GO_INVERSE,
+    MAX_SUBJECT, NAME_GROUPS, RUBY_CALL, RUBY_OPENERS, SUBJECT_FIRST,
+    SUFFIXES, TEST_DECL,
 )
 from .spellings import FLUENT_RELATIONS, METHOD_RELATIONS, NEGATIONS, fold
 
@@ -77,8 +77,8 @@ def _declared_name(match) -> str:
 
 
 def _body_of(source: str, match):
-    """Ruby closes a block with ``end``; everything else here uses braces."""
-    if match.group("rbname"):
+    """Ruby and Elixir close a block with ``end``; the rest use braces."""
+    if match.group("rbname") or match.group("exname"):
         return _ended(source, match.end())
     return _braced(source, match.end())
 
@@ -148,6 +148,8 @@ def _assertions(body: str, base_line: int, filename: str = ""):
     yield from _fluent_assertions(body, base_line)
     yield from _call_assertions(body, base_line, filename)
     yield from _guard_assertions(body, base_line)
+    if filename.endswith((".ex", ".exs")):
+        yield from _elixir_assertions(body, base_line)
 
 
 def _fluent_assertions(body: str, base_line: int):
@@ -170,12 +172,32 @@ def _call_assertions(body: str, base_line: int, filename: str):
     """``assertEquals(a, b)``, ``assert_eq!(a, b)``, and Ruby's paren-less form."""
     patterns = [CALL]
     if filename.endswith(".rb"):
-        patterns.append(_RUBYCALL)
+        patterns.append(RUBY_CALL)
     for pattern in patterns:
         for match in pattern.finditer(body):
             found = _from_call(match, body, base_line)
             if found is not None:
                 yield found
+
+
+def _elixir_assertions(body: str, base_line: int):
+    """``assert total == 42``: a macro, no parentheses, operator carries strength."""
+    for match in ELIXIR_ASSERT.finditer(body):
+        expression = match.group("expr").strip()
+        line = base_line + body.count("\n", 0, match.start())
+        relation, subject = Relation.TRUTHY, expression
+
+        for operator, found in ELIXIR_RELATIONS.items():
+            left, separator, _right = expression.partition(operator)
+            if separator and left.strip():
+                relation, subject = found, left
+                break
+
+        cleaned = _clean(subject)
+        if cleaned is None:
+            continue
+        yield Assertion(subject=cleaned, relation=relation, line=line,
+                        raw=_snippet(match.group(0)))
 
 
 def _guard_assertions(body: str, base_line: int):
