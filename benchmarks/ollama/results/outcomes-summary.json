@@ -1,49 +1,78 @@
 {
-  "candidates": 71,
+  "candidates": 1408,
   "repositories": [
-    "yieldpoint"
+    "axios",
+    "clap",
+    "click",
+    "cobra",
+    "express",
+    "gson",
+    "mux",
+    "requests",
+    "sinatra"
   ],
   "outcomes": {
-    "not-a-file": 7,
-    "live": 8,
-    "unknown": 12,
-    "moved": 44
+    "unknown": 561,
+    "live": 253,
+    "fixed": 67,
+    "moved": 519,
+    "not-a-file": 8
   },
-  "still_live": 8,
+  "still_live": 253,
   "by_rule": {
     "assertion_monotonicity": {
-      "live": 4
+      "live": 60,
+      "moved": 413,
+      "fixed": 11
     },
     "change_too_large": {
-      "not-a-file": 7
+      "unknown": 1,
+      "not-a-file": 8
     },
     "ci_check_disabled": {
-      "unknown": 2
+      "unknown": 10
     },
     "ci_check_removed": {
-      "unknown": 3
+      "unknown": 173,
+      "moved": 7
     },
     "complexity_too_high": {
-      "moved": 19
+      "live": 58,
+      "moved": 12,
+      "fixed": 16
+    },
+    "dangling_reference": {
+      "unknown": 1
     },
     "duplicate_implementation": {
-      "unknown": 3
+      "unknown": 13
     },
     "empty_test": {
-      "unknown": 4
+      "unknown": 1,
+      "moved": 3
     },
-    "export_removed": {
-      "moved": 1
+    "file_too_long": {
+      "unknown": 362,
+      "moved": 41
     },
     "function_too_long": {
-      "live": 1,
-      "moved": 16
+      "live": 92,
+      "fixed": 22,
+      "moved": 28
+    },
+    "nesting_too_deep": {
+      "fixed": 4,
+      "live": 8
     },
     "skip_marker": {
-      "live": 3
+      "fixed": 11,
+      "live": 12,
+      "moved": 14
     },
     "too_many_parameters": {
-      "moved": 8
+      "live": 23,
+      "fixed": 3,
+      "moved": 1
     }
   },
   "note": "live means the finding is still true of HEAD today. It does not mean the finding was right \u2014 that judgement is the reader's."

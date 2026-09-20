@@ -1,8 +1,13 @@
 {
-  "repositories": 1,
-  "candidates": 22,
+  "repositories": 9,
+  "candidates": 1408,
   "by_language": {
-    "unknown": 22
+    "go": 36,
+    "java": 52,
+    "javascript": 472,
+    "python": 822,
+    "ruby": 7,
+    "rust": 19
   },
   "rules_with_a_real_instance": [
     "assertion_monotonicity",
@@ -10,36 +15,39 @@
     "ci_check_disabled",
     "ci_check_removed",
     "complexity_too_high",
+    "dangling_reference",
     "duplicate_implementation",
     "empty_test",
-    "export_removed",
+    "file_too_long",
     "function_too_long",
+    "nesting_too_deep",
+    "skip_marker",
     "too_many_parameters"
   ],
   "rules_with_none": [
     "boundary_violation",
-    "dangling_reference",
     "disabled_assertion",
-    "file_too_long",
-    "nesting_too_deep",
-    "skip_marker",
+    "export_removed",
     "utility_module",
     "vacuous_assertion"
   ],
   "by_rule": {
-    "function_too_long": 5,
-    "change_too_large": 4,
-    "ci_check_removed": 3,
-    "empty_test": 2,
-    "duplicate_implementation": 2,
-    "assertion_monotonicity": 2,
-    "ci_check_disabled": 1,
-    "too_many_parameters": 1,
-    "complexity_too_high": 1,
-    "export_removed": 1
+    "assertion_monotonicity": 484,
+    "file_too_long": 403,
+    "ci_check_removed": 180,
+    "function_too_long": 142,
+    "complexity_too_high": 86,
+    "skip_marker": 37,
+    "too_many_parameters": 27,
+    "duplicate_implementation": 13,
+    "nesting_too_deep": 12,
+    "ci_check_disabled": 10,
+    "change_too_large": 9,
+    "empty_test": 4,
+    "dangling_reference": 1
   },
-  "carry_the_removed_text": 2,
-  "distinct_commits": 6,
+  "carry_the_removed_text": 521,
+  "distinct_commits": 374,
   "labelled": 0,
   "note": "candidates, not labels. Whether each removal was legitimate is a judgement mining cannot make."
 }
