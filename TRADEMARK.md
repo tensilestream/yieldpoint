@@ -1,10 +1,15 @@
 # Trademark policy
 
-The Apache License, Version 2.0 covers the **code**. It deliberately does not grant
-rights to a project's name or marks — [section 6](./LICENSE) says so explicitly. This
+The [Business Source License 1.1](./LICENSE) covers the **code**. Like almost every
+licence, it grants no rights to a project's name or marks — it says so explicitly. This
 page says what that means in practice, because "you may fork it, but you may not call
 your fork Yieldpoint" is the part people most often get wrong, and the part most worth
 being unambiguous about.
+
+What you may *do* with the code is a separate question, answered in
+[COMMERCIAL.md](./COMMERCIAL.md): free in production for individuals and teams under ten
+engineers, free always for evaluation and development, commercially licensed above that,
+and Apache-2.0 for everybody four years after each release.
 
 ## What is reserved
 
@@ -12,20 +17,19 @@ being unambiguous about.
 - The stress-strain mark (`╭●╮ ╱ ╲ ╱ ╳`) and the logo
 - The PyPI package name `yieldpoint` and the commands `yieldpoint` and `yp`
 
-These are not licensed by Apache-2.0.
+These are not licensed with the code.
 
 ## What you may do, freely and without asking
 
-- **Use it**, commercially, at any company, in any product, for any purpose
-- **Modify it**, and ship those modifications in something you sell
-- **Fork it**, publish the fork, and maintain it as your own project
-- **Redistribute it**, in source or binary form
+- **Read, modify and fork it**, and publish your fork
+- **Use it in production** within the free tier, or under a commercial licence above it
+- **Use it without limit** for evaluation, development and testing, always
 - **Say what it is** — "built on Yieldpoint", "compatible with Yieldpoint",
   "a fork of Yieldpoint". Accurate statements of fact about the origin of software are
   nominative use, and nobody needs permission for them.
 
-Apache-2.0 asks two things in return, and they are not optional: keep the copyright
-notices, and include the `NOTICE` file with any redistribution (section 4).
+The licence asks two things in return, and they are not optional: display the `LICENSE`
+on every copy you distribute, original or modified, and keep the `NOTICE` with it.
 
 ## What you may not do
 

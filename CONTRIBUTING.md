@@ -50,5 +50,16 @@ Commits and tags are made by maintainers; see [RELEASING.md](./RELEASING.md). Ta
 
 ## Licensing of contributions
 
-By opening a pull request you agree that your contribution is licensed under
-[Apache-2.0](./LICENSE), the same terms as the rest of the project. There is no CLA.
+Yieldpoint is licensed under the [Business Source License 1.1](./LICENSE) and sold
+commercially above the free tier, so code contributions need a sign-off that lets the
+project license your work on the same terms. Add this to a commit in your pull request:
+
+```
+Signed-off-by: Your Name <your@email>
+```
+
+You keep your copyright. [CLA.md](./CLA.md) says exactly what that grants and why it is
+necessary — it is one page, and worth reading before you spend time on a patch.
+
+**Bug reports, false positives and missed detections need no sign-off**, and are the most
+useful thing you can send.

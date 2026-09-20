@@ -52,11 +52,26 @@ package version is not.
 
 ### Added
 
-- **`NOTICE` and `TRADEMARK.md`.** The licence is unchanged — Apache-2.0, commercial use
-  and forking freely permitted. What is now written down is the part Apache-2.0 section 6
-  already implies: the name, the mark and the package name are not licensed with the code,
-  so a fork needs its own name. `NOTICE` ships in the wheel and sdist, and section 4(d)
-  requires redistributors to carry it.
+### Changed
+
+- **Licence: Apache-2.0 → Business Source License 1.1.** Done before the first release and
+  before any fork existed, because Apache-2.0 cannot be narrowed after the fact. Free in
+  production for individuals, teams of fewer than ten engineers, charities, schools and
+  OSI-licensed open source projects; free without limit for evaluation and development;
+  commercially licensed above that. Each release converts to Apache-2.0 four years after
+  it ships, irrevocably. The free tier is conditional on not circumventing licence key or
+  metering functionality — a licence term rather than a code check, because in
+  source-available software a check can simply be deleted.
+
+### Added
+
+- **`COMMERCIAL.md`** — who pays and who does not, as one table.
+- **`CLA.md`** and a `Signed-off-by` requirement on code contributions, so contributed
+  code can be offered on the same commercial terms as the rest. Contributors keep their
+  copyright. Bug reports, false positives and missed detections need no sign-off.
+- **`NOTICE` and `TRADEMARK.md`.** The name, the mark, the PyPI name and the `yieldpoint`
+  and `yp` commands are not licensed with the code, so a fork needs its own name. All four
+  legal files ship in the wheel and sdist.
 
 ### Added
 
