@@ -47,7 +47,8 @@ class Policy:
     # ---------------------------------------------------------------- loading
 
     @classmethod
-    def load(cls, source: "str | Path | dict[str, Any] | Policy | None" = None) -> "Policy":
+    def load(cls, source: "str | Path | dict[str, Any] | Policy | None" = None,
+             *, root: str | Path | None = None) -> "Policy":
         """Load from a path, a parsed dict, an existing policy, or the defaults.
 
         ``None`` searches upward from the working directory for
@@ -58,7 +59,7 @@ class Policy:
         if isinstance(source, dict):
             return cls.from_dict(source, source_name="<dict>")
         if source is None:
-            found = cls.discover(Path.cwd())
+            found = cls.discover(Path(root) if root is not None else Path.cwd())
             if found is None:
                 return cls()
             source = found

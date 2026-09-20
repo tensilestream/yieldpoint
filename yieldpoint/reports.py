@@ -34,7 +34,8 @@ def report_command(args) -> int:
     from .timeline import timeline
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
+        _price(policy, args)
         chosen = window.parse(
             since=args.since or "", run=args.run or "", agent=args.agent or "")
     except (OSError, ValueError, window.BadWindow) as exc:
@@ -43,11 +44,11 @@ def report_command(args) -> int:
 
     path = ledger.path_for(policy, args.root)
     events = window.apply(ledger.load(path), chosen)
-    summary = summarise(events)
+    summary = summarise(events, price_per_million=_price(policy, args))
     title, heading = _page_names(policy.project_name)
     page = Page(
         turns=timeline(events),
-        price_per_million=policy.metrics.price_per_million,
+        price_per_million=_price(policy, args),
         now=_current(args.root, policy),
         title=title,
         heading=heading,
@@ -97,10 +98,10 @@ def export_command(args) -> int:
     a socket; where the bytes go after that is the caller's business.
     """
     from . import ledger, sink, window
-    from .timeline import timeline
+    from .contextstats import export_rows
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
         chosen = window.parse(
             since=getattr(args, "since", "") or "",
             run=getattr(args, "run", "") or "",
@@ -125,8 +126,8 @@ def export_command(args) -> int:
         print(f"sent {sent:,} event(s) to {argv[0]}", file=sys.stderr)
         return EXIT_OK
 
-    for turn in timeline(events):
-        print(json.dumps(turn.to_dict(), separators=(",", ":")))
+    for row in export_rows(events):
+        print(json.dumps(row, separators=(",", ":")))
     return EXIT_OK
 
 
@@ -178,7 +179,7 @@ def backtest_command(args) -> int:
     from . import backtest
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -229,7 +230,7 @@ def stats_command(args) -> int:
     from .timeline import timeline
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -249,7 +250,12 @@ def stats_command(args) -> int:
         return _as_page(args)
 
     events = window.apply(ledger.load(path), chosen)
-    summary = summarise(events)
+    try:
+        price = _price(policy, args)
+        summary = summarise(events, price_per_million=price)
+    except ValueError as exc:
+        print(f"yieldpoint: {exc}", file=sys.stderr)
+        return EXIT_ERROR
     turns = timeline(events)
     if args.json:
         payload = to_dict(summary)
@@ -274,13 +280,18 @@ def _as_page(args):
         run=getattr(args, "run", "") or "",
         agent=getattr(args, "agent", "") or "",
         policy=args.policy,
+        price=getattr(args, "price", None),
     ))
 
 
 def _price(policy, args) -> float:
     """``--price`` for one run, otherwise whatever the project configured."""
+    import math
     chosen = getattr(args, "price", None)
-    return policy.metrics.price_per_million if chosen is None else chosen
+    value = policy.metrics.price_per_million if chosen is None else chosen
+    if not math.isfinite(value) or value < 0:
+        raise ValueError("price must be finite and non-negative")
+    return value
 
 
 def _stats_text(summary, turns, chosen, path, price: float) -> None:
@@ -289,6 +300,8 @@ def _stats_text(summary, turns, chosen, path, price: float) -> None:
     from .timeline import render as render_turns
 
     print(render(summary))
+    from .contextstats import render as render_context
+    print("\n" + render_context(summary.context))
     per_turn = render_turns(turns, price_per_million=price)
     if per_turn:
         print()

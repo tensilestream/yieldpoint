@@ -141,6 +141,11 @@ class TestReportHonesty(unittest.TestCase):
         for heading in ("MEASURED", "ARCHITECTURAL", "ESTIMATED", "NOT CLAIMED"):
             self.assertIn(heading, text)
 
+    def test_footer_reports_repair_turn_compaction(self):
+        from yieldpoint.report import footer
+
+        self.assertIn("feedback", footer(self.summary))
+
     def test_it_refuses_to_claim_fewer_total_model_calls(self):
         """PLAN section 4.1: unbenchmarked, so it must not appear as a result."""
         self.assertIn("does not exist yet", render(self.summary))
@@ -197,11 +202,23 @@ class TestCompactionCountsOnlyComparableWork(unittest.TestCase):
         self.assertEqual(summary.analysed_chars, 1_000 + 2 * 50_000)
         self.assertEqual(summary.prescribed_chars, 1_000)
 
-    def test_the_ratio_is_prescribed_chars_over_critique(self):
+    def test_the_ratio_is_input_tokens_over_feedback_tokens(self):
         summary = summarise(self._events(5))
         self.assertAlmostEqual(
             summary.compaction,
-            summary.prescribed_chars / summary.prescription_chars)
+            summary.compaction_source_tokens / summary.compacted_tokens)
+
+    def test_the_ratio_uses_the_same_per_turn_rounding_as_the_timeline(self):
+        events = [
+            ledger.Event(surface="review", status="repair", findings=1,
+                         analysed_chars=1, prescription_chars=4),
+            ledger.Event(surface="review", status="repair", findings=1,
+                         analysed_chars=4, prescription_chars=1),
+        ]
+        summary = summarise(events)
+        self.assertEqual(summary.compaction_source_tokens, 2)
+        self.assertEqual(summary.compacted_tokens, 2)
+        self.assertEqual(summary.compaction, 1.0)
 
 
 class TestItDoesNotPolluteTheRepository(unittest.TestCase):

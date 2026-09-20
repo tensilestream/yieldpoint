@@ -43,7 +43,7 @@ def _with_running_total(name: str, text: str, arguments: dict, policy: Policy) -
     the total rides along. Skipped for yieldpoint_stats, which is the total, and for
     errors, where a footer is noise on top of a problem.
     """
-    if name == "yieldpoint_stats":
+    if name in ("yieldpoint_stats", "yieldpoint_compact"):
         return text
     from .. import ledger
     from ..report import running_line
@@ -147,8 +147,10 @@ def _stats(arguments: dict, policy: Policy):
     from ..stats import summarise
 
     root = arguments.get("root") or "."
-    summary = summarise(ledger.load(ledger.path_for(policy, root)))
-    return render(summary), to_dict(summary), False
+    summary = summarise(ledger.load(ledger.path_for(policy, root)),
+                        price_per_million=policy.metrics.price_per_million)
+    from ..contextstats import render as render_context
+    return render(summary) + "\n\n" + render_context(summary.context), to_dict(summary), False
 
 
 def _brief(arguments: dict, policy: Policy) -> tuple[str, dict, bool]:
@@ -216,7 +218,15 @@ def _name(status) -> str:
     return status.value if status is not None else "off"
 
 
+def _compact(arguments: dict, policy: Policy):
+    from ..contextrecording import compact_and_record
+
+    result, _ = compact_and_record(arguments["text"], root=arguments.get("root") or ".", policy=policy)
+    return result.text, {}, False
+
+
 _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
+    "yieldpoint_compact": _compact,
     "yieldpoint_verify_change": _verify_change,
     "yieldpoint_verify_diff": _verify_diff,
     "yieldpoint_review": _review,

@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .ledger import DEFAULT_PATH
+from .compaction import compact, ratio
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,15 @@ class Totals:
     caught: int = 0
     findings: int = 0
     analysed_chars: int = 0
+    prescribed_chars: int = 0
+    prescription_chars: int = 0
+    compaction_source_tokens: int = 0
+    compacted_tokens: int = 0
+
+    @property
+    def compaction(self) -> float:
+        """Input tokens per feedback token for repair turns, or zero if none."""
+        return ratio(self.compaction_source_tokens, self.compacted_tokens)
 
 
 def totals(path: str | Path = DEFAULT_PATH) -> Totals:
@@ -57,13 +67,17 @@ def totals(path: str | Path = DEFAULT_PATH) -> Totals:
     target = Path(path)
     cache = Path(str(target) + ".totals.json")
     try:
-        size = target.stat().st_size
+        stat = target.stat()
+        size = stat.st_size
     except OSError:
-        return Totals()
+        return _fold(Totals(), _previous(target))
 
-    offset, running = _cached(cache)
-    if offset > size:
-        offset, running = 0, Totals()  # rotated or truncated: start again
+    generation = [stat.st_dev, stat.st_ino, _generation(Path(str(target) + ".1"))]
+    offset, running, previous_mtime = _cached(cache, generation)
+    if offset > size or (offset == size and previous_mtime != stat.st_mtime_ns):
+        offset, running = 0, Totals()
+    if offset == 0:
+        running = _fold(Totals(), _previous(target))
 
     try:
         with target.open("rb") as handle:
@@ -84,47 +98,80 @@ def totals(path: str | Path = DEFAULT_PATH) -> Totals:
 
     fresh = raw.decode("utf-8", errors="replace")
     running = _fold(running, fresh)
-    _store(cache, consumed, running)
+    _store(cache, consumed, running, generation, stat.st_mtime_ns)
     return running
 
 
 
 def _fold(running: Totals, text: str) -> Totals:
-    verdicts = caught = findings = analysed = 0
-    for line in text.splitlines():
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(data, dict):
+    verdicts = caught = findings = analysed = prescribed = prescription = 0
+    source_tokens = compacted_tokens = 0
+    from .events import parse_events
+    for event in parse_events(text):
+        if event.context is not None:
             continue
         verdicts += 1
-        findings += int(data.get("findings", 0))
-        analysed += int(data.get("analysed_chars", 0))
-        if data.get("status") not in ("pass", "unverified"):
+        findings += event.findings
+        analysed += event.analysed_chars
+        output = event.prescription_chars
+        prescription += output
+        if output:
+            prescribed += event.analysed_chars
+            item = compact(event.analysed_chars, output)
+            source_tokens += item.source_tokens
+            compacted_tokens += item.compacted_tokens
+        if event.status not in ("pass", "unverified"):
             caught += 1
     return Totals(
         verdicts=running.verdicts + verdicts,
         caught=running.caught + caught,
         findings=running.findings + findings,
         analysed_chars=running.analysed_chars + analysed,
+        prescribed_chars=running.prescribed_chars + prescribed,
+        prescription_chars=running.prescription_chars + prescription,
+        compaction_source_tokens=running.compaction_source_tokens + source_tokens,
+        compacted_tokens=running.compacted_tokens + compacted_tokens,
     )
 
 
-def _cached(cache: Path) -> tuple[int, Totals]:
+def _generation(path: Path):
+    try:
+        stat = path.stat()
+        return [stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns]
+    except OSError:
+        return None
+
+
+def _previous(target: Path) -> str:
+    try:
+        return Path(str(target) + ".1").read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return ""
+
+
+def _cached(cache: Path, generation) -> tuple[int, Totals, int]:
     try:
         data = json.loads(cache.read_text(encoding="utf-8"))
-        return int(data["offset"]), Totals(**data["totals"])
-    except (OSError, ValueError, KeyError, TypeError):
-        return 0, Totals()
+        if data.get("version") != 3 or data.get("generation") != generation:
+            return 0, Totals(), 0
+        offset = data["offset"]
+        if type(offset) is not int or offset < 0:
+            raise ValueError("invalid cache offset")
+        values = data["totals"]
+        if not all(type(value) is int and value >= 0 for value in values.values()):
+            raise ValueError("invalid cache totals")
+        return offset, Totals(**values), data["mtime"]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return 0, Totals(), 0
 
 
-def _store(cache: Path, offset: int, running: Totals) -> None:
+def _store(cache: Path, offset: int, running: Totals, generation, mtime: int) -> None:
     """Replace the cache atomically. Best effort: losing it costs one full read."""
     temp = cache.with_suffix(f".{os.getpid()}.tmp")
     try:
         temp.write_text(
-            json.dumps({"offset": offset, "totals": asdict(running)}),
+            json.dumps({"version": 3, "generation": generation, "mtime": mtime,
+                        "offset": offset, "totals": asdict(running)}),
             encoding="utf-8",
         )
         os.replace(str(temp), str(cache))

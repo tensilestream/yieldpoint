@@ -84,6 +84,11 @@ class Page:
 def render(page: Page) -> str:
     """One self-contained HTML document."""
     s = page.summary
+    from .contextstats import render as render_context
+    context = _section("Context compaction", "generated output; provider savings unknown",
+                       "<pre>" + html.escape(render_context(s.context)) + "</pre>")
+    if not s.verdicts and s.context.get("operations"):
+        return _document(page, context)
     if not s.verdicts:
         return _document(page, "<p class='empty'>Nothing recorded yet. "
                                "Run <code>yieldpoint review</code>, or let the hook "
@@ -104,6 +109,7 @@ def render(page: Page) -> str:
         _verdict_banner(page.now)
         + _pace_bar(page.now)
         + _headline(s)
+        + context
         + f"<div class='split'><div class='col'>{left}</div>"
           f"<div class='col'>{right}</div></div>"
         + _timeline(page.turns)
@@ -220,7 +226,7 @@ def _architectural(s: Summary) -> str:
         ("model calls made by Yieldpoint", "0"),
         ("prescriptions assembled, not generated", f"{s.findings:,}"),
         ("characters of critique produced free", f"{s.prescription_chars:,}"),
-        ("critique size", compaction),
+        ("critique size (estimated; not context compaction)", compaction),
     ])
 
 
@@ -300,17 +306,20 @@ def _timeline(turns) -> str:
     shown = turns[-40:]
     head = ("<tr><th>when</th><th>surface</th><th>status</th>"
             "<th class='num'>found</th><th class='num'>ms</th>"
-            "<th class='num'>calls</th><th class='num'>~tokens</th>"
-            "<th class='num'>cumulative ~tokens</th></tr>")
+            "<th class='num'>input</th><th class='num'>feedback</th>"
+            "<th class='num'>delta</th><th class='num'>turn ratio</th>"
+            "<th class='num'>repair ratio</th></tr>")
     rows = "".join(
         f"<tr><td>{html.escape(t.when)}</td>"
         f"<td>{html.escape(t.surface)}</td>"
         f"<td>{html.escape(t.status)}</td>"
         f"<td class='num'>{t.findings:,}</td>"
         f"<td class='num'>{t.duration_ms:,}</td>"
-        f"<td class='num'>{t.calls_saved:,}</td>"
-        f"<td class='num'>{t.tokens_saved:,}</td>"
-        f"<td class='num'>{t.cum_tokens_saved:,}</td></tr>"
+        f"<td class='num'>{t.compaction_source_tokens:,}</td>"
+        f"<td class='num'>{t.compacted_tokens:,}</td>"
+        f"<td class='num'>{t.compaction_saved_tokens:,}</td>"
+        f"<td class='num'>{_ratio(t.compaction_ratio)}</td>"
+        f"<td class='num'>{_ratio(t.cum_compaction_ratio)}</td></tr>"
         for t in shown
     )
     from .timeline import repetition
@@ -325,7 +334,11 @@ def _timeline(turns) -> str:
         more += (f"<p class='more'>{len(turns) - len(shown):,} earlier turn(s) not "
                  "shown. <code>yieldpoint export</code> has every one.</p>")
     table = f"<div class='scroll'><table class='rows'>{head}{rows}</table></div>{more}"
-    return _section("Per turn", "calls are architectural, tokens are estimated", table)
+    return _section("Per turn", "estimated source/feedback comparison, not context compaction", table)
+
+
+def _ratio(value: float) -> str:
+    return f"{value:.1f}x" if value else "—"
 
 
 def _ms(value: int) -> str:

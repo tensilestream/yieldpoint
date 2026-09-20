@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 from yieldpoint import ledger, sink, timeline
+from yieldpoint.compaction import compact
 from yieldpoint.core.policy import Policy
 
 
@@ -48,6 +49,45 @@ class TestTheFold(unittest.TestCase):
 
     def test_an_empty_ledger_renders_nothing_rather_than_a_header(self):
         self.assertEqual(timeline.render(()), "")
+
+    def test_each_repair_turn_reports_its_token_compaction(self):
+        event = ledger.Event(surface="review", status="repair", findings=1,
+                             analysed_chars=4000, prescription_chars=400, at=1)
+        turn = timeline.timeline([event])[0]
+        self.assertEqual(turn.compaction_source_tokens, 1000)
+        self.assertEqual(turn.compacted_tokens, 100)
+        self.assertEqual(turn.compaction_saved_tokens, 900)
+        self.assertEqual(turn.compaction_ratio, 10.0)
+        self.assertEqual(turn.cum_compaction_ratio, 10.0)
+
+    def test_clean_turn_is_explicitly_not_a_compaction(self):
+        turn = timeline.timeline([_event(1, chars=4000, findings=0)])[0]
+        self.assertEqual(turn.compacted_tokens, 0)
+        self.assertEqual(turn.compaction_ratio, 0.0)
+        self.assertIn("—", timeline.render((turn,), paint=_plain()))
+
+
+class TestTokenCompaction(unittest.TestCase):
+    def test_small_feedback_still_has_one_estimated_token(self):
+        result = compact(4, 1)
+        self.assertEqual(result.source_tokens, 1)
+        self.assertEqual(result.compacted_tokens, 1)
+        self.assertEqual(result.saved_tokens, 0)
+
+    def test_larger_feedback_reports_a_negative_token_delta(self):
+        result = compact(4, 5)
+        self.assertEqual(result.saved_tokens, -1)
+
+    def test_an_expansion_is_not_described_as_smaller(self):
+        event = ledger.Event(surface="review", status="repair", findings=1,
+                             analysed_chars=4, prescription_chars=8, at=1)
+        text = timeline.render(timeline.timeline([event]), paint=_plain())
+        self.assertIn("2.0x larger on repair turns", text)
+
+    def test_no_prescription_is_not_reported_as_a_saving(self):
+        result = compact(4000, 0)
+        self.assertFalse(result.applicable)
+        self.assertEqual(result.ratio, 0.0)
 
 
 class TestTheSink(unittest.TestCase):

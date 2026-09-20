@@ -15,14 +15,15 @@ produces for nothing and an LLM-as-judge produces for one call.
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from .compaction import compact, ratio
 from .ledger import Event
 
 
 @dataclass(frozen=True)
 class Summary:
-    """Counted facts. Every field here is measured, none is inferred."""
+    """Verification observations and separately labelled compaction estimates."""
 
     verdicts: int = 0
     findings: int = 0
@@ -46,6 +47,11 @@ class Summary:
     median_ms: int = 0
     p95_ms: int = 0
 
+    compaction_source_tokens: int = 0
+    """Estimated input tokens from turns which actually produced feedback."""
+    compacted_tokens: int = 0
+    """Estimated feedback tokens from those same turns."""
+
     severities: tuple[tuple[str, int], ...] = ()
     confidences: tuple[tuple[str, int], ...] = ()
     languages: tuple[tuple[str, int], ...] = ()
@@ -66,6 +72,8 @@ class Summary:
 
     recurring: int = 0
     """Findings still present in the most recent look at their file."""
+
+    context: dict = field(default_factory=dict)
 
     @property
     def caught(self) -> int:
@@ -97,7 +105,7 @@ class Summary:
 
     @property
     def compaction(self) -> float:
-        """Analysed characters per prescription character, on comparable work.
+        """Input tokens per feedback token, on comparable repair turns.
 
         How much smaller the instruction is than the code it describes. The
         numerator counts only the verdicts that produced a critique: a file
@@ -107,9 +115,7 @@ class Summary:
 
         0.0 when nothing was prescribed.
         """
-        if not self.prescription_chars:
-            return 0.0
-        return self.prescribed_chars / self.prescription_chars
+        return ratio(self.compaction_source_tokens, self.compacted_tokens)
 
 
 #: Rules that mean the suite lost verification strength rather than shape.
@@ -119,19 +125,38 @@ CONTRACT_RULES = frozenset({
 })
 
 
-def summarise(events: list[Event]) -> Summary:
-    """Fold the ledger into one Summary. Every field here is measured."""
+def summarise(events: list[Event], *, price_per_million: float = 0.0) -> Summary:
+    """Fold recorded activity without treating compactions as verifications."""
+    from .contextstats import summarise as context_summary
+    context = context_summary(events, price_per_million)
+    events = [e for e in events if e.context is None]
     if not events:
-        return Summary()
+        return Summary(context=context)
     resolved, recurring = _outcomes(events)
     return Summary(
         verdicts=len(events),
+        context=context,
         resolved=resolved,
         recurring=recurring,
         **_sums(events),
         **_timings(events),
         **_groupings(events),
     )
+
+
+def _compaction_sums(events: list[Event]) -> dict:
+    """Token totals over the turns that actually produced a critique.
+
+    A clean verdict prescribes nothing and so compressed nothing; counting it
+    would inflate the ratio by however much clean code was verified alongside.
+    """
+    applicable = [item for item in
+                  (compact(e.analysed_chars, e.prescription_chars) for e in events)
+                  if item.applicable]
+    return {
+        "compaction_source_tokens": sum(item.source_tokens for item in applicable),
+        "compacted_tokens": sum(item.compacted_tokens for item in applicable),
+    }
 
 
 def _sums(events: list[Event]) -> dict:
@@ -142,6 +167,7 @@ def _sums(events: list[Event]) -> dict:
         "analysed_chars": sum(e.analysed_chars for e in events),
         "prescribed_chars": sum(
             e.analysed_chars for e in events if e.prescription_chars),
+        **_compaction_sums(events),
         "files_checked": sum(e.files_checked for e in events),
         "files_skipped": sum(e.files_skipped for e in events),
         "acknowledged": sum(e.acknowledged for e in events),

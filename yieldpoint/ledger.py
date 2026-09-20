@@ -61,82 +61,7 @@ MAX_LINE_BYTES = 3_500
 MAX_BYTES = 8_000_000
 
 
-@dataclass(frozen=True)
-class Event:
-    """One verification, reduced to what can be counted."""
-
-    surface: str
-    status: str
-    findings: int = 0
-    rules: tuple[str, ...] = ()
-    prescription_chars: int = 0
-    analysed_chars: int = 0
-    files_checked: int = 0
-    files_skipped: int = 0
-    duration_ms: int = 0
-
-    severities: tuple[str, ...] = ()
-    """Status of each finding, so severity can be reported separately from count."""
-
-    confidences: tuple[str, ...] = ()
-    """How each finding was derived. Only ``exact`` may block, so the mix says
-    how much of the output is authoritative rather than advisory."""
-
-    languages: tuple[str, ...] = ()
-    """Extensions of the files analysed — the honest view of what coverage this
-    install actually has, given Python is the only exact analyser today."""
-
-    checked: tuple[str, ...] = ()
-    """Paths analysed, capped. Needed to tell a finding that was fixed from one
-    in a file nothing has looked at since."""
-
-    at: int = 0
-    """When this was recorded, in whole seconds since the epoch. Stamped by
-    ``record``, never by ``observe`` — the clock is a surface concern, and a
-    check that reads one is not reproducible (RULES.md section 4). Zero on
-    events written before the field existed."""
-
-    run: str = ""
-    """Groups every verdict from one orchestrated job. Set by the orchestrator
-    through ``YIELDPOINT_RUN_ID``; empty when nobody is coordinating."""
-
-    agent: str = ""
-    """Which worker produced this verdict, from ``YIELDPOINT_AGENT``. With a
-    fan-out of three hundred, "what did the suite look like" is far less useful
-    than "which agent keeps weakening it"."""
-
-    acknowledged: int = 0
-    """Findings a source comment answered. Counted so suppression stays visible."""
-
-    keys: tuple[str, ...] = ()
-    """``file::rule`` per finding, so the same problem can be recognised across
-    verdicts."""
-
-    def to_json(self) -> str:
-        return json.dumps(asdict(self), separators=(",", ":"), sort_keys=True)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "Event":
-        return cls(
-            surface=str(data.get("surface", "")),
-            status=str(data.get("status", "")),
-            findings=int(data.get("findings", 0)),
-            rules=tuple(data.get("rules", ())),
-            prescription_chars=int(data.get("prescription_chars", 0)),
-            analysed_chars=int(data.get("analysed_chars", 0)),
-            files_checked=int(data.get("files_checked", 0)),
-            files_skipped=int(data.get("files_skipped", 0)),
-            duration_ms=int(data.get("duration_ms", 0)),
-            at=int(data.get("at", 0)),
-            run=str(data.get("run", "")),
-            agent=str(data.get("agent", "")),
-            acknowledged=int(data.get("acknowledged", 0)),
-            severities=tuple(data.get("severities", ())),
-            confidences=tuple(data.get("confidences", ())),
-            languages=tuple(data.get("languages", ())),
-            checked=tuple(data.get("checked", ())),
-            keys=tuple(data.get("keys", ())),
-        )
+from .events import Event, parse_events
 
 
 #: Paths recorded per event. Bounded so one scan of a large repository cannot
@@ -344,19 +269,7 @@ def load(path: str | Path = DEFAULT_PATH) -> list[Event]:
     rest of the file.
     """
     target = Path(path)
-    text = _read(Path(str(target) + ".1")) + _read(target)
-    events = []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue  # a truncated write must not lose the rest of the file
-        if isinstance(data, dict):
-            events.append(Event.from_dict(data))
-    return events
+    return parse_events(_read(Path(str(target) + ".1"))) + parse_events(_read(target))
 
 
 def _read(path: Path) -> str:

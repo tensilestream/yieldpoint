@@ -120,7 +120,7 @@ def _architectural(summary: Summary) -> list[str]:
         f"  characters of critique produced free   {summary.prescription_chars:>10,}",
     ]
     if summary.compaction:
-        out.append(f"  {_compaction_line(summary.compaction)}")
+        out.append(f"  {_compaction_line(summary.compaction)} (estimated feedback ratio; not context compaction)")
     return out
 
 
@@ -154,6 +154,7 @@ def _estimated(summary: Summary) -> list[str]:
         "  tokenizers disagree; treat it as an order of magnitude, not a bill.",
         "",
         "NOT CLAIMED",
+        "  Provider-billed savings are unknown; the judge comparison is hypothetical.",
         "  That your agent converges in fewer total model calls. That needs a",
         "  benchmark against a real model, and it does not exist yet.",
     ]
@@ -164,12 +165,15 @@ def running_line(totals) -> str:
     if not totals.verdicts:
         return ""
     judge_tokens = totals.analysed_chars // CHARS_PER_TOKEN
-    return (
+    line = (
         f"Yieldpoint so far: {_plural(totals.verdicts, 'check')} · "
         f"{totals.caught:,} flagged · {_plural(totals.findings, 'finding')} · "
         f"0 model calls · ~{_short(judge_tokens)} tokens an LLM judge would "
         f"have read (est.)"
     )
+    if totals.compaction:
+        line += f" · feedback {_compaction_line(totals.compaction)} (est.)"
+    return line
 
 
 def footer(summary: Summary) -> str:
@@ -185,12 +189,15 @@ def footer(summary: Summary) -> str:
     if not summary.verdicts:
         return ""
     judge_tokens = summary.analysed_chars // CHARS_PER_TOKEN
-    return (
+    line = (
         f"Yieldpoint so far: {_plural(summary.verdicts, 'check')} · "
         f"{summary.caught:,} flagged · {_plural(summary.findings, 'finding')} · "
         f"0 model calls · ~{_short(judge_tokens)} tokens an LLM judge would "
         f"have read (est.)"
     )
+    if summary.compaction:
+        line += f" · feedback {_compaction_line(summary.compaction)} (est.)"
+    return line
 
 
 def _plural(count: int, noun: str) -> str:
@@ -222,7 +229,8 @@ def _architectural_dict(summary: Summary) -> dict:
         "model_calls_made": 0,
         "prescriptions_assembled": summary.findings,
         "compaction_ratio": round(summary.compaction, 1),
-        "_compaction_basis": "prescribed_chars / prescription_chars; "
+        "_compaction_basis": "legacy estimated feedback comparison, not actual context compaction: "
+                             "estimated source tokens / estimated prescription tokens; "
                              "clean verdicts are excluded from the numerator",
         "prescribed_chars": summary.prescribed_chars,
         "prescription_chars": summary.prescription_chars,
@@ -232,6 +240,7 @@ def _architectural_dict(summary: Summary) -> dict:
 def to_dict(summary: Summary) -> dict:
     """The machine-readable form, tiered the same way as the report."""
     return {
+        "context_compaction": summary.context,
         "measured": {
             "verdicts": summary.verdicts,
             "reported_something": summary.caught,
@@ -270,6 +279,8 @@ def to_dict(summary: Summary) -> dict:
             "llm_judge_input_tokens": summary.analysed_chars // CHARS_PER_TOKEN,
         },
         "not_claimed": [
+            "provider-billed token or cost savings; not observed",
+            "source/prescription ratio is not actual context compaction",
             "fewer total model calls to convergence; unbenchmarked",
         ],
     }

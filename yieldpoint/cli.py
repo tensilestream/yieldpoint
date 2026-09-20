@@ -174,7 +174,7 @@ def _add_setup_commands(sub) -> None:
 #: Commands that speak a protocol or are consumed by another program. A banner
 #: on any of these corrupts what the caller is reading, so they never get one
 #: whatever the terminal says.
-_MACHINE_COMMANDS = frozenset({"mcp", "hook"})
+_MACHINE_COMMANDS = frozenset({"mcp", "hook", "compact"})
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -261,6 +261,8 @@ def _parser() -> argparse.ArgumentParser:
                        help="render for a listener, with voice-mode severity")
     check_cmd.set_defaults(handler=check)
 
+    from .contextrecording import add_command
+    add_command(sub)
     _add_reporting_commands(sub)
 
 

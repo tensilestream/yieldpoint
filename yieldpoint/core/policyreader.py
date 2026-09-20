@@ -84,7 +84,10 @@ def _metrics(section: dict, warnings: list[str]) -> Metrics:
             "never name a command. Set the YIELDPOINT_SINK environment "
             "variable instead; see SECURITY.md.")
     try:
+        import math
         price = float(section.get("price_per_million") or 0.0)
+        if not math.isfinite(price):
+            raise ValueError("non-finite price")
     except (TypeError, ValueError):
         warnings.append("metrics.price_per_million is not a number; no cost is shown")
         price = 0.0

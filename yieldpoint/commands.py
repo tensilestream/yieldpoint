@@ -75,7 +75,7 @@ def check(args) -> int:
         return EXIT_ERROR
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -87,7 +87,7 @@ def check(args) -> int:
     with Timer() as timer:
         verdict = verify_change(before, after, args.path, policy)
     _record(verdict, Run("check", len(before or "") + len(after or ""),
-                          timer.elapsed_ms), policy)
+                          timer.elapsed_ms, args.root), policy)
     return _emit(verdict, args, policy,
                  deletions=() if after is not None else (args.path,))
 
@@ -123,7 +123,7 @@ def review_command(args) -> int:
     from .worktree import uncommitted
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -152,14 +152,17 @@ def check_diff(args) -> int:
 
     try:
         text = _read_source(args.diff) or ""
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
     if args.speak:
         policy = policy.for_voice()
-    verdict = verify_diff(text, root=args.root, policy=policy)
+    from .ledger import Timer
+    with Timer() as timer:
+        verdict = verify_diff(text, root=args.root, policy=policy)
+    _record(verdict, Run("check:diff", len(text), timer.elapsed_ms, args.root), policy)
     if args.speak:
         return _print_spoken(verdict, policy)
     if args.json:
@@ -184,7 +187,7 @@ def hook_command(args) -> int:
     # Loaded once, and never allowed to fail the hook: a broken config must not
     # stand between a person and their editor. Defaults are the safe fallback.
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError):
         policy = Policy()
 
@@ -230,7 +233,7 @@ def stop_command(args) -> int:
         _record(
             outcome.verdict,
             Run("stop", outcome.analysed, timer.elapsed_ms, outcome.root),
-            Policy.load(args.policy),
+            Policy.load(args.policy, root=getattr(args, "root", ".")),
         )
 
     response = stop.decision(
@@ -289,7 +292,7 @@ def brief_command(args) -> int:
     from .briefing import render, to_dict
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -306,7 +309,7 @@ def scan_command(args) -> int:
     from .scan import scan
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError) as exc:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
@@ -358,7 +361,7 @@ def linters_command(args) -> int:
     from .core.linters.adapter import FAST
 
     try:
-        policy = Policy.load(args.policy)
+        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
     except (OSError, ValueError):
         policy = Policy()
 

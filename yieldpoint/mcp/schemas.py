@@ -14,6 +14,14 @@ _FILE = {"type": "string", "description": "Repository-relative path being change
 
 TOOLS: list[dict[str, Any]] = [
     {
+        "name": "yieldpoint_compact",
+        "description": "Losslessly remove formatting whitespace from JSON tool output. Prefer running in a harness before prompt insertion: a separate model tool call may cost more than it saves. No transcript summarisation or provider savings claim.",
+        "inputSchema": {"type": "object", "properties": {
+            "text": {"type": "string", "description": "JSON text to compact"},
+            "root": {"type": "string", "description": "Repository for local metrics"},
+        }, "required": ["text"]},
+    },
+    {
         "name": "yieldpoint_verify_change",
         "title": "Verify a proposed edit",
         "description": (

@@ -296,41 +296,28 @@ Anything it touches is backed up first. Skip pieces with `--no-hook`, `--no-git`
 
 ### Is it actually saving anything?
 
-The ledger records every verdict locally — no network call, ever. `yp stats` adds it up:
+The ledger records verification activity locally. `yp stats` separates:
 
-```console
-$ yp stats
-────────────────────────────────────────────────────────────────
-  SAVED  on this repository, across 243 verification(s)
+- **Measured activity:** checks run, findings, duration, files checked or skipped.
+- **Observed outcomes:** findings absent on a later check, without claiming Yieldpoint caused the fix.
+- **Actual output compaction:** input/output characters and UTF-8 bytes from `yp compact`.
+- **Token estimates:** four characters per token, rounded per compacted output. A Python
+  caller can supply a named tokenizer for measured token counts instead.
+- **Hypothetical judge comparison:** what a separate LLM review might have read,
+  assuming one review per verification. This is not observed savings.
 
-             243   model calls not made      architectural
-      ~1,194,287   input tokens not read     estimated
-          ~$3.58   at $3.00 per M tokens     your stated rate
-
-  over 27 distinct file set(s); 112 verification(s) re-analysed one already counted
-────────────────────────────────────────────────────────────────
-
-PER TURN  when each verdict happened, and the running total after it
-  when                 surface  status     found     ms  calls   ~tokens  saved so far
-  2026-09-19 15:16:09  review   pass           0     20      1    11,480  242 calls · ~1,192,748 tokens saved
-  2026-09-19 15:16:13  check    pass           0      4      1     1,539  243 calls · ~1,194,287 tokens saved
-```
-
-Three different kinds of number, never added together. **Model calls not made** is
-architectural — Yieldpoint makes none, and an LLM-as-judge producing the same critique
-makes one per verdict. **Tokens** is an estimate, measured characters over a stated
-constant. **Cost** is that estimate times a rate you supply, because a vendor price baked
-in here would be stale within a quarter:
+Provider-billed token and cost savings remain **unknown**. Producing smaller output
+only saves prompt tokens if the harness substitutes it before the model reads it.
+Calling another tool after the model already received the original may cost more.
 
 ```sh
-yp stats --price 3.00                          # one run
-# or, permanently:  "metrics": { "price_per_million": 3.00 }  in .yieldpoint.json
+yp compact tool-output.json --root . > compact-output.json
+yp stats --price 3.00       # optional price per million input tokens
+yp stats --json            # context_compaction contains the accounting and assumptions
 ```
 
-The repeat line is not an apology. Verifying the same suite all day counts once per
-verdict, because a judge asked the same question all day would read it once per verdict
-too — but a large number reads as "a lot of different code", and usually it is not, so
-the report says which.
+Compaction never adds a verification to the ledger. The ledger stores sizes and attribution,
+not tool-output content. Reading stats never records additional activity.
 
 ```sh
 yp stats --since today     # a window
@@ -858,14 +845,41 @@ NOT CLAIMED
 **Why three blocks.** *Measured* is counted from what ran. *Architectural* is true by
 construction — Yieldpoint makes no model calls, so an LLM-as-judge doing the same job costs
 one per verdict; that is a property of how each is built, not a benchmark result.
-*Estimated* is arithmetic on the measured byte counts with the assumption printed beside
+*Estimated* is arithmetic on the measured character counts with the assumption printed beside
 it. If you only trust the first block you still get a complete picture.
 
-**On prompt compaction.** The honest version of that claim is the ratio above: the
-prescription describes the change in a fraction of the characters, so a repair round feeds
-the model a targeted instruction instead of the files and the reasoning to re-derive it.
-Below about 1.0 the report says the critique is *larger* than the code — which happens on
-tiny changes, and is printed rather than rounded away.
+**On prompt compaction.** The source/prescription ratio compares two different
+representations; it does not prove that context was replaced. Clean verdicts stay out
+of that ratio, and expansions remain visible. Legacy `*_saved` export fields retain
+their names for compatibility and include an explicit hypothetical-comparison label.
+
+`yp compact` is the actual compaction path: it removes only insignificant whitespace
+from valid JSON. It preserves strings (including source code), escapes, numeric
+lexemes, key order, duplicate keys and error fields. Already compact JSON yields no
+reduction. Non-JSON input is rejected rather than summarized or truncated.
+
+For an agent harness, compact the tool output **before** inserting it into model context:
+
+```python
+from yieldpoint.contextrecording import compact_and_record
+
+result, recorded = compact_and_record(tool_result_json, root=repository_root)
+# Insert result.text in place of tool_result_json in the next prompt.
+# Check recorded if the harness requires an auditable ledger entry.
+```
+
+For exact counts, pass `count_tokens=your_token_counter` and
+`tokenizer="your-model-tokenizer-version"`. The callback receives each text and returns
+an integer count. Different tokenizers are reported separately; if the candidate costs
+more tokens, the original is retained. These are payload counts, not provider invoices.
+A potential input-cost reduction is shown only for estimated tokens at your stated rate;
+actual billed savings remain unknown because caching, retries and call overhead differ.
+
+The same function is available as `yieldpoint.context.compact_json` without recording,
+and as the `yieldpoint_compact` MCP tool. The SDK or CLI path avoids an extra model turn.
+This is lossless JSON compaction, not conversation summarisation or automatic interception
+of other MCP servers. Run `python scripts/benchmark_compaction.py` to reproduce its
+size reductions and check that the tool results are preserved.
 
 **What is deliberately absent:** any claim that your agent finishes in fewer total model
 calls. That needs a benchmark against a real model, it does not exist, and until it does
@@ -902,35 +916,19 @@ with `"metrics": { "enabled": false }` in `.yieldpoint.json`, or `YIELDPOINT_NO_
 one. A total tells you whether the tool is worth keeping; the timeline is the only way to
 see a *trend*.
 
-```console
-$ yieldpoint stats --since today
-────────────────────────────────────────────────────────────────
-  SAVED  on this repository, across 139 verification(s)
-
-             139   model calls not made      architectural
-      ~1,194,287   input tokens not read     estimated
-          ~$3.58   at $3.00 per M tokens     your stated rate
-
-  over 27 distinct file set(s); 112 verification(s) re-analysed one already counted
-────────────────────────────────────────────────────────────────
-
-PER TURN  when each verdict happened, and the running total after it
-  when                 surface  status     found     ms  calls   ~tokens  saved so far
-  2026-09-19 15:16:09  review   pass           0     20      1    11,480  138 calls · ~1,192,748 tokens saved
-  2026-09-19 15:16:13  check    pass           0      4      1     1,539  139 calls · ~1,194,287 tokens saved
-
-  calls  — architectural: one judge call per verdict, not made
-  tokens — estimated: analysed characters / 4
+```sh
+yieldpoint stats --since today
+yieldpoint stats --agent my-agent --json
+yieldpoint export
 ```
 
-The three lines are three different kinds of number and are never added together, for the
-same reason the totals keep them apart.
+The verification timeline shows estimated source/feedback sizes and their delta,
+not measured provider savings. Context compactions have separate totals and export
+records. `--since`, `--run`, and `--agent` filter both kinds of event. Repeated
+verification of the same file set is disclosed. Totals cover the retained ledger
+(current file plus one rotated generation), not unlimited lifetime history.
 
-**The repeat line is not an apology, it is the point.** Verifying the same suite all day
-counts once per verdict, because an LLM-as-judge asked the same question all day would
-read it once per verdict too. But a large number reads as "a lot of different code", and
-on most repositories it is not, so the report says which it is rather than letting you
-assume. **There is no default price**, because a vendor
+**There is no default price**, because a vendor
 rate baked in here would be stale within a quarter and unreproducible the moment it was —
 state your own and the report states it back:
 

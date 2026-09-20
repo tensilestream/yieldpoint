@@ -25,6 +25,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 
+from .compaction import compact
 from .ledger import CHARS_PER_TOKEN, Event
 
 
@@ -56,6 +57,14 @@ class Turn:
     cum_calls_saved: int = 0
     cum_tokens_saved: int = 0
 
+    compacted_tokens: int = 0
+    """Estimated feedback tokens for this repair turn; zero when clean."""
+
+    compaction_source_tokens: int = 0
+    compaction_saved_tokens: int = 0
+    compaction_ratio: float = 0.0
+    cum_compaction_ratio: float = 0.0
+
     @property
     def when(self) -> str:
         """Local wall-clock, because the reader is sitting in a timezone."""
@@ -64,13 +73,15 @@ class Turn:
     def to_dict(self) -> dict:
         data = asdict(self)
         data["when"] = self.when
+        data["savings_basis"] = "legacy *_saved fields are hypothetical judge/feedback comparisons, not observed savings"
         return data
 
 
 def timeline(events) -> tuple[Turn, ...]:
     """Fold events into per-turn rows, oldest first, carrying the totals."""
-    ordered = sorted(events, key=lambda e: (e.at, e.surface))
+    ordered = sorted((e for e in events if e.context is None), key=lambda e: (e.at, e.surface))
     verdicts = findings = calls = tokens = 0
+    compacted = compacted_source = 0
     rows = []
     for event in ordered:
         saved_tokens = event.analysed_chars // CHARS_PER_TOKEN
@@ -78,6 +89,10 @@ def timeline(events) -> tuple[Turn, ...]:
         findings += event.findings
         calls += 1
         tokens += saved_tokens
+        turn_compaction = compact(event.analysed_chars, event.prescription_chars)
+        if turn_compaction.applicable:
+            compacted_source += turn_compaction.source_tokens
+            compacted += turn_compaction.compacted_tokens
         rows.append(Turn(
             at=event.at,
             surface=event.surface,
@@ -95,6 +110,11 @@ def timeline(events) -> tuple[Turn, ...]:
             cum_findings=findings,
             cum_calls_saved=calls,
             cum_tokens_saved=tokens,
+            compaction_source_tokens=turn_compaction.source_tokens,
+            compacted_tokens=turn_compaction.compacted_tokens,
+            compaction_saved_tokens=turn_compaction.saved_tokens,
+            compaction_ratio=turn_compaction.ratio,
+            cum_compaction_ratio=(compacted_source / compacted if compacted else 0.0),
         ))
     return tuple(rows)
 
@@ -135,8 +155,8 @@ def repetition(turns: tuple[Turn, ...]) -> tuple[int, int]:
 def _figures(last: Turn, price_per_million: float) -> list[tuple[str, str, str]]:
     """``(value, what it is, which tier it belongs to)``, never blended."""
     rows = [
-        (f"{last.cum_calls_saved:,}", "model calls not made", "architectural"),
-        (f"~{last.cum_tokens_saved:,}", "input tokens not read", "estimated"),
+        (f"{last.cum_calls_saved:,}", "hypothetical judge calls", "assumed"),
+        (f"~{last.cum_tokens_saved:,}", "hypothetical judge tokens", "estimated"),
     ]
     if price_per_million > 0:
         money = cost(last.cum_tokens_saved, price_per_million)
@@ -167,7 +187,7 @@ def panel(turns: tuple[Turn, ...], price_per_million: float = 0.0, paint=None) -
 
     lines = [
         rule,
-        f"  {paint.bold}SAVED{paint.reset}  {paint.dim}on this repository, across "
+        f"  {paint.bold}JUDGE COMPARISON{paint.reset}  {paint.dim}on this repository, across "
         f"{last.cum_verdicts:,} verification(s){paint.reset}",
         "",
     ]
@@ -204,7 +224,8 @@ def render(turns: tuple[Turn, ...], limit: int = RECENT,
         f"{paint.bold}PER TURN{paint.reset}  {paint.dim}when each verdict happened, "
         f"and the running total after it{paint.reset}",
         f"  {paint.dim}{'when':<19}  {'surface':<8} {'status':<10} "
-        f"{'found':>5} {'ms':>6} {'calls':>6} {'~tokens':>9}  saved so far{paint.reset}",
+        f"{'found':>5} {'ms':>6} {'input':>7} {'feedback':>9} {'delta':>7} {'ratio':>7}"
+        f"  feedback ratio so far{paint.reset}",
     ]
     for turn in shown:
         tint = getattr(paint, _TINT.get(turn.status, "steel"))
@@ -214,19 +235,32 @@ def render(turns: tuple[Turn, ...], limit: int = RECENT,
             f"{tint}{turn.status:<10}{paint.reset} "
             f"{tint if turn.findings else paint.dim}{found}{paint.reset} "
             f"{paint.dim}{turn.duration_ms:>6}{paint.reset} "
-            f"{turn.calls_saved:>6} {paint.amber}{turn.tokens_saved:>9,}{paint.reset}"
-            f"  {paint.dim}{turn.cum_calls_saved:,} calls · "
-            f"~{turn.cum_tokens_saved:,} tokens saved{paint.reset}"
+            f"{turn.compaction_source_tokens:>7,} {paint.amber}{turn.compacted_tokens:>9,}{paint.reset}"
+            f" {turn.compaction_saved_tokens:>7,}"
+            f" {paint.amber}{_ratio(turn.compaction_ratio):>7}{paint.reset}"
+            f"  {paint.dim}{_compaction_label(turn.cum_compaction_ratio)} on repair turns{paint.reset}"
         )
     if len(turns) > len(shown):
         lines.append(f"  {paint.dim}… {len(turns) - len(shown):,} earlier turn(s) not "
                      f"shown; `yieldpoint export` has every one{paint.reset}")
     lines.append("")
-    lines.append(f"  {paint.dim}calls  — architectural: one judge call per verdict, "
-                 f"not made{paint.reset}")
-    lines.append(f"  {paint.dim}tokens — estimated: analysed characters / "
-                 f"{CHARS_PER_TOKEN}{paint.reset}")
+    lines.append(f"  {paint.dim}input/feedback — source and prescription tokens; clean turns are n/a. "
+                 f"All token counts use {CHARS_PER_TOKEN} chars/token.{paint.reset}")
     return "\n".join(lines)
+
+
+def _ratio(value: float) -> str:
+    """A ratio label that does not turn an inapplicable clean turn into zero."""
+    return f"{value:.1f}x" if value else "—"
+
+
+def _compaction_label(value: float) -> str:
+    """Describe a compaction ratio without calling an expansion a saving."""
+    if not value:
+        return "—"
+    if value >= 1:
+        return f"{value:.1f}x smaller"
+    return f"{1 / value:.1f}x larger"
 
 
 def _palette():

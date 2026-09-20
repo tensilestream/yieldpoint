@@ -98,11 +98,11 @@ def flush(policy, events, ledger_path: Path) -> int:
     if not fresh:
         return 0
 
-    from .timeline import timeline
+    from .contextstats import export_rows
 
     payload = "".join(
-        json.dumps(turn.to_dict(), separators=(",", ":")) + "\n"
-        for turn in timeline(fresh)
+        json.dumps(row, separators=(",", ":")) + "\n"
+        for row in export_rows(fresh)
     )
     try:
         subprocess.run(
