@@ -10,6 +10,59 @@ package version is not.
 
 ## [Unreleased]
 
+## [0.1.2] — unreleased
+
+### Added
+
+- **Eleven more languages.** Test files in JavaScript, TypeScript, Java, Kotlin, Go,
+  Rust, C#, Ruby, PHP, Swift and Elixir are now read, alongside Python. Go is read
+  through both testify and its own stdlib idiom — `if got != want { t.Errorf(...) }`,
+  where the assertion is the negation of the guard, which is how most Go tests are
+  written. `scripts/language_matrix.py` generates the support table, and a test holds
+  the README to it so the table cannot drift from the engine.
+- **Three contract rules now reach every language.** `empty_test`, `skip_marker` and
+  `vacuous_assertion` were Python-only because the integrity rules were assumed to need
+  control flow. Only `disabled_assertion` actually does: an empty body, an annotation
+  that switches a test off, and an assertion whose subject is a literal are each
+  unambiguous without it. `scripts/check_matrix.py` reports every check against every
+  language, and says `n/a` where a language has no such construct rather than claiming
+  a pass.
+- **`weak_new_test`** — a newly added test whose every assertion only checks existence.
+  Monotonicity cannot see this: there is no earlier version to be weaker than. It is the
+  shape an agent produces when asked to add a feature *with tests*. Advisory by default,
+  and silent when one not-null guard sits beside a real assertion.
+- **`duplicate_across_files`** — the same implementation in two files of one change.
+  `duplicate_implementation` only ever compared within a single file, which is the half
+  a reader can already see.
+- **`yieldpoint brief`** — what is true about the files a task is about to touch: lines
+  of headroom, functions already at their limit, the assertions that must not get weaker,
+  and the imports the file's zone forbids. A verdict arrives after the code is written;
+  this arrives before. Also an MCP tool, `yieldpoint_brief`.
+- **`structure.exclude`** — paths the maintainability limits skip, as globs: a directory,
+  an exact file, or an extension. Only maintainability is skipped. An excluded file is
+  still checked for a weakened test contract, which no path may switch off.
+
+### Changed
+
+- **`max_file_lines` is off by default.** A line count is the weakest proxy here for
+  one-responsibility-per-module, and it fired 403 times across Requests, Click, Rich,
+  Flask, Black, Cobra and Axios. A rule that flags every well-regarded codebase gets
+  switched off, taking the rules that matter with it. Set it explicitly to opt in; this
+  repository still sets 300 for itself.
+- **Every install route now gates commits.** `install-mcp` and `install-hook` previously
+  wired nothing for git, so installing through the MCP server — the usual path for an
+  agent — left commits ungated. Both now write `.git/hooks/pre-commit`; pass `--no-git`
+  to opt out.
+
+### Fixed
+
+- **The compaction ratio counted code no critique described.** `analysed_chars` summed
+  every verdict while `prescription_chars` summed only those that produced one, so the
+  ratio improved the more clean code happened to be verified alongside. It now divides by
+  the characters of the verdicts that actually produced a critique. On this repository
+  that corrects a reported 201.9x to 128.8x.
+
+
 ## [0.1.1] — unreleased
 
 ### Added
