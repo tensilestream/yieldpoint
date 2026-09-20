@@ -16,7 +16,8 @@ as clean. Under-reporting is a gap; over-reporting is a false accusation about
 somebody's code, and only one of those is recoverable.
 
 What it reads today: Jest, Vitest, Mocha with Chai, and plain `assert` in
-JavaScript and TypeScript; JUnit and AssertJ in Java and Kotlin; testify in Go.
+JavaScript and TypeScript; JUnit and AssertJ in Java and Kotlin; testify in
+Go, and Go's own guard idiom, which has no assertion API at all.
 The relation tables are shared with the Python path (spellings.py), so a
 framework added there is understood here too.
 """
@@ -27,37 +28,12 @@ import re
 
 from .recognise import Assertion
 from .relation import Relation
+from .testpatterns import (
+    CALL, GO_GUARD, GO_INVERSE, NAME_GROUPS, _RUBYCALL,
+    RUBY_OPENERS, SUBJECT_FIRST, TEST_DECL, FLUENT, MAX_SUBJECT,
+    SUFFIXES,
+)
 from .spellings import FLUENT_RELATIONS, METHOD_RELATIONS, NEGATIONS, fold
-
-#: Suffixes read lexically. Python is absent on purpose — it has an exact path.
-SUFFIXES = (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".java", ".kt", ".go")
-
-#: ``it("...")``, ``test("...")``, ``@Test void name()``, ``func TestName(``.
-_TEST_DECL = re.compile(
-    r"""(?:
-        \b(?:it|test)\s*(?:\.\w+)?\s*\(\s*(?P<quote>["'`])(?P<name>[^"'`]{1,200})(?P=quote)
-      | @Test[\s\S]{0,120}?\b(?:public\s+|private\s+)?\w[\w<>\[\]]*\s+(?P<jname>\w+)\s*\(
-      | \bfun\s+(?P<kname>`[^`]+`|\w+)\s*\([^)]*\)\s*(?=\{)
-      | \bfunc\s+(?P<gname>Test\w+)\s*\(
-    )""",
-    re.VERBOSE,
-)
-
-#: ``expect(x).toBe(1)``, ``assertThat(x).isEqualTo(1)``, ``x.should.equal(1)``.
-_FLUENT = re.compile(
-    r"\b(?:expect|assertThat|assert_that|require)\s*\(\s*(?P<subject>.+?)\s*\)"
-    r"(?P<chain>(?:\s*\.\s*\w+(?:\s*\([^()]*\))?)+)",
-    re.DOTALL,
-)
-
-#: ``assertEquals(expected, actual)``, ``assert.equal(a, b)``, ``assert.Equal(t, a, b)``.
-_CALL = re.compile(
-    r"\b(?:assert\s*\.\s*)?(?P<name>assert[A-Za-z]*|Equal|NotEqual|True|False|Nil|NotNil)"
-    r"\s*\(\s*(?P<args>[^;]{0,400}?)\s*\)\s*[;\n]"
-)
-
-_MAX_SUBJECT = 120
-
 
 def reads(path: str) -> bool:
     return path.endswith(SUFFIXES)
@@ -78,7 +54,7 @@ def extract(source: str, *, filename: str = "<source>") -> tuple:
     cases = []
     understood = False
     for name, start, body, line in blocks:
-        assertions = tuple(_assertions(body, line))
+        assertions = tuple(_assertions(body, line, filename))
         understood = understood or bool(assertions)
         cases.append(TestCase(
             qualname=name,
@@ -87,26 +63,61 @@ def extract(source: str, *, filename: str = "<source>") -> tuple:
             is_empty=not body.strip(),
             body_hash=_shape(body),
         ))
-    del filename, start
+    del start
     return tuple(cases), understood
 
 
+def _declared_name(match) -> str:
+    """The test's name, whichever language declared it."""
+    for group in NAME_GROUPS:
+        found = match.group(group)
+        if found:
+            return found.strip("`")
+    return ""
+
+
+def _body_of(source: str, match):
+    """Ruby closes a block with ``end``; everything else here uses braces."""
+    if match.group("rbname"):
+        return _ended(source, match.end())
+    return _braced(source, match.end())
+
+
 def _blocks(source: str):
-    """Each test declaration, with the source between its braces."""
+    """Each test declaration, with the source of its body."""
     seen: set[str] = set()
-    for match in _TEST_DECL.finditer(source):
-        name = (
-            match.group("name") or match.group("jname")
-            or (match.group("kname") or "").strip("`") or match.group("gname") or ""
-        )
+    for match in TEST_DECL.finditer(source):
+        name = _declared_name(match)
         if not name:
             continue
         unique = name if name not in seen else f"{name}#{len(seen)}"
         seen.add(unique)
-        body = _braced(source, match.end())
+        body = _body_of(source, match)
         if body is None:
             continue
         yield unique, match.end(), body, source.count("\n", 0, match.start()) + 1
+
+
+def _ended(source: str, start: int) -> str | None:
+    """A Ruby body: from here to its matching ``end``.
+
+    Depth counting, not parsing. An ``end`` inside a string literal miscounts,
+    which yields a body that is too long or too short — so the failure is a
+    missed or spurious assertion, never a crash, and the caller's timidity
+    turns that into silence.
+    """
+    depth = 1
+    collected: list[str] = []
+    for line in source[start:].splitlines(keepends=True):
+        stripped = line.strip()
+        if stripped == "end" or stripped.startswith("end "):
+            depth -= 1
+            if depth == 0:
+                return "".join(collected)
+        elif stripped.startswith(RUBY_OPENERS) or stripped.endswith(" do"):
+            depth += 1
+        collected.append(line)
+    return None
 
 
 def _braced(source: str, start: int) -> str | None:
@@ -132,9 +143,16 @@ def _braced(source: str, start: int) -> str | None:
     return None
 
 
-def _assertions(body: str, base_line: int):
+def _assertions(body: str, base_line: int, filename: str = ""):
     """Every assertion shape recognised inside one test body."""
-    for match in _FLUENT.finditer(body):
+    yield from _fluent_assertions(body, base_line)
+    yield from _call_assertions(body, base_line, filename)
+    yield from _guard_assertions(body, base_line)
+
+
+def _fluent_assertions(body: str, base_line: int):
+    """``expect(x).toBe(1)``, ``assertThat(x).isEqualTo(1)``."""
+    for match in FLUENT.finditer(body):
         subject = _clean(match.group("subject"))
         if subject is None:
             continue
@@ -147,10 +165,63 @@ def _assertions(body: str, base_line: int):
             raw=_snippet(match.group(0)),
         )
 
-    for match in _CALL.finditer(body):
-        found = _from_call(match, body, base_line)
+
+def _call_assertions(body: str, base_line: int, filename: str):
+    """``assertEquals(a, b)``, ``assert_eq!(a, b)``, and Ruby's paren-less form."""
+    patterns = [CALL]
+    if filename.endswith(".rb"):
+        patterns.append(_RUBYCALL)
+    for pattern in patterns:
+        for match in pattern.finditer(body):
+            found = _from_call(match, body, base_line)
+            if found is not None:
+                yield found
+
+
+def _guard_assertions(body: str, base_line: int):
+    """Go's ``if <cond> { t.Fatal(...) }``, which is an assertion inverted."""
+    for match in GO_GUARD.finditer(body):
+        found = _from_go_guard(match, body, base_line)
         if found is not None:
             yield found
+
+
+
+def _from_go_guard(match, body: str, base_line: int):
+    """An ``if <cond> { t.Fatal(...) }`` guard, read as the assertion it makes.
+
+    ``if err != nil`` is the one shape deliberately ignored: it is Go's error
+    propagation idiom, present in nearly every test, and reading it as an
+    assertion about ``err`` would bury the real ones in noise.
+    """
+    condition = match.group("cond").strip()
+    if not condition or _is_error_check(condition):
+        return None
+
+    line = base_line + body.count("\n", 0, match.start())
+    if condition.startswith("!"):
+        subject = _clean(condition[1:])
+        if subject is None:
+            return None
+        return Assertion(subject=subject, relation=Relation.TRUTHY, line=line,
+                         raw=_snippet(match.group(0)))
+
+    for operator, relation in GO_INVERSE.items():
+        left, sep, right = condition.partition(f" {operator} ")
+        if not sep:
+            continue
+        subject = _clean(left)
+        if subject is None:
+            return None
+        return Assertion(subject=subject, relation=relation, line=line,
+                         expected=_clean(right), raw=_snippet(match.group(0)))
+    return None
+
+
+def _is_error_check(condition: str) -> bool:
+    """``if err != nil`` and friends: plumbing, not verification."""
+    stripped = condition.replace(" ", "")
+    return stripped.endswith(("!=nil", "==nil")) and "err" in stripped.lower()
 
 
 def _chain_relation(chain: str) -> Relation | None:
@@ -172,13 +243,21 @@ def _chain_relation(chain: str) -> Relation | None:
     return Relation.OPAQUE if links else None
 
 
+def _subject_of(name: str, args: str) -> str | None:
+    """The argument naming what is under test, by the family's convention."""
+    if name.startswith(SUBJECT_FIRST):
+        first, _, _ = args.partition(",")
+        return _clean(first) or _clean(_last_argument(args))
+    return _clean(_last_argument(args))
+
+
 def _from_call(match, body: str, base_line: int) -> Assertion | None:
     """``assertEquals(expected, actual)`` and friends."""
     name = match.group("name")
     relation = METHOD_RELATIONS.get(name) or FLUENT_RELATIONS.get(fold(name))
     if relation is None:
         return None
-    subject = _clean(_last_argument(match.group("args")))
+    subject = _subject_of(name, match.group("args"))
     if subject is None:
         return None
     return Assertion(
@@ -214,7 +293,7 @@ def _clean(text: str | None) -> str | None:
     if not text:
         return None
     subject = " ".join(text.split())
-    if not subject or len(subject) > _MAX_SUBJECT:
+    if not subject or len(subject) > MAX_SUBJECT:
         return None
     if subject[0] in "\"'`" or subject.replace(".", "").isdigit():
         return None  # a literal is a value, not a subject

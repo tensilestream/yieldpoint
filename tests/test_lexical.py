@@ -116,6 +116,83 @@ class TestItNeverBlocks(unittest.TestCase):
         self.assertIs(verdict.findings[0].confidence, Confidence.EXACT)
 
 
+class TestNativeGoTests(unittest.TestCase):
+    """Go's standard library has no assertion API.
+
+    The idiom is a guard that fails the test, so the assertion is the negation
+    of the guard. Missing it means missing most Go tests ever written, since
+    many projects deliberately avoid a testify dependency.
+    """
+
+    def _read(self, body: str):
+        tests, understood = extract(
+            f"func TestTotal(t *testing.T) {{\n{body}\n}}\n",
+            filename="x_test.go")
+        return [(a.subject, a.relation.value) for t in tests for a in t.assertions]
+
+    def test_an_inequality_guard_asserts_equality(self):
+        self.assertEqual(
+            self._read('\tif got != want {\n\t\tt.Errorf("got %v", got)\n\t}'),
+            [("got", "eq")])
+
+    def test_a_negation_guard_asserts_truthiness(self):
+        self.assertEqual(
+            self._read('\tif !ok {\n\t\tt.Error("not ok")\n\t}'),
+            [("ok", "truthy")])
+
+    def test_an_ordering_guard_asserts_a_comparison(self):
+        self.assertEqual(
+            self._read('\tif n < 3 {\n\t\tt.Fatalf("too few: %d", n)\n\t}'),
+            [("n", "comparison")])
+
+    def test_every_failing_call_counts(self):
+        for call in ("t.Fatal", "t.Fatalf", "t.Error", "t.Errorf"):
+            with self.subTest(call=call):
+                self.assertEqual(
+                    self._read(f'\tif got != want {{\n\t\t{call}("x")\n\t}}'),
+                    [("got", "eq")])
+
+    def test_an_error_check_is_plumbing_not_verification(self):
+        """`if err != nil` is in nearly every Go test. Reading it as an
+        assertion would bury the real ones in noise."""
+        self.assertEqual(
+            self._read('\tif err != nil {\n\t\tt.Fatal(err)\n\t}'), [])
+
+    def test_a_guard_with_no_failing_call_is_not_an_assertion(self):
+        self.assertEqual(
+            self._read('\tif got != want {\n\t\tlog.Print("x")\n\t}'), [])
+
+
+class TestGoWeakeningIsCaught(unittest.TestCase):
+    STRONG = ("func TestTotal(t *testing.T) {\n"
+              '\tif total != 42 {\n\t\tt.Fatal("bad")\n\t}\n}\n')
+    WEAK = ("func TestTotal(t *testing.T) {\n"
+            '\tif !total {\n\t\tt.Fatal("bad")\n\t}\n}\n')
+
+    def _verify(self, before: str, after: str):
+        return verify_change(before, after, "pkg/total_test.go", POLICY)
+
+    def test_downgrading_the_guard_is_reported(self):
+        verdict = self._verify(self.STRONG, self.WEAK)
+        self.assertIn("assertion_monotonicity",
+                      {f.rule for f in verdict.findings})
+
+    def test_strengthening_the_guard_is_silent(self):
+        self.assertFalse(self._verify(self.WEAK, self.STRONG).findings)
+
+    def test_adding_error_plumbing_is_silent(self):
+        after = ("func TestTotal(t *testing.T) {\n"
+                 "\tv, err := run()\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n"
+                 '\t_ = v\n\tif total != 42 {\n\t\tt.Fatal("bad")\n\t}\n}\n')
+        self.assertFalse(self._verify(self.STRONG, after).findings)
+
+    def test_it_still_cannot_block(self):
+        """Lexical analysis advises; it never stops a build."""
+        verdict = self._verify(self.STRONG, self.WEAK)
+        self.assertTrue(all(f.confidence is Confidence.LEXICAL
+                            for f in verdict.findings))
+
+
 class TestItIsTimid(unittest.TestCase):
     def test_an_unrecognised_file_is_unverified_not_clean(self):
         source = "// nothing here resembles a test\nconst x = 1;\n"
@@ -133,11 +210,12 @@ class TestItIsTimid(unittest.TestCase):
         self.assertEqual(tests, ())
 
     def test_it_only_claims_the_languages_it_reads(self):
-        self.assertTrue(reads("a.test.ts"))
-        self.assertTrue(reads("Foo_test.go"))
+        for supported in ("a.test.ts", "Foo_test.go", "a_test.rs", "ATest.cs",
+                          "a_test.rb", "ATest.php", "ATests.swift"):
+            self.assertTrue(reads(supported), supported)
         self.assertFalse(reads("a.py"), "Python has an exact path")
-        self.assertFalse(reads("a.rb"))
         self.assertFalse(reads("a.txt"))
+        self.assertFalse(reads("a.ex"), "Elixir is not read yet")
 
 
 if __name__ == "__main__":

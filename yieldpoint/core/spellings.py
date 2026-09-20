@@ -22,6 +22,50 @@ def fold(name: str) -> str:
 
 # unittest/pytest method name -> the relation it asserts.
 METHOD_RELATIONS: dict[str, Relation] = {
+    # Rust: `assert_eq!`, `assert_ne!`, `assert!`. The bang is stripped before
+    # lookup, so the name here is the macro without it.
+    "assert_eq": Relation.EQ,
+    "assert_ne": Relation.COMPARISON,
+    "assert_matches": Relation.MEMBERSHIP,
+    "debug_assert_eq": Relation.EQ,
+    "debug_assert": Relation.TRUTHY,
+    # C# / xUnit, NUnit, MSTest.
+    "AreEqual": Relation.EQ,
+    "AreNotEqual": Relation.COMPARISON,
+    "AreSame": Relation.EQ,
+    "IsTrue": Relation.TRUTHY,
+    "IsFalse": Relation.TRUTHY,
+    "IsNull": Relation.EQ,
+    "IsNotNull": Relation.NON_NULL,
+    "IsInstanceOf": Relation.MEMBERSHIP,
+    "Contains": Relation.MEMBERSHIP,
+    "Throws": Relation.RAISES,
+    "ThrowsAsync": Relation.RAISES,
+    "IsEmpty": Relation.EQ,
+    "Greater": Relation.COMPARISON,
+    "Less": Relation.COMPARISON,
+    # Ruby / RSpec and Minitest.
+    "assert_equal": Relation.EQ,
+    "assert_nil": Relation.EQ,
+    "refute_nil": Relation.NON_NULL,
+    "assert_includes": Relation.MEMBERSHIP,
+    "assert_raises": Relation.RAISES,
+    "assert_instance_of": Relation.MEMBERSHIP,
+    "refute_equal": Relation.COMPARISON,
+    # PHP / PHPUnit.
+    "assertSame": Relation.EQ,
+    "assertNotSame": Relation.COMPARISON,
+    "assertStringContainsString": Relation.MEMBERSHIP,
+    # Swift / XCTest.
+    "XCTAssertEqual": Relation.EQ,
+    "XCTAssertNotEqual": Relation.COMPARISON,
+    "XCTAssertTrue": Relation.TRUTHY,
+    "XCTAssertFalse": Relation.TRUTHY,
+    "XCTAssertNil": Relation.EQ,
+    "XCTAssertNotNil": Relation.NON_NULL,
+    "XCTAssertThrowsError": Relation.RAISES,
+    "XCTAssert": Relation.TRUTHY,
+
     "assertEqual": Relation.EQ, "assertEquals": Relation.EQ,
     "assertAlmostEqual": Relation.EQ, "assertIs": Relation.EQ,
     "assertIsNone": Relation.EQ, "assertDictEqual": Relation.EQ,
