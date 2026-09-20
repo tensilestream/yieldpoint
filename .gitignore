@@ -14,3 +14,8 @@ htmlcov/
 
 # Backups written by `yieldpoint init` / `install-mcp` / `install-hook`
 *-backup
+
+# VS Code extension build
+extension/node_modules/
+extension/out/
+extension/package-lock.json

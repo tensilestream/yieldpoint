@@ -1,0 +1,24 @@
+{
+  "name": "yieldpoint",
+  "description": "Deterministic test-weakening checks for coding agents. Zero model calls, zero runtime dependencies.",
+  "owner": {
+    "name": "Tensilestream",
+    "url": "https://github.com/tensilestream"
+  },
+  "plugins": [
+    {
+      "name": "yieldpoint",
+      "source": "./",
+      "description": "Deterministically detect when a code change weakens what the tests verify. No model call.",
+      "version": "0.1.3",
+      "license": "Apache-2.0",
+      "keywords": [
+        "testing",
+        "code-review",
+        "static-analysis",
+        "test-quality",
+        "guardrail"
+      ]
+    }
+  ]
+}

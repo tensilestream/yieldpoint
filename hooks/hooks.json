@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v yieldpoint >/dev/null 2>&1 && yieldpoint hook || exit 0"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v yieldpoint >/dev/null 2>&1 && yieldpoint hook --stop || exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}
