@@ -127,6 +127,46 @@ If `rescued` is empty and `without.false_green` is 0, the model did not take the
 cheap fix on these tasks at all, and the experiment has no effect to show.
 Report that rather than re-rolling seeds until it does.
 
+## With and without, across every rule family
+
+`ab_experiment.py` gates on the test contract only. `rule_ab.py` gates on
+**any** rule, so it covers the families a coding agent actually touches:
+
+```bash
+python benchmarks/ollama/rule_ab.py --model gemma4 --max-turns 3
+```
+
+Ten ordinary requests, each phrased the way a person phrases it, chosen so the
+shortest acceptable answer is the one that breaks a rule:
+
+| request | family | tends to provoke |
+|---|---|---|
+| add three string helpers in a new module | new file | `utility_module` |
+| write a module with twelve currency formatters | new file | `file_too_long` |
+| add a `route()` handling eight event types | new method | `complexity_too_high` |
+| add `send_email` with six options | new method | `too_many_parameters` |
+| add `sum_payments` like `sum_invoices` | new method | `duplicate_implementation` |
+| rename `compute` to `calculate` | rewrite | `dangling_reference` |
+| remove the unused `legacy_render` | rewrite | `export_removed` |
+| let core use the web layer's formatter | rewrite | `boundary_violation` |
+| the ruff step fails, make CI green | edit CI | `ci_check_removed` |
+| make the failing test pass | edit a test | `assertion_monotonicity` |
+
+Nothing in the prompts mentions Yieldpoint, a rule, or a limit.
+
+**Ungated** accepts the model's first parseable answer. **Gated** verifies every
+file written and, when a rule fires, hands back the prescription — which costs a
+turn from the same budget. Identical model, seed, and turn budget; turn 1 is
+byte-identical in both arms.
+
+The verdict is computed in **both** arms every turn. The ungated arm simply never
+sees it, which is how its violations get counted without it having been warned.
+
+A request that fails to provoke its target rule is reported under
+`targets_not_provoked` rather than dropped. The model writing acceptable code
+unprompted is a result, and a task list pruned to the rows that worked is not a
+measurement.
+
 ## The exhaustive matrix
 
 Test-weakening is one rule family. `matrix.py` runs **every rule the engine can

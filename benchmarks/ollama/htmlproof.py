@@ -215,38 +215,11 @@ def measured_block(judge: dict) -> str:
         "block a different set on the next run.</p>")
 
 
-def matrix_block(m: dict) -> str:
-    """Every rule, as the agent action that provokes it, grouped by that action."""
-    s = m["summary"]
-    head = ("<tr><th>what the agent did</th><th>rule</th>"
-            "<th>verdict</th></tr>")
-    body, action = [], None
-    for r in m["results"]:
-        if r["action"] != action:
-            action = r["action"]
-            body.append(f"<tr><th colspan='3'><b>{html.escape(action)}</b></th></tr>")
-        clean = not r["expect"]
-        rule = tag("stays clean", "good") if clean else tag(r["expect"], "bad")
-        got = (tag("clean", "good") if clean and not r["rules"]
-               else tag(r["status"], "bad") if r["rules"] else tag(r["status"]))
-        body.append(
-            f"<tr><th>{html.escape(r['name'])}"
-            f"<p class='fix'>{html.escape(r['intent'])} &mdash; "
-            f"<code>{html.escape(r['path'])}</code></p></th>"
-            f"<td class='num'>{rule}</td><td class='num'>{got}</td></tr>")
-    note = (
-        f"<p class='lead'><b>{s['fired_as_claimed']} of {s['must_fire']}</b> rules "
-        f"fired on the edit that provokes them, and <b>{s['stayed_clean']} of "
-        f"{s['must_stay_clean']}</b> legitimate edits came back clean &mdash; "
-        f"{len(s['distinct_rules'])} distinct rules in {s['total_ms']:.0f} ms, with "
-        f"{s['model_calls']} model calls and {s['tokens']} tokens. The clean rows "
-        "matter as much as the others: a checker that fires on real work is one "
-        "people turn off.</p>")
-    return f"<table class='rows'>{head}{''.join(body)}</table>{note}"
-
-
 def build(story: dict, ab: dict | None, judge: dict | None,
-          matrix: dict | None = None) -> str:
+          matrix: dict | None = None, rule_ab: dict | None = None) -> str:
+    from abblocks import (
+        ab_block, calibration_block, matrix_block, rule_ab_block)
+
     policy = (Path(__file__).resolve().parent
               / "example_repo" / ".yieldpoint.json").read_text().strip()
     parts = [
@@ -262,6 +235,19 @@ def build(story: dict, ab: dict | None, judge: dict | None,
         section("What it costs", "authoring, checking, repairing",
                 cost_block(story, ab, judge)),
     ]
+    if rule_ab:
+        parts.append(section(
+            "The same request, gated and ungated",
+            "every rule family, one local model, identical turn budget",
+            rule_ab_block(rule_ab)))
+    if ab:
+        parts.append(section(
+            "The narrower A/B: test repair only",
+            "eight repair tasks, same budget both arms", ab_block(ab)))
+        cal = calibration_block(ab)
+        if cal:
+            parts.append(section(
+                "Calibration", "the one constant the estimates rest on", cal))
     if matrix:
         parts.append(section(
             "Every rule, and the edit that provokes it",
@@ -301,7 +287,7 @@ def regenerate(out: Path | None = None) -> Path | None:
                   "this page, on this machine",
             source="benchmarks/ollama/example_repo",
             body=build(story, load("ab-*.json"), load("judge-*.json"),
-                       load("matrix.json")),
+                       load("matrix.json"), load("ruleab-*.json")),
         ), encoding="utf-8")
         return target
     except (OSError, ValueError, KeyError) as exc:
