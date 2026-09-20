@@ -4,7 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Getting started · Yieldpoint</title>
-<meta name="description" content="Deterministic verification for agents that write code.">
+<meta name="description" content="Install Yieldpoint in a Python repository and block AI-authored changes that weaken tests or safeguards.">
+<link rel="canonical" href="https://tensilestream.github.io/yieldpoint/start.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Yieldpoint">
+<meta property="og:title" content="Getting started · Yieldpoint">
+<meta property="og:description" content="Install Yieldpoint in a Python repository and block AI-authored changes that weaken tests or safeguards.">
+<meta property="og:url" content="https://tensilestream.github.io/yieldpoint/start.html">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Getting started · Yieldpoint">
+<meta name="twitter:description" content="Install Yieldpoint in a Python repository and block AI-authored changes that weaken tests or safeguards.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -86,7 +95,9 @@ pip install yieldpoint                    <span class="c"># or: pip install /pat
 yp init --no-hook                         <span class="c"># config + pre-commit; no editor setup</span>
 
 mkdir tests
-printf 'def test_total():\n    assert 2 + 2 == 4\n' &gt; tests/test_total.py
+printf 'def test_total():
+    assert 2 + 2 == 4
+' &gt; tests/test_total.py
 git add . &amp;&amp; git commit -m baseline
 
 <span class="c"># Deliberately weaken the assertion (macOS form of sed).</span>

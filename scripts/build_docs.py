@@ -32,6 +32,7 @@ from docs_style import STYLE
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs"
 REPO = "https://github.com/tensilestream/yieldpoint"
+SITE = "https://tensilestream.github.io/yieldpoint"
 
 #: A module-level ``UPPER_SNAKE = "lower_snake"`` in the package is a rule id.
 _RULE_VALUE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -199,6 +200,20 @@ TITLES = {
     "limits": "Status and limits",
 }
 
+DESCRIPTIONS = {
+    "index": "Yieldpoint deterministically detects when AI coding agents weaken tests, remove safeguards, or bypass CI.",
+    "start": "Install Yieldpoint in a Python repository and block AI-authored changes that weaken tests or safeguards.",
+    "rules": "Reference for Yieldpoint's deterministic rules for weakened assertions, skipped tests, CI bypasses, and risky refactors.",
+    "config": "Configure Yieldpoint's repository policy for test contracts, refactors, CI safeguards, and code structure.",
+    "integrations": "Use Yieldpoint with Claude Code, Cursor, Codex, MCP, pre-commit, and CI to verify AI-authored code changes.",
+    "limits": "Yieldpoint support status, current limitations, and the safeguards it can verify in Python repositories.",
+}
+
+
+def page_url(page: str) -> str:
+    """Return the canonical public URL for one generated page."""
+    return f"{SITE}/" if page == "index" else f"{SITE}/{page}.html"
+
 
 def shell(page: str, body: str) -> str:
     nav = "".join(
@@ -208,13 +223,28 @@ def shell(page: str, body: str) -> str:
     )
     title = TITLES[page] if page != "index" else "Yieldpoint"
     suffix = "" if page == "index" else " · Yieldpoint"
+    full_title = f"{title}{suffix}"
+    url = page_url(page)
+    description = DESCRIPTIONS[page]
+    structured_data = ""
+    if page == "index":
+        structured_data = f'''\n<script type="application/ld+json">\n{{\n  "@context": "https://schema.org",\n  "@type": "SoftwareApplication",\n  "name": "Yieldpoint",\n  "applicationCategory": "DeveloperApplication",\n  "operatingSystem": "Cross-platform",\n  "description": "{DESCRIPTIONS["index"]}",\n  "url": "{SITE}/",\n  "codeRepository": "{REPO}",\n  "downloadUrl": "https://pypi.org/project/yieldpoint/",\n  "programmingLanguage": "Python"\n}}\n</script>'''
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)}{suffix}</title>
-<meta name="description" content="Deterministic verification for agents that write code.">
+<title>{html.escape(full_title)}</title>
+<meta name="description" content="{html.escape(description, quote=True)}">
+<link rel="canonical" href="{url}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Yieldpoint">
+<meta property="og:title" content="{html.escape(full_title, quote=True)}">
+<meta property="og:description" content="{html.escape(description, quote=True)}">
+<meta property="og:url" content="{url}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="{html.escape(full_title, quote=True)}">
+<meta name="twitter:description" content="{html.escape(description, quote=True)}">{structured_data}
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -272,6 +302,20 @@ def rules_page() -> str:
 def build() -> None:
     OUT.mkdir(exist_ok=True)
     (OUT / ".nojekyll").write_text("", encoding="utf-8")
+    (OUT / "robots.txt").write_text(
+        f"User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n",
+        encoding="utf-8",
+    )
+    urls = "\n".join(
+        f"  <url><loc>{page_url(page)}</loc></url>" for page in PAGES
+    )
+    (OUT / "sitemap.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{urls}\n"
+        "</urlset>\n",
+        encoding="utf-8",
+    )
     (OUT / "style.css").write_text(STYLE, encoding="utf-8")
     bodies = {
         "index": index_page(), "start": start_page(), "rules": rules_page(),
@@ -280,7 +324,7 @@ def build() -> None:
     }
     for page, body in bodies.items():
         (OUT / f"{page}.html").write_text(shell(page, body), encoding="utf-8")
-    print(f"wrote {len(bodies) + 2} files to {OUT.relative_to(ROOT)}/")
+    print(f"wrote {len(bodies) + 4} files to {OUT.relative_to(ROOT)}/")
 
 
 def main() -> int:

@@ -110,6 +110,33 @@ yp install-mcp --client continue --show</code></pre>
 <p>Plus <code>pre-commit</code> and CI &mdash; see <a href="integrations.html">Integrations</a>.
 <code>yp install-mcp --list</code> shows every client name.</p>
 
+<h2>Validate it in a developer-sized repo</h2>
+<p>Before adding Yieldpoint to a real project, prove the integration in a disposable Git
+repository. Establish a committed baseline, weaken a test deliberately, and confirm that
+both review and the commit gate reject it.</p>
+<pre><code>mkdir yieldpoint-smoke &amp;&amp; cd yieldpoint-smoke
+git init
+git config user.email you@example.com
+git config user.name "Your Name"
+
+pip install yieldpoint                    <span class="c"># or: pip install /path/to/yieldpoint</span>
+yp init --no-hook                         <span class="c"># config + pre-commit; no editor setup</span>
+
+mkdir tests
+printf 'def test_total():\n    assert 2 + 2 == 4\n' &gt; tests/test_total.py
+git add . &amp;&amp; git commit -m baseline
+
+<span class="c"># Deliberately weaken the assertion (macOS form of sed).</span>
+sed -i '' 's/== 4/is not None/' tests/test_total.py
+yp review                                 <span class="c"># expected: REPAIR and exit code 1</span>
+
+git add tests/test_total.py
+git commit -m weakened-test               <span class="c"># expected: blocked by the pre-commit gate</span></code></pre>
+<p>On Linux, use <code>sed -i 's/== 4/is not None/' tests/test_total.py</code> instead.
+The finding should be <code>assertion_monotonicity</code>. Restore the equality assertion
+and rerun <code>yp review</code> for a clean result; then initialize the actual repository
+and commit its <code>.yieldpoint.json</code>.</p>
+
 <h2>Three doors, deliberately</h2>
 <p>No single surface sees everything, which is why there are three.</p>
 <table>
