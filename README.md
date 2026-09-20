@@ -241,6 +241,39 @@ uvx yieldpoint review      # reads your uncommitted diff, writes nothing
 ```
 </details>
 
+### Validate it in a developer-sized repo
+
+Before adding Yieldpoint to a real project, prove the integration in a disposable Git
+repository. This is the same path a developer takes in their own repo: establish a
+committed baseline, make a change that weakens a test, and confirm that both the review
+command and commit gate reject it.
+
+```sh
+mkdir yieldpoint-smoke && cd yieldpoint-smoke
+git init
+git config user.email you@example.com
+git config user.name "Your Name"
+
+pip install yieldpoint                    # or: pip install /path/to/yieldpoint
+yp init --no-hook                         # config + pre-commit gate; no editor setup
+
+mkdir tests
+printf 'def test_total():\n    assert 2 + 2 == 4\n' > tests/test_total.py
+git add . && git commit -m baseline
+
+# Deliberately weaken the assertion (macOS form of sed).
+sed -i '' 's/== 4/is not None/' tests/test_total.py
+yp review                                 # expected: REPAIR and exit code 1
+
+git add tests/test_total.py
+git commit -m weakened-test               # expected: blocked by the pre-commit gate
+```
+
+On Linux, use `sed -i 's/== 4/is not None/' tests/test_total.py` instead. The review
+should identify `assertion_monotonicity`; the commit should stop with the same finding.
+Restore `assert 2 + 2 == 4`, then rerun `yp review` to see a clean result. Once that
+works, run `yp init --no-hook` in the actual repository and commit `.yieldpoint.json`.
+
 ### What `init` writes
 
 | File | What it does |
