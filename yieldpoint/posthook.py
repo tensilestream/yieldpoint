@@ -20,9 +20,23 @@ from __future__ import annotations
 import json
 import sys
 
-from .contextrecording import compact_and_record
+from .bounded import failures, head
+from .contextrecording import bound_and_record, compact_and_record
+from .recall import keep
 
 EVENT = "PostToolUse"
+
+#: Which adapter each tool's output gets. Keyed on the name the runtime gives
+#: the tool, never sniffed from the content: guessing that a blob "looks like"
+#: search output is how the wrong lines get dropped.
+ADAPTERS = {"Grep": "head", "Glob": "head", "Bash": "failures"}
+
+#: Results shorter than this are forwarded whole. Bounding a short result costs
+#: a disclosure line and saves nothing.
+BOUND_ABOVE_LINES = 200
+
+#: How many lines a ``head`` adapter keeps.
+HEAD_LINES = 60
 
 
 def _output(payload: dict) -> str | None:
@@ -35,19 +49,57 @@ def _output(payload: dict) -> str | None:
     return response if isinstance(response, str) else None
 
 
+def _reply(text: str) -> dict:
+    return {"hookSpecificOutput": {"hookEventName": EVENT,
+                                   "updatedToolOutput": text}}
+
+
+def _lossless(text: str, root: str, policy) -> dict | None:
+    """Whitespace-only compaction, for output that is valid JSON."""
+    try:
+        result, _ = compact_and_record(text, root=root, policy=policy)
+    except ValueError:
+        return None          # not JSON; nothing this adapter understands
+    if result.output_chars >= result.input_chars:
+        return None          # no gain, so no rewrite and no claim of one
+    return _reply(result.text)
+
+
+def _bounded(text: str, adapter: str, root: str, policy) -> dict | None:
+    """Deliver part of a long result, with the omission stated in the result.
+
+    The original is stored first, so the disclosure can name a handle that
+    already resolves. When retention is off the handle is empty and the
+    disclosure says what was dropped without offering to fetch it — still
+    honest, just less useful.
+    """
+    if len(text.splitlines()) <= BOUND_ABOVE_LINES:
+        return None
+    handle = keep(text, root=root, policy=policy)
+    result = (head(text, limit=HEAD_LINES, handle=handle) if adapter == "head"
+              else failures(text, handle=handle))
+    if result.complete or len(result.text) >= len(text):
+        return None
+    bound_and_record(result, root=root, policy=policy)
+    return _reply(result.text)
+
+
 def replacement(payload: dict, *, root: str = ".", policy=None) -> dict | None:
     """The hook's reply, or ``None`` when the output is better left alone."""
     text = _output(payload)
     if not text:
         return None
-    try:
-        result, _ = compact_and_record(text, root=root, policy=policy)
-    except ValueError:
-        return None          # not JSON; nothing this hook understands
-    if result.output_chars >= result.input_chars:
-        return None          # no gain, so no rewrite and no claim of one
-    return {"hookSpecificOutput": {"hookEventName": EVENT,
-                                   "updatedToolOutput": result.text}}
+    lossless = _lossless(text, root, policy)
+    if lossless:
+        return lossless
+    adapter = ADAPTERS.get(str(payload.get("tool_name") or ""))
+    if not adapter:
+        return None
+    # Resolved here because the store needs a real policy to read the
+    # retention switch from; passing None through would silently decline to
+    # store and hand back a disclosure with no handle in it.
+    from .core.policy import Policy
+    return _bounded(text, adapter, root, Policy.load(policy, root=root))
 
 
 def post_command(args) -> int:

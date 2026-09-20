@@ -11,6 +11,7 @@ from unittest.mock import patch
 from yieldpoint.cli import main
 from yieldpoint.context import compact_json
 from yieldpoint.contextrecording import compact_and_record
+from yieldpoint.contextstats import render as render_context
 from yieldpoint.contextstats import summarise as context_summary
 from yieldpoint.core.policy import Policy
 from yieldpoint.ledger import Event, load, record
@@ -85,7 +86,12 @@ class TestAccounting(AccountingFixture):
         self.assertTrue(recorded)
         self.assertNotIn('do not log me', self.path.read_text())
         events = load(self.path)
-        self.assertEqual(events[0].context, result.metrics())
+        # Timing is stamped by the recorder, not by the pure compaction, so the
+        # stored record is the metrics plus how long it took and nothing else.
+        self.assertEqual(events[0].context,
+                         {**result.metrics(), 'processing_ms': events[0].context['processing_ms']})
+        self.assertIsInstance(events[0].context['processing_ms'], int)
+        self.assertGreaterEqual(events[0].context['processing_ms'], 0)
         self.assertEqual((events[0].run, events[0].agent), ('run-a', 'agent-a'))
         summary = summarise(events)
         self.assertEqual(summary.verdicts, 0)
@@ -276,3 +282,40 @@ class TestLedgerConsistency(AccountingFixture):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TierAndOverheadCase(AccountingFixture):
+    """What was guaranteed, what gained nothing, and what it cost to run."""
+
+    def _summary(self, *texts):
+        for text in texts:
+            compact_and_record(text, root=self.root, policy=self.policy)
+        return context_summary(load(self.path))
+
+    def test_bytes_are_reported_under_the_guarantee_that_produced_them(self):
+        data = self._summary('{ "a": 1 }')
+        self.assertEqual(list(data['by_tier']), ['lossless'])
+        self.assertEqual(data['by_tier']['lossless']['operations'], 1)
+        self.assertEqual(data['by_tier']['lossless']['bytes_removed'],
+                         data['input_bytes'] - data['output_bytes'])
+
+    def test_an_operation_that_gained_nothing_is_counted_and_shown(self):
+        """Forwarding unchanged is an outcome, not a silent non-event."""
+        data = self._summary('[1,2]')
+        self.assertEqual(data['operations'], 1)
+        self.assertEqual(data['no_gain'], 1)
+        self.assertEqual(data['changed'], 0)
+        self.assertIn('removed nothing', render_context(data))
+
+    def test_gains_and_non_gains_are_counted_separately(self):
+        data = self._summary('{ "a": 1 }', '[1,2]')
+        self.assertEqual((data['operations'], data['changed'], data['no_gain']),
+                         (2, 1, 1))
+
+    def test_sub_millisecond_work_is_not_reported_as_unmeasured(self):
+        text = render_context(self._summary('{ "a": 1 }'))
+        self.assertIn('ms spent compacting', text)
+
+    def test_processing_time_is_recorded_per_operation(self):
+        self._summary('{ "a": 1 }')
+        self.assertIsInstance(load(self.path)[0].context['processing_ms'], int)

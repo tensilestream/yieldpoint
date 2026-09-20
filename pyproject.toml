@@ -39,6 +39,11 @@ dependencies = []
 
 [project.optional-dependencies]
 langgraph = ["langgraph>=0.2"]
+# A real token counter, for repositories that set metrics.tokenizer. Without
+# it every token figure is a 4-chars-per-token estimate and is labelled one.
+# Deliberately not a runtime dependency: loading an encoding may fetch its
+# vocabulary, and the core must never reach the network (RULES.md section 4).
+tokenizer = ["tiktoken>=0.7"]
 
 [project.urls]
 Homepage = "https://github.com/tensilestream/yieldpoint"

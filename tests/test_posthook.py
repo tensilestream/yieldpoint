@@ -56,3 +56,42 @@ class ReplacementCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BoundedRoutingCase(unittest.TestCase):
+    """Which adapter runs is decided by the tool's name, never by the content."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        from yieldpoint.core.policy import Policy
+        self.root = Path(tempfile.mkdtemp())
+        self.policy = Policy.from_dict({"metrics": {"enabled": False}})
+        self.long = "\n".join(f"src/f{i}.py:{i}: match" for i in range(400))
+
+    def _out(self, tool: str, text: str):
+        reply = replacement({"tool_name": tool, "tool_response": text},
+                            root=str(self.root), policy=self.policy)
+        return reply["hookSpecificOutput"]["updatedToolOutput"] if reply else None
+
+    def test_search_output_is_bounded_and_declares_the_omission(self):
+        out = self._out("Grep", self.long)
+        self.assertLess(len(out), len(self.long))
+        self.assertIn("not shown", out.splitlines()[-1])
+
+    def test_an_unknown_tool_passes_through_untouched(self):
+        """Guessing that a blob looks like search output loses the wrong lines."""
+        self.assertIsNone(self._out("SomeOtherTool", self.long))
+
+    def test_a_short_result_is_not_bounded(self):
+        self.assertIsNone(self._out("Grep", "one\ntwo\nthree"))
+
+    def test_json_takes_the_lossless_path_whatever_tool_produced_it(self):
+        import json
+        text = json.dumps({"a": [1, 2]}, indent=2)
+        self.assertEqual(self._out("Grep", text), '{"a":[1,2]}')
+
+    def test_no_handle_is_offered_when_retention_is_off(self):
+        out = self._out("Grep", self.long)
+        self.assertIn("not shown", out)
+        self.assertNotIn("recall", out)

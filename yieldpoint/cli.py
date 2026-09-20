@@ -270,6 +270,9 @@ def _parser() -> argparse.ArgumentParser:
 
     from .contextrecording import add_command
     add_command(sub)
+
+    from .recall import add_command as add_recall
+    add_recall(sub)
     _add_reporting_commands(sub)
 
 

@@ -301,6 +301,23 @@ class Metrics:
     own and the report states it back beside the result. Unlike ``sink`` this
     is safe in a committed file: it is a number, and a number cannot execute."""
 
+    retain_omitted: bool = False
+    """Keep what a bounded result left out, so it can be fetched back.
+
+    Off by default, and the only setting in this package that causes tool
+    output to be written to disk. Everything else recorded here is sizes and
+    rule names. Turning this on means whatever a tool printed — file contents
+    included — is stored under `.yieldpoint/recall/` until you delete it."""
+
+    tokenizer: str = ""
+    """``provider:encoding`` for a real token count, e.g. ``tiktoken:o200k_base``.
+
+    Empty means every token figure is a four-characters-per-token estimate and
+    says so. Naming one here selects from a fixed allowlist of providers — it
+    cannot name a command, for the same reason ``sink`` cannot. Note that a
+    tokenizer is an optional extra and loading one may fetch its vocabulary the
+    first time, which is why nothing is named by default."""
+
     #: Where events are exported is deliberately **not** here. This file is
     #: committed, and SECURITY.md states that configuration must never be able
     #: to name an executable: a repository that could would run a command on

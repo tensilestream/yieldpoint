@@ -66,6 +66,16 @@ class Turn:
     cum_compaction_ratio: float = 0.0
 
     @property
+    def compared(self) -> bool:
+        """Whether this turn produced feedback there was anything to compare.
+
+        A clean verdict prescribes nothing, so no source was replaced by
+        anything. The token columns have no value to report for it — which is
+        different from reporting a value of zero.
+        """
+        return bool(self.compacted_tokens)
+
+    @property
     def when(self) -> str:
         """Local wall-clock, because the reader is sitting in a timezone."""
         return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.at))
@@ -74,6 +84,9 @@ class Turn:
         data = asdict(self)
         data["when"] = self.when
         data["savings_basis"] = "legacy *_saved fields are hypothetical judge/feedback comparisons, not observed savings"
+        # Without this a reader cannot tell a clean turn's zero from a measured
+        # one. The renderer prints a dash; machines get the same fact as a flag.
+        data["compared"] = self.compared
         return data
 
 
@@ -235,8 +248,9 @@ def render(turns: tuple[Turn, ...], limit: int = RECENT,
             f"{tint}{turn.status:<10}{paint.reset} "
             f"{tint if turn.findings else paint.dim}{found}{paint.reset} "
             f"{paint.dim}{turn.duration_ms:>6}{paint.reset} "
-            f"{turn.compaction_source_tokens:>7,} {paint.amber}{turn.compacted_tokens:>9,}{paint.reset}"
-            f" {turn.compaction_saved_tokens:>7,}"
+            f"{_tokens(turn.compaction_source_tokens, turn.compared):>7} "
+            f"{paint.amber}{_tokens(turn.compacted_tokens, turn.compared):>9}{paint.reset}"
+            f" {_tokens(turn.compaction_saved_tokens, turn.compared):>7}"
             f" {paint.amber}{_ratio(turn.compaction_ratio):>7}{paint.reset}"
             f"  {paint.dim}{_compaction_label(turn.cum_compaction_ratio)} on repair turns{paint.reset}"
         )
@@ -244,9 +258,21 @@ def render(turns: tuple[Turn, ...], limit: int = RECENT,
         lines.append(f"  {paint.dim}… {len(turns) - len(shown):,} earlier turn(s) not "
                      f"shown; `yieldpoint export` has every one{paint.reset}")
     lines.append("")
-    lines.append(f"  {paint.dim}input/feedback — source and prescription tokens; clean turns are n/a. "
-                 f"All token counts use {CHARS_PER_TOKEN} chars/token.{paint.reset}")
+    lines.append(f"  {paint.dim}input/feedback — source and prescription tokens. "
+                 f"A clean turn prescribes nothing, so it shows — rather than a "
+                 f"count. All token counts use {CHARS_PER_TOKEN} chars/token.{paint.reset}")
     return "\n".join(lines)
+
+
+def _tokens(value: int, compared: bool) -> str:
+    """A token count, or a dash when this turn had nothing to compare.
+
+    Printing ``0`` here states a measurement that was never taken. It is the
+    same defect as reporting `pass` on a file no rule could read: the reader
+    cannot tell an absent comparison from a comparison that found nothing
+    (RULES.md section 5).
+    """
+    return f"{value:,}" if compared else "—"
 
 
 def _ratio(value: float) -> str:

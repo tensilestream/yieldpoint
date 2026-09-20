@@ -93,9 +93,9 @@ class Event:
                     isinstance(value, str) for value in data.get(key, ())):
                 raise ValueError("invalid event list")
         if event.context is not None:
-            from .contextstats import valid
-            if not valid(event.context):
-                raise ValueError("invalid compaction metrics")
+            from .contextstats import known
+            if not known(event.context):
+                raise ValueError("invalid context metrics")
         return event
 
 

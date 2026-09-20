@@ -186,6 +186,44 @@ class TestItStaysOffTheNetwork(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
+class CleanTurnCase(unittest.TestCase):
+    """A turn with nothing to compare must not report a count of zero."""
+
+    def _turn(self, **kwargs):
+        return timeline.timeline([ledger.Event(surface="review", status="pass", at=1, **kwargs)])[0]
+
+    def test_a_clean_turn_reports_no_comparison(self):
+        turn = self._turn(analysed_chars=4_000, prescription_chars=0)
+        self.assertIs(turn.compared, False)
+        self.assertIs(turn.to_dict()["compared"], False)
+
+    def test_a_repair_turn_reports_its_counts(self):
+        turn = self._turn(analysed_chars=4_000, prescription_chars=400)
+        self.assertIs(turn.compared, True)
+        self.assertEqual(turn.compaction_source_tokens, 1_000)
+        self.assertEqual(turn.compacted_tokens, 100)
+
+    def test_clean_turns_render_as_dashes_not_zeroes(self):
+        text = timeline.render(timeline.timeline([
+            ledger.Event(surface="review", status="pass", at=1,
+                         analysed_chars=4_000, prescription_chars=0)]))
+        row = [l for l in text.splitlines() if "review" in l and "pass" in l][0]
+        # The four token columns say nothing was compared. `found 0` stays a
+        # number: zero findings is a result, an absent comparison is not.
+        self.assertGreaterEqual(row.count("—"), 4)
+        self.assertNotIn("1,000", row)
+        self.assertIn("pass", row)
+
+    def test_repair_turns_still_render_their_numbers(self):
+        text = timeline.render(timeline.timeline([
+            ledger.Event(surface="review", status="repair", findings=1, at=1,
+                         analysed_chars=4_000, prescription_chars=400)]))
+        row = [l for l in text.splitlines() if "repair" in l][0]
+        self.assertIn("1,000", row)
+        self.assertIn("100", row)
+        self.assertIn("10.0x", row)
+
+
 if __name__ == "__main__":
     unittest.main()
 

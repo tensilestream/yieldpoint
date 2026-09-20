@@ -939,6 +939,21 @@ state your own and the report states it back:
 `yieldpoint stats --price 3.00` overrides it for one run, and `yieldpoint stats --html`
 writes the same figures to the HTML page instead of the terminal.
 
+**Token counts are estimates unless you name a tokenizer.** By default every figure uses
+four characters per token and says so. Name a real counter and the result is filed under
+that counter's name, because two tokenizers disagree about the same text and a total
+spanning both is a number neither would confirm:
+
+```json
+{ "metrics": { "tokenizer": "tiktoken:o200k_base" } }
+```
+
+Install it with `pip install yieldpoint[tokenizer]`. It stays optional because loading an
+encoding may fetch its vocabulary, and the verification core never reaches the network.
+A name that no provider matches is reported, not ignored — silently falling back to
+estimates would leave you believing you were measuring. None of this measures what a
+provider bills: `stats` keeps reporting provider savings as unknown.
+
 ### Getting it off the machine
 
 A number you cannot aggregate across a team is barely better than one nobody checks — but

@@ -95,7 +95,29 @@ def _metrics(section: dict, warnings: list[str]) -> Metrics:
         enabled=bool(section.get("enabled", True)),
         path=str(section.get("path") or Metrics.path),
         price_per_million=max(0.0, price),
+        tokenizer=_tokenizer(section.get("tokenizer"), warnings),
+        retain_omitted=bool(section.get("retain_omitted", False)),
     )
+
+
+def _tokenizer(value: object, warnings: list[str]) -> str:
+    """A named counter from the allowlist, or nothing.
+
+    A misspelt name is reported rather than ignored. Silently falling back to
+    estimates would leave a repository believing it was measuring.
+    """
+    from .. import tokenizer as counters
+
+    if not value:
+        return ""
+    spec = str(value).strip()
+    provider = spec.partition(":")[0].lower()
+    if provider in counters.PROVIDERS:
+        return spec
+    known = ", ".join(sorted(counters.PROVIDERS))
+    warnings.append(f"metrics.tokenizer '{spec}' names no known provider "
+                    f"({known}); token counts stay estimates")
+    return ""
 
 
 def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
