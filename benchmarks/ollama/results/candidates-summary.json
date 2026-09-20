@@ -1,0 +1,43 @@
+{
+  "repositories": 1,
+  "candidates": 71,
+  "rules_with_a_real_instance": [
+    "assertion_monotonicity",
+    "change_too_large",
+    "ci_check_disabled",
+    "ci_check_removed",
+    "complexity_too_high",
+    "duplicate_implementation",
+    "empty_test",
+    "export_removed",
+    "function_too_long",
+    "skip_marker",
+    "too_many_parameters"
+  ],
+  "rules_with_none": [
+    "boundary_violation",
+    "dangling_reference",
+    "disabled_assertion",
+    "file_too_long",
+    "nesting_too_deep",
+    "utility_module",
+    "vacuous_assertion"
+  ],
+  "by_rule": {
+    "complexity_too_high": 19,
+    "function_too_long": 17,
+    "too_many_parameters": 8,
+    "change_too_large": 7,
+    "empty_test": 4,
+    "assertion_monotonicity": 4,
+    "ci_check_removed": 3,
+    "duplicate_implementation": 3,
+    "skip_marker": 3,
+    "ci_check_disabled": 2,
+    "export_removed": 1
+  },
+  "carry_the_removed_text": 7,
+  "distinct_commits": 17,
+  "labelled": 0,
+  "note": "candidates, not labels. Whether each removal was legitimate is a judgement mining cannot make."
+}

@@ -1,0 +1,50 @@
+{
+  "candidates": 71,
+  "repositories": [
+    "yieldpoint"
+  ],
+  "outcomes": {
+    "not-a-file": 7,
+    "live": 8,
+    "unknown": 12,
+    "moved": 44
+  },
+  "still_live": 8,
+  "by_rule": {
+    "assertion_monotonicity": {
+      "live": 4
+    },
+    "change_too_large": {
+      "not-a-file": 7
+    },
+    "ci_check_disabled": {
+      "unknown": 2
+    },
+    "ci_check_removed": {
+      "unknown": 3
+    },
+    "complexity_too_high": {
+      "moved": 19
+    },
+    "duplicate_implementation": {
+      "unknown": 3
+    },
+    "empty_test": {
+      "unknown": 4
+    },
+    "export_removed": {
+      "moved": 1
+    },
+    "function_too_long": {
+      "live": 1,
+      "moved": 16
+    },
+    "skip_marker": {
+      "live": 3
+    },
+    "too_many_parameters": {
+      "moved": 8
+    }
+  },
+  "note": "live means the finding is still true of HEAD today. It does not mean the finding was right \u2014 that judgement is the reader's."
+}

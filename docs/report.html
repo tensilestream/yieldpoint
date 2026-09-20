@@ -1,0 +1,220 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yieldpoint Verification Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  /* Light is the base set. Every colour is a token so both themes resolve
+     together; nothing is defined only inside a media query. */
+  :root {
+    --ground:  #f7f8fa;
+    --panel:   #ffffff;
+    --sunk:    #eef1f5;
+    --line:    #dde2ea;
+    --ink:     #1a1d23;
+    --dim:     #636b78;
+    --faint:   #8d95a3;
+    --accent:  #2b5d8a;
+    --signal:  #a8642a;
+    --clean:   #3f7d5c;
+    --shadow:  0 1px 2px rgba(20, 28, 42, .06), 0 8px 24px rgba(20, 28, 42, .05);
+    --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0e1116; --panel: #161a21; --sunk: #1c212a; --line: #29303b;
+      --ink: #e8eaee; --dim: #9aa3b2; --faint: #79828f;
+      --accent: #7fb0dd; --signal: #e0a45c; --clean: #6fc099;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e1116; --panel: #161a21; --sunk: #1c212a; --line: #29303b;
+    --ink: #e8eaee; --dim: #9aa3b2; --faint: #79828f;
+    --accent: #7fb0dd; --signal: #e0a45c; --clean: #6fc099;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px rgba(0, 0, 0, .3);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1.5rem 3rem;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 15px/1.65 var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  main { max-width: 100rem; margin: 0 auto; display: flex;
+         flex-direction: column; gap: 1.5rem; }
+
+  /* Two columns on a real screen: what to do on the left, where it stays in
+     view, and the accounting beside it rather than a screen below it. */
+  .split { display: grid; gap: 1.5rem 2rem; align-items: start;
+           grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+  @media (max-width: 68rem) { .split { grid-template-columns: minmax(0, 1fr); } }
+  .split > .col { display: flex; flex-direction: column; gap: 1.75rem;
+                  min-width: 0; }
+
+  .verdict { display: flex; flex-direction: column; gap: .2rem;
+             padding: .9rem 1.1rem; border-radius: 6px; border: 1px solid;
+             border-left-width: 4px; background: var(--panel); }
+  .verdict b { font-size: 1.05rem; font-weight: 600; }
+  .verdict span { font-size: .875rem; color: var(--dim); }
+  .verdict.is-blocking { border-color: var(--signal); }
+  .verdict.is-blocking b { color: var(--signal); }
+  .verdict.is-clean { border-color: var(--clean); }
+  .verdict.is-clean b { color: var(--clean); }
+  .verdict.is-advisory, .verdict.is-quiet { border-color: var(--line); }
+
+  .pace { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 6px; padding: .8rem 1.1rem;
+          display: flex; flex-direction: column; gap: .45rem; }
+  .pace-top { display: flex; justify-content: space-between;
+              align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  .pace b { font: 500 .72rem/1 var(--mono); letter-spacing: .14em;
+            text-transform: uppercase; }
+  .pace .num { font-size: .8rem; color: var(--dim); }
+  .pace p { margin: 0; font-size: .875rem; color: var(--dim); }
+  .gauge { display: block; height: .45rem; border-radius: 2px;
+           background: var(--sunk); overflow: hidden; }
+  .gauge > span { display: block; height: 100%; background: var(--accent); }
+  .pace.is-warn b { color: var(--signal); }
+  .pace.is-warn .gauge > span { background: var(--signal); }
+  .pace.is-over { border-color: var(--signal); }
+  .pace.is-over b { color: var(--signal); }
+  .pace.is-over .gauge > span { background: var(--signal); }
+
+  .findings { list-style: none; margin: 0; padding: 0;
+              display: flex; flex-direction: column; gap: .6rem; }
+  .findings li { background: var(--panel); border: 1px solid var(--line);
+                 border-left: 3px solid var(--line); border-radius: 5px;
+                 padding: .7rem .9rem; display: flex;
+                 flex-direction: column; gap: .3rem; }
+  .findings li.is-blocking { border-left-color: var(--signal); }
+  .where { display: flex; gap: .6rem; align-items: baseline;
+           flex-wrap: wrap; }
+  .where code { font-size: .8rem; }
+  .rule { font: 500 .65rem/1 var(--mono); letter-spacing: .09em;
+          text-transform: uppercase; color: var(--dim); }
+  .findings li.is-blocking .rule { color: var(--signal); }
+  .what { margin: 0; font-size: .9rem; }
+  .fix { margin: 0; font-size: .85rem; color: var(--dim); }
+  .more { font-size: .85rem; color: var(--dim); margin: .25rem 0 0; }
+
+  .masthead { display: flex; flex-direction: column; gap: .4rem; }
+  /* The mark is the measurement: an elastic rise, the yield point where a
+     suite stops holding, then the fracture. */
+  .brand { display: flex; align-items: center; gap: .6rem; }
+  .mark { width: 2.6rem; height: 1.4rem; flex: none; overflow: visible; }
+  .eyebrow {
+    font: 500 .7rem/1 var(--mono); letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent);
+  }
+  h1 { font-size: 1.75rem; font-weight: 600; letter-spacing: -.015em;
+       margin: 0; text-wrap: balance; }
+  .scope { color: var(--dim); font: 400 .875rem/1.5 var(--mono); margin: 0; }
+
+  .cards { display: grid; gap: .75rem;
+           grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 1rem 1.1rem; box-shadow: var(--shadow);
+    display: flex; flex-direction: column; gap: .15rem;
+  }
+  .card .value {
+    font: 600 1.6rem/1.1 var(--sans); letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .card .label { font: 500 .7rem/1.4 var(--mono); letter-spacing: .1em;
+                 text-transform: uppercase; color: var(--dim); }
+  .card .note { font-size: .78rem; color: var(--faint); margin-top: .3rem; }
+  .card.is-zero .value { color: var(--clean); }
+
+  /* The three tiers of claim differ in visual weight, because they differ in
+     how much they can be trusted. Solid, ruled, then dashed and recessed. */
+  section { display: flex; flex-direction: column; gap: .5rem; }
+  .tier-head { display: flex; align-items: baseline; gap: .75rem;
+               flex-wrap: wrap; padding-bottom: .5rem;
+               border-bottom: 1px solid var(--line); }
+  h2 { font: 500 .72rem/1 var(--mono); letter-spacing: .16em;
+       text-transform: uppercase; margin: 0; color: var(--ink); }
+  .tier-head .note { font-size: .8rem; color: var(--dim); }
+  .tier-estimated .tier-head { border-bottom-style: dashed; }
+  .tier-estimated h2 { color: var(--dim); }
+  .tier-estimated .rows { opacity: .88; }
+  .tier-estimated .rows tr:nth-child(odd) { background: transparent; }
+  .tier-estimated .rows th, .tier-estimated .rows td {
+    border-bottom: 1px dashed var(--line);
+  }
+
+  h3 { font: 500 .78rem/1 var(--mono); letter-spacing: .08em;
+       text-transform: uppercase; color: var(--dim);
+       margin: 1.25rem 0 .1rem; }
+
+  table { border-collapse: collapse; width: 100%; }
+  th { text-align: left; font-weight: 400; }
+  .num { text-align: right; font-family: var(--mono);
+         font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .bars th { padding: .32rem .75rem .32rem 0; white-space: nowrap; }
+  .bars td:nth-child(2) { width: 58%; padding: .32rem 0; }
+  .bars .num { padding-left: .75rem; font-size: .85rem; }
+  .track { display: block; height: .5rem; border-radius: 2px;
+           background: var(--sunk); overflow: hidden; }
+  .bar { display: block; height: 100%; border-radius: 2px;
+         background: var(--accent); }
+  .bar.is-signal { background: var(--signal); }
+  .star { font: 500 .62rem/1 var(--mono); letter-spacing: .1em;
+          text-transform: uppercase; color: var(--signal);
+          border: 1px solid currentColor; border-radius: 3px;
+          padding: .15rem .3rem; margin-left: .5rem; vertical-align: .05em; }
+
+  .rows { background: var(--panel); border: 1px solid var(--line);
+          border-radius: 6px; overflow: hidden; }
+  .rows tr:nth-child(odd) { background: var(--sunk); }
+  .rows th, .rows td { padding: .5rem .85rem; font-size: .9rem; }
+
+  .caveat {
+    color: var(--dim); background: var(--panel);
+    border: 1px dashed var(--line); border-left: 3px solid var(--signal);
+    padding: .85rem 1.1rem; border-radius: 0 6px 6px 0; margin: 0;
+    font-size: .9rem;
+  }
+  .caveat em { color: var(--ink); font-style: normal; font-weight: 500; }
+  .empty { color: var(--dim); }
+
+  footer { color: var(--faint); font: 400 .8rem/1.6 var(--mono);
+           border-top: 1px solid var(--line); padding-top: 1.25rem; }
+  code { font-family: var(--mono); font-size: .92em;
+         background: var(--sunk); padding: .1rem .35rem; border-radius: 3px; }
+  .scroll { overflow-x: auto; }
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+<main>
+  <header class="masthead">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 64 34" aria-hidden="true">
+        <path d="M2 32 C 14 32, 20 8, 30 7" fill="none"
+              stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M30 7 C 38 6, 42 14, 46 24" fill="none"
+              stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+        <circle cx="30" cy="7" r="3.5" fill="var(--signal)"/>
+        <path d="M50 20 l8 10 M58 20 l-8 10" stroke="var(--signal)"
+              stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="eyebrow">Yieldpoint</span>
+    </div>
+    <h1>Verification Report</h1>
+    <p class="scope">everything recorded</p>
+  </header>
+  <div class='verdict is-clean'><b>Clean</b><span>5 file(s) checked, nothing to fix.</span></div><div class='pace is-warn'><div class='pace-top'><b>wrap-up</b><span class='num'>1,047 / 1,200 lines since the last commit</span></div><span class='gauge'><span style='width:87%'></span></span><p>1,047 of 1,200 lines used (87%). Finish the current piece, then commit before starting anything new</p></div><div class='cards'><div class='card'><span class='value'>256</span><span class='label'>verifications</span><span class='note'>across every surface</span></div><div class='card'><span class='value'>195</span><span class='label'>findings</span><span class='note'>21 of them correctness</span></div><div class='card is-zero'><span class='value'>0</span><span class='label'>model calls</span><span class='note'>the critique is assembled, not generated</span></div><div class='card'><span class='value'>8 ms</span><span class='label'>median verdict</span><span class='note'>95th percentile 167 ms</span></div></div><div class='split'><div class='col'><section class='tier-to'><div class='tier-head'><h2>To fix</h2><span class='note'>nothing outstanding</span></div><p class='empty'>Nothing in the working tree needs attention.</p></section></div><div class='col'><section class='tier-measured'><div class='tier-head'><h2>Measured</h2><span class='note'>counted from what actually ran</span></div><h3>What it caught</h3><div class='scroll'><table class='bars'><tr><th>function_too_long</th><td><span class='track'><span class='bar' style='width:100%'></span></span></td><td class='num'>28</td></tr><tr><th>change_too_large</th><td><span class='track'><span class='bar' style='width:62%'></span></span></td><td class='num'>17</td></tr><tr><th>assertion_monotonicity<span class='star'>correctness</span></th><td><span class='track'><span class='bar is-signal' style='width:54%'></span></span></td><td class='num'>15</td></tr><tr><th>complexity_too_high</th><td><span class='track'><span class='bar' style='width:54%'></span></span></td><td class='num'>15</td></tr><tr><th>file_too_long</th><td><span class='track'><span class='bar' style='width:31%'></span></span></td><td class='num'>9</td></tr><tr><th>duplicate_implementation</th><td><span class='track'><span class='bar' style='width:27%'></span></span></td><td class='num'>8</td></tr><tr><th>nesting_too_deep</th><td><span class='track'><span class='bar' style='width:27%'></span></span></td><td class='num'>8</td></tr><tr><th>ci_check_disabled</th><td><span class='track'><span class='bar' style='width:23%'></span></span></td><td class='num'>6</td></tr><tr><th>ci_check_removed</th><td><span class='track'><span class='bar' style='width:23%'></span></span></td><td class='num'>6</td></tr><tr><th>empty_test<span class='star'>correctness</span></th><td><span class='track'><span class='bar is-signal' style='width:23%'></span></span></td><td class='num'>6</td></tr><tr><th>too_many_parameters</th><td><span class='track'><span class='bar' style='width:15%'></span></span></td><td class='num'>4</td></tr><tr><th>export_removed</th><td><span class='track'><span class='bar' style='width:12%'></span></span></td><td class='num'>3</td></tr></table></div><h3>Where it ran</h3><div class='scroll'><table class='bars'><tr><th>check</th><td><span class='track'><span class='bar' style='width:69%'></span></span></td><td class='num'>95</td></tr><tr><th>hook</th><td><span class='track'><span class='bar' style='width:4%'></span></span></td><td class='num'>7</td></tr><tr><th>mcp:review</th><td><span class='track'><span class='bar' style='width:4%'></span></span></td><td class='num'>3</td></tr><tr><th>review</th><td><span class='track'><span class='bar' style='width:100%'></span></span></td><td class='num'>141</td></tr><tr><th>stop</th><td><span class='track'><span class='bar' style='width:8%'></span></span></td><td class='num'>10</td></tr></table></div><h3>Most-flagged files</h3><div class='scroll'><table class='bars'><tr><th>scripts/build_docs.py</th><td><span class='track'><span class='bar' style='width:100%'></span></span></td><td class='num'>18</td></tr><tr><th>scripts/docs_content.py</th><td><span class='track'><span class='bar' style='width:85%'></span></span></td><td class='num'>15</td></tr><tr><th>.github/workflows/ci.yml</th><td><span class='track'><span class='bar' style='width:65%'></span></span></td><td class='num'>12</td></tr><tr><th>yieldpoint/reports.py</th><td><span class='track'><span class='bar' style='width:65%'></span></span></td><td class='num'>12</td></tr><tr><th>scripts/bump_version.py</th><td><span class='track'><span class='bar' style='width:46%'></span></span></td><td class='num'>8</td></tr></table></div><h3>Coverage</h3><table class='rows'><tr><th>files analysed</th><td class='num'>1,517</td></tr><tr><th>files nothing could analyse</th><td class='num'>693 (31%)</td></tr><tr><th>acknowledged in source</th><td class='num'>34</td></tr><tr><th>findings gone by next look</th><td class='num'>32 of 34 (94%)</td></tr></table></section><section class='tier-architectural'><div class='tier-head'><h2>Architectural</h2><span class='note'>true by construction, not observed</span></div><table class='rows'><tr><th>model calls made by Yieldpoint</th><td class='num'>0</td></tr><tr><th>prescriptions assembled, not generated</th><td class='num'>195</td></tr><tr><th>characters of critique produced free</th><td class='num'>46,862</td></tr><tr><th>critique size</th><td class='num'>163.8x smaller than the code it describes</td></tr></table></section><section class='tier-estimated'><div class='tier-head'><h2>Estimated</h2><span class='note'>arithmetic on the measured bytes, at 4 characters per token</span></div><h3>If an LLM-as-judge had produced the same critiques</h3><table class='rows'><tr><th>model calls</th><td class='num'>256 (one per verdict, by construction)</td></tr><tr><th>input tokens</th><td class='num'>~1,919,072 (7,676,291 characters / 4)</td></tr></table></section><section class='tier-not'><div class='tier-head'><h2>Not claimed</h2><span class='note'>stated rather than omitted</span></div><p class='caveat'>That your agent converges in fewer <em>total</em> model calls. That needs a benchmark against a real model, and it does not exist yet, so it is not claimed here.</p></section></div></div><section class='tier-per'><div class='tier-head'><h2>Per turn</h2><span class='note'>calls are architectural, tokens are estimated</span></div><div class='scroll'><table class='rows'><tr><th>when</th><th>surface</th><th>status</th><th class='num'>found</th><th class='num'>ms</th><th class='num'>calls</th><th class='num'>~tokens</th><th class='num'>cumulative ~tokens</th></tr><tr><td>2026-09-19 16:32:35</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,650,544</td></tr><tr><td>2026-09-19 16:32:35</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>8</td><td class='num'>1</td><td class='num'>2,937</td><td class='num'>1,653,481</td></tr><tr><td>2026-09-19 16:32:47</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>8,548</td><td class='num'>1,662,029</td></tr><tr><td>2026-09-19 16:33:02</td><td>stop</td><td>pass</td><td class='num'>0</td><td class='num'>123</td><td class='num'>1</td><td class='num'>12,277</td><td class='num'>1,674,306</td></tr><tr><td>2026-09-19 16:35:03</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,675,845</td></tr><tr><td>2026-09-19 16:35:04</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>43</td><td class='num'>1</td><td class='num'>13,568</td><td class='num'>1,689,413</td></tr><tr><td>2026-09-19 16:35:28</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,690,952</td></tr><tr><td>2026-09-19 16:35:28</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>26</td><td class='num'>1</td><td class='num'>13,947</td><td class='num'>1,704,899</td></tr><tr><td>2026-09-19 16:35:40</td><td>review</td><td>repair</td><td class='num'>1</td><td class='num'>22</td><td class='num'>1</td><td class='num'>22,496</td><td class='num'>1,727,395</td></tr><tr><td>2026-09-19 16:35:40</td><td>review</td><td>repair</td><td class='num'>1</td><td class='num'>21</td><td class='num'>1</td><td class='num'>22,496</td><td class='num'>1,749,891</td></tr><tr><td>2026-09-19 16:36:12</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,751,430</td></tr><tr><td>2026-09-19 16:36:12</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>19</td><td class='num'>1</td><td class='num'>568</td><td class='num'>1,751,998</td></tr><tr><td>2026-09-19 16:36:33</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,753,537</td></tr><tr><td>2026-09-19 16:36:33</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>18</td><td class='num'>1</td><td class='num'>619</td><td class='num'>1,754,156</td></tr><tr><td>2026-09-19 16:36:44</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,755,695</td></tr><tr><td>2026-09-19 16:36:44</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>619</td><td class='num'>1,756,314</td></tr><tr><td>2026-09-19 16:37:11</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,757,853</td></tr><tr><td>2026-09-19 16:37:11</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>13</td><td class='num'>1</td><td class='num'>781</td><td class='num'>1,758,634</td></tr><tr><td>2026-09-19 16:37:58</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,760,173</td></tr><tr><td>2026-09-19 16:37:58</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>11</td><td class='num'>1</td><td class='num'>2,340</td><td class='num'>1,762,513</td></tr><tr><td>2026-09-19 16:38:24</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,764,052</td></tr><tr><td>2026-09-19 16:38:24</td><td>review</td><td>repair</td><td class='num'>1</td><td class='num'>15</td><td class='num'>1</td><td class='num'>4,457</td><td class='num'>1,768,509</td></tr><tr><td>2026-09-19 16:38:31</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,770,048</td></tr><tr><td>2026-09-19 16:38:31</td><td>review</td><td>repair</td><td class='num'>1</td><td class='num'>10</td><td class='num'>1</td><td class='num'>4,457</td><td class='num'>1,774,505</td></tr><tr><td>2026-09-19 16:38:50</td><td>review</td><td>repair</td><td class='num'>2</td><td class='num'>28</td><td class='num'>1</td><td class='num'>25,453</td><td class='num'>1,799,958</td></tr><tr><td>2026-09-19 16:38:50</td><td>review</td><td>repair</td><td class='num'>2</td><td class='num'>24</td><td class='num'>1</td><td class='num'>25,453</td><td class='num'>1,825,411</td></tr><tr><td>2026-09-19 16:39:22</td><td>review</td><td>repair</td><td class='num'>2</td><td class='num'>32</td><td class='num'>1</td><td class='num'>25,453</td><td class='num'>1,850,864</td></tr><tr><td>2026-09-19 17:08:22</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,852,403</td></tr><tr><td>2026-09-19 17:08:22</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>5,902</td><td class='num'>1,858,305</td></tr><tr><td>2026-09-19 17:08:46</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>4</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,859,844</td></tr><tr><td>2026-09-19 17:08:46</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>13</td><td class='num'>1</td><td class='num'>6,317</td><td class='num'>1,866,161</td></tr><tr><td>2026-09-19 17:08:53</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,867,700</td></tr><tr><td>2026-09-19 17:08:53</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>9</td><td class='num'>1</td><td class='num'>6,317</td><td class='num'>1,874,017</td></tr><tr><td>2026-09-19 17:09:16</td><td>check</td><td>pass</td><td class='num'>0</td><td class='num'>3</td><td class='num'>1</td><td class='num'>1,539</td><td class='num'>1,875,556</td></tr><tr><td>2026-09-19 17:09:16</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>44</td><td class='num'>1</td><td class='num'>6,615</td><td class='num'>1,882,171</td></tr><tr><td>2026-09-19 17:09:22</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>9</td><td class='num'>1</td><td class='num'>6,615</td><td class='num'>1,888,786</td></tr><tr><td>2026-09-19 17:10:51</td><td>review</td><td>pass</td><td class='num'>0</td><td class='num'>13</td><td class='num'>1</td><td class='num'>6,615</td><td class='num'>1,895,401</td></tr><tr><td>2026-09-19 20:47:34</td><td>hook</td><td>unverified</td><td class='num'>0</td><td class='num'>7</td><td class='num'>1</td><td class='num'>2,681</td><td class='num'>1,898,082</td></tr><tr><td>2026-09-19 21:43:14</td><td>stop</td><td>repair</td><td class='num'>3</td><td class='num'>146</td><td class='num'>1</td><td class='num'>10,326</td><td class='num'>1,908,408</td></tr><tr><td>2026-09-19 21:44:26</td><td>stop</td><td>pass</td><td class='num'>0</td><td class='num'>103</td><td class='num'>1</td><td class='num'>10,601</td><td class='num'>1,919,009</td></tr></table></div><p class='caveat'>Over 52 distinct file set(s): 204 verification(s) re-analysed one already counted. The totals count each, because a judge would have read each.</p><p class='more'>216 earlier turn(s) not shown. <code>yieldpoint export</code> has every one.</p></section>
+  <footer>
+    Generated by <code>yieldpoint report</code> from /Users/kumudham/workspace/yieldpoint/.yieldpoint/metrics.jsonl.<br>
+    Local only &mdash; nothing in this package sends anything anywhere.
+  </footer>
+</main>
