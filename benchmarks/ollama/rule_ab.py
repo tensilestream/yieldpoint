@@ -27,9 +27,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ollama_client import OllamaUnavailable, converse, parse_files, resolve_model  # noqa: E402
 from rule_tasks import RULE_TASKS, RuleTask  # noqa: E402
+from rule_tasks_langs import LANGUAGE_TASKS  # noqa: E402
 from rule_tasks_more import MORE_TASKS  # noqa: E402
 
-ALL_TASKS = RULE_TASKS + MORE_TASKS
+ALL_TASKS = RULE_TASKS + MORE_TASKS + LANGUAGE_TASKS
 from scenarios import POLICY  # noqa: E402
 from yieldpoint.core.verdict import Status  # noqa: E402
 from yieldpoint.verify import verify_change  # noqa: E402

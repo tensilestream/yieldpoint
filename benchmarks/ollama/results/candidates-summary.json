@@ -1,11 +1,11 @@
 {
   "repositories": 9,
-  "candidates": 1408,
+  "candidates": 1423,
   "by_language": {
     "go": 36,
     "java": 52,
-    "javascript": 472,
-    "python": 822,
+    "javascript": 480,
+    "python": 829,
     "ruby": 7,
     "rust": 19
   },
@@ -16,20 +16,22 @@
     "ci_check_removed",
     "complexity_too_high",
     "dangling_reference",
+    "duplicate_across_files",
     "duplicate_implementation",
     "empty_test",
     "file_too_long",
     "function_too_long",
     "nesting_too_deep",
     "skip_marker",
-    "too_many_parameters"
+    "too_many_parameters",
+    "vacuous_assertion",
+    "weak_new_test"
   ],
   "rules_with_none": [
     "boundary_violation",
     "disabled_assertion",
     "export_removed",
-    "utility_module",
-    "vacuous_assertion"
+    "utility_module"
   ],
   "by_rule": {
     "assertion_monotonicity": 484,
@@ -43,10 +45,13 @@
     "nesting_too_deep": 12,
     "ci_check_disabled": 10,
     "change_too_large": 9,
+    "vacuous_assertion": 8,
+    "duplicate_across_files": 5,
     "empty_test": 4,
+    "weak_new_test": 2,
     "dangling_reference": 1
   },
-  "carry_the_removed_text": 521,
+  "carry_the_removed_text": 531,
   "distinct_commits": 374,
   "labelled": 0,
   "note": "candidates, not labels. Whether each removal was legitimate is a judgement mining cannot make."

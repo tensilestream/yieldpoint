@@ -1,6 +1,6 @@
 {
   "summary": {
-    "scenarios": 24,
+    "scenarios": 27,
     "distinct_rules": [
       "assertion_monotonicity",
       "boundary_violation",
@@ -10,6 +10,7 @@
       "complexity_too_high",
       "dangling_reference",
       "disabled_assertion",
+      "duplicate_across_files",
       "duplicate_implementation",
       "empty_test",
       "export_removed",
@@ -19,14 +20,15 @@
       "skip_marker",
       "too_many_parameters",
       "utility_module",
-      "vacuous_assertion"
+      "vacuous_assertion",
+      "weak_new_test"
     ],
-    "must_fire": 18,
-    "fired_as_claimed": 18,
-    "must_stay_clean": 6,
-    "stayed_clean": 6,
+    "must_fire": 20,
+    "fired_as_claimed": 20,
+    "must_stay_clean": 7,
+    "stayed_clean": 7,
     "mismatches": [],
-    "total_ms": 11.1,
+    "total_ms": 12.01,
     "model_calls": 0,
     "tokens": 0
   },
@@ -43,7 +45,7 @@
       "status": "repair",
       "detail": "`utils` is a catch-all module name.",
       "prescription": "Name the module for its single responsibility. A utility dump accumulates unrelated code because nothing in the name excludes anything.",
-      "ms": 5.155
+      "ms": 4.276
     },
     {
       "action": "new file",
@@ -57,7 +59,7 @@
       "status": "repair",
       "detail": "src/big.py has 60 lines of code, over the limit of 40.",
       "prescription": "Split it into modules with one responsibility each. A file this size usually has more than one reason to change.",
-      "ms": 0.461
+      "ms": 0.234
     },
     {
       "action": "new file",
@@ -69,7 +71,7 @@
       "status": "pass",
       "detail": "",
       "prescription": "",
-      "ms": 0.323
+      "ms": 0.112
     },
     {
       "action": "new method",
@@ -83,7 +85,7 @@
       "status": "repair",
       "detail": "`process` has 22 lines, over the limit of 12.",
       "prescription": "Extract the distinct steps into named functions.",
-      "ms": 0.462
+      "ms": 0.869
     },
     {
       "action": "new method",
@@ -97,7 +99,7 @@
       "status": "repair",
       "detail": "`send` has 6 parameters, over the limit of 4.",
       "prescription": "Group related parameters into a value object, or split the function.",
-      "ms": 0.151
+      "ms": 0.102
     },
     {
       "action": "new method",
@@ -111,7 +113,7 @@
       "status": "repair",
       "detail": "`f` has 4 levels of nesting, over the limit of 3.",
       "prescription": "Return early, or extract the inner block into its own function.",
-      "ms": 0.154
+      "ms": 0.32
     },
     {
       "action": "new method",
@@ -126,7 +128,7 @@
       "status": "repair",
       "detail": "`route` has 9 branches, over the limit of 5.",
       "prescription": "Split the decision into smaller functions, or replace the branching with a lookup.",
-      "ms": 0.118
+      "ms": 0.14
     },
     {
       "action": "new method",
@@ -140,7 +142,7 @@
       "status": "repair",
       "detail": "`sum_payments` is structurally identical to `sum_invoices` (line 4).",
       "prescription": "Extract the shared implementation. Two copies drift apart, and a fix applied to one is a bug left in the other.",
-      "ms": 0.133
+      "ms": 0.137
     },
     {
       "action": "new method",
@@ -152,7 +154,7 @@
       "status": "pass",
       "detail": "",
       "prescription": "",
-      "ms": 0.085
+      "ms": 0.102
     },
     {
       "action": "rewrite a method",
@@ -166,7 +168,7 @@
       "status": "repair",
       "detail": "`compute` is used here but nothing in this module defines or imports it.",
       "prescription": "Import `compute` from wherever it now lives, restore its definition, or update the reference to the name it was renamed to. A refactor that moves a definition must move or update every use of it.",
-      "ms": 0.107
+      "ms": 0.34
     },
     {
       "action": "rewrite a method",
@@ -180,7 +182,7 @@
       "status": "repair",
       "detail": "`public_api` was part of this module's public API and is now gone.",
       "prescription": "Restore `public_api`, or re-export it from wherever it moved. If removing it is intended, say so explicitly \u2014 callers outside this change set still import it.",
-      "ms": 0.133
+      "ms": 0.378
     },
     {
       "action": "rewrite a method",
@@ -194,7 +196,7 @@
       "status": "repair",
       "detail": "`src/core/engine.py` is in zone `core`, which may not import `src.web` (matches `src.web`).",
       "prescription": "The core must not depend on the web layer or the network.",
-      "ms": 0.31
+      "ms": 0.199
     },
     {
       "action": "rewrite a method",
@@ -206,7 +208,7 @@
       "status": "pass",
       "detail": "",
       "prescription": "",
-      "ms": 0.086
+      "ms": 0.258
     },
     {
       "action": "edit a test",
@@ -220,7 +222,7 @@
       "status": "block",
       "detail": "Assertion on total was weakened: eq -> truthy.",
       "prescription": "Re-assert total at eq strength, or fix the code under test so the original assertion passes. Restore `assert total == 42`.",
-      "ms": 0.265
+      "ms": 0.293
     },
     {
       "action": "edit a test",
@@ -235,7 +237,7 @@
       "status": "block",
       "detail": "`assert True` is a tautology and can never fail.",
       "prescription": "Assert something about the value under test, or delete the line. A tautology makes the suite green without verifying anything.",
-      "ms": 0.362
+      "ms": 0.213
     },
     {
       "action": "edit a test",
@@ -249,7 +251,7 @@
       "status": "block",
       "detail": "test_total has no body and verifies nothing.",
       "prescription": "Give test_total assertions, or remove it.",
-      "ms": 0.18
+      "ms": 0.182
     },
     {
       "action": "edit a test",
@@ -263,7 +265,7 @@
       "status": "block",
       "detail": "test_total is skipped (pytest.mark.skip(reason='flaky')).",
       "prescription": "Remove the skip marker from test_total and make it pass, or delete the test deliberately rather than disabling it.",
-      "ms": 0.203
+      "ms": 0.217
     },
     {
       "action": "edit a test",
@@ -278,7 +280,7 @@
       "status": "block",
       "detail": "`assert total == 42` cannot fail: it is unreachable, or its exception is swallowed.",
       "prescription": "Remove the swallowing handler or the unreachable guard so this assertion can fail again.",
-      "ms": 0.18
+      "ms": 0.199
     },
     {
       "action": "edit a test",
@@ -290,7 +292,7 @@
       "status": "pass",
       "detail": "",
       "prescription": "",
-      "ms": 0.155
+      "ms": 0.337
     },
     {
       "action": "edit a test",
@@ -302,7 +304,7 @@
       "status": "pass",
       "detail": "",
       "prescription": "",
-      "ms": 0.447
+      "ms": 0.434
     },
     {
       "action": "edit CI",
@@ -316,7 +318,7 @@
       "status": "repair",
       "detail": "CI no longer runs `ruff check .`.",
       "prescription": "Restore the step. If the check is genuinely obsolete, remove it in a change that says so \u2014 a build that stops running a check still reports green.",
-      "ms": 0.227
+      "ms": 0.222
     },
     {
       "action": "edit CI",
@@ -330,7 +332,7 @@
       "status": "repair",
       "detail": "`pytest` can no longer fail the build (the job is gated on false).",
       "prescription": "Remove the suppression and fix the underlying failure. A step that cannot fail is a step that is not running.",
-      "ms": 0.086
+      "ms": 0.085
     },
     {
       "action": "edit CI",
@@ -342,7 +344,33 @@
       "status": "pass",
       "detail": "",
       "prescription": "",
-      "ms": 0.075
+      "ms": 0.076
+    },
+    {
+      "action": "edit a test",
+      "name": "a new test that only checks existence",
+      "intent": "add the feature with tests, quickly",
+      "path": "tests/test_new.py",
+      "expect": "weak_new_test",
+      "rules": [
+        "weak_new_test"
+      ],
+      "status": "repair",
+      "detail": "`test_total` is new and only checks non_null: it passes for any value the code happens to return.",
+      "prescription": "Assert the value test_total is supposed to produce, not that it exists. A not-null check passes whether the calculation is right or wrong.",
+      "ms": 0.35
+    },
+    {
+      "action": "edit a test",
+      "name": "a new test that pins a value",
+      "intent": "the same request, answered properly",
+      "path": "tests/test_new.py",
+      "expect": "",
+      "rules": [],
+      "status": "pass",
+      "detail": "",
+      "prescription": "",
+      "ms": 0.17
     },
     {
       "action": "one big change",
@@ -357,7 +385,21 @@
       "status": "repair",
       "detail": "This change adds 1600 lines across 4 files, over the limit of 1200.",
       "prescription": "Split it into changes that can each be reviewed and reverted independently. A change this size is approved rather than read.",
-      "ms": 1.244
+      "ms": 1.067
+    },
+    {
+      "action": "one big change",
+      "name": "the same function in two files",
+      "intent": "copy the working implementation into a second module",
+      "path": "2 files",
+      "expect": "duplicate_across_files",
+      "rules": [
+        "duplicate_across_files"
+      ],
+      "status": "repair",
+      "detail": "`sum_payments` is structurally identical to `sum_invoices` in src/invoices.py.",
+      "prescription": "Extract the shared implementation into one module and call it from both. Two copies in different files drift apart without either reader noticing.",
+      "ms": 0.699
     }
   ]
 }

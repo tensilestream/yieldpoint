@@ -1,9 +1,9 @@
 {
   "repository": "yieldpoint",
-  "commits_replayed": 44,
-  "commits_flagged": 17,
+  "commits_replayed": 54,
+  "commits_flagged": 21,
   "commits_a_correctness_rule_would_have_stopped": 7,
-  "seconds": 5.5,
+  "seconds": 6.0,
   "model_calls": 0,
   "tokens": 0,
   "stopped": [

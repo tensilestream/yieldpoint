@@ -19,7 +19,13 @@ POLICY = {
     "version": "1.0",
     "project": {"name": "Exhaustive demo", "languages": ["python"]},
     "test_contract": {
-        "protected_patterns": ["**/tests/**", "**/test_*.py"],
+        # Every language's convention, not only Python's. A Go test file that
+        # is not protected reads as "Go is clean" rather than "Go was skipped".
+        "protected_patterns": [
+            "**/tests/**", "**/test/**", "**/spec/**",
+            "**/test_*.py", "**/*_test.*", "**/*.test.*",
+            "**/*Test.*", "**/*Tests.*", "**/*Spec.*", "**/*_spec.rb",
+        ],
         "assertion_monotonicity": "block",
         "forbid_vacuous_assertions": "block",
         "forbid_new_skip_markers": "block",
@@ -194,8 +200,24 @@ YAML = (
              CI + "      - run: mypy .\n", ""),
 )
 
-SCENARIOS = NEW_FILE + NEW_METHOD + REWRITE + TESTS + YAML
+#: Rules that need no before-state, or that only a change set can see. Both
+#: arrived after the first five groups and belong with them.
+LATER = (
+    Scenario("edit a test", "a new test that only checks existence",
+             "add the feature with tests, quickly",
+             "tests/test_new.py", None,
+             "from billing import total\n\n\ndef test_total():\n"
+             "    assert total(10) is not None\n",
+             "weak_new_test"),
+    Scenario("edit a test", "a new test that pins a value",
+             "the same request, answered properly",
+             "tests/test_new.py", None,
+             "from billing import total\n\n\ndef test_total():\n"
+             "    assert total(10) == 12\n", ""),
+)
+
+SCENARIOS = NEW_FILE + NEW_METHOD + REWRITE + TESTS + YAML + LATER
 
 #: Rules that are decided across a whole change set, so they need a diff rather
 #: than one file transition. Demonstrated separately in matrix.py.
-CHANGE_SET_RULES = ("change_too_large",)
+CHANGE_SET_RULES = ("change_too_large", "duplicate_across_files")

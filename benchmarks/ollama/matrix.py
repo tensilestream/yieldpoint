@@ -98,6 +98,35 @@ def change_set_demo() -> Result:
     )
 
 
+def duplication_demo() -> Result:
+    """`duplicate_across_files` needs two files, so it needs a diff."""
+    body = ("    total = 0\n    for row in rows:\n        if row.active:\n"
+            "            total += row.amount\n    return total\n")
+    content = {"src/invoices.py": f"def sum_invoices(rows):\n{body}",
+               "src/payments.py": f"def sum_payments(rows):\n{body}"}
+    diff = "".join(
+        f"diff --git a/{path} b/{path}\nnew file mode 100644\n"
+        f"--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{len(src.splitlines())} @@\n"
+        + "".join(f"+{line}\n" for line in src.splitlines())
+        for path, src in content.items())
+
+    start = time.perf_counter()
+    verdict = verify_diff(diff, ROOT, POLICY, read=content.get)
+    elapsed = (time.perf_counter() - start) * 1000
+    finding = next((f for f in verdict.findings
+                    if f.rule == "duplicate_across_files"), None)
+    return Result(
+        action="one big change", name="the same function in two files",
+        intent="copy the working implementation into a second module",
+        path="2 files", expect="duplicate_across_files",
+        rules=sorted({f.rule for f in verdict.findings}),
+        status=verdict.status.value,
+        detail=finding.detail if finding else "",
+        prescription=finding.prescription if finding else "",
+        ms=round(elapsed, 3),
+    )
+
+
 def summarise(results: list[Result]) -> dict:
     fire = [r for r in results if r.expect]
     clean = [r for r in results if not r.expect]
@@ -142,7 +171,8 @@ def report(results: list[Result], summary: dict) -> None:
 
 
 def main() -> int:
-    results = [run(s) for s in SCENARIOS] + [change_set_demo()]
+    results = ([run(s) for s in SCENARIOS]
+               + [change_set_demo(), duplication_demo()])
     summary = summarise(results)
     report(results, summary)
 
