@@ -1,0 +1,5 @@
+# Model-dependent run output. Which model you have, and how it behaved on the
+# day, decides every number in here — so these are regenerated, never trusted
+# from someone else's machine. The deterministic evidence lives in
+# benchmarks/ollama/results/, which is committed.
+harness-*.json
