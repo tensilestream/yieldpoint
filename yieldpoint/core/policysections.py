@@ -148,15 +148,20 @@ class ContinuousIntegration:
 
 @dataclass(frozen=True)
 class Refactor:
-    """Rules for changes that restructure code rather than change behaviour.
+    """Rules whose violations parse cleanly and fail only when the path runs.
 
-    Applies to every Python file, not only protected tests — a refactor that
-    leaves a call site pointing at a renamed definition still parses, and fails
-    only when that path runs.
+    Applies to every Python file, not only protected tests — a call site left
+    pointing at a renamed definition still imports, and a handler that discards
+    every error still returns. Nothing here is visible until production is.
     """
 
     dangling_reference: Status | None = Status.REPAIR
     export_removed: Status | None = Status.REPAIR
+
+    swallowed_exception: Status | None = Status.REPAIR
+    """A handler this change added that catches broadly and records nothing.
+    Reported only when the change introduced it: a handler already there was
+    somebody else's decision."""
 
 
 @dataclass(frozen=True)

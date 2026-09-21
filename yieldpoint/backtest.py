@@ -122,11 +122,12 @@ def run(root: str | Path = ".", since: str = "HEAD~50",
     for index, (sha, subject) in enumerate(shas, start=1):
         if progress:
             progress(index, len(shas), sha[:8])
-        verdict = _replay(base, sha, resolved)
-        if verdict is None:
-            unreadable.append(sha)
+        replay = _replay(base, sha, resolved)
+        if replay.verdict is None:
+            unreadable.append(f"{sha[:8]} — {replay.reason}")
             continue
-        results.append(CommitResult(sha=sha, subject=subject, verdict=verdict))
+        results.append(CommitResult(sha=sha, subject=subject,
+                                    verdict=replay.verdict))
 
     return Backtest(commits=tuple(results), unreadable=tuple(unreadable))
 
@@ -151,12 +152,26 @@ def _commits(base: Path, since: str, limit: int):
     return rows
 
 
-def _replay(base: Path, sha: str, policy: Policy) -> Verdict | None:
+@dataclass(frozen=True)
+class Replay:
+    """One commit's replay, or why there is not one.
+
+    The reason is kept because two very different things end a replay: a commit
+    git cannot show, which is ordinary, and a verifier that raised, which is a
+    bug in this package. Counting them together makes a systematic crash look
+    like ordinary data loss.
+    """
+
+    verdict: Verdict | None = None
+    reason: str = ""
+
+
+def _replay(base: Path, sha: str, policy: Policy) -> Replay:
     """Verify one commit as the change it was when it was made."""
     shown = _git(base, ["show", "--no-color", "--no-ext-diff", "-U3",
                         "--format=", sha])
     if shown is None or shown.returncode != 0 or not shown.stdout.strip():
-        return None
+        return Replay(reason="git could not show this commit")
 
     def read(relative: str) -> str | None:
         """The file as it stood *after* that commit, not as it stands now."""
@@ -166,9 +181,9 @@ def _replay(base: Path, sha: str, policy: Policy) -> Verdict | None:
         return blob.stdout
 
     try:
-        return verify_diff(shown.stdout, base, policy, read=read)
-    except Exception:  # one bad commit must not end the replay
-        return None
+        return Replay(verify_diff(shown.stdout, base, policy, read=read))
+    except Exception as exc:  # one bad commit must not end the replay
+        return Replay(reason=f"the verifier raised {type(exc).__name__}: {exc}")
 
 
 def _git(base: Path, args: list[str]):
@@ -224,10 +239,28 @@ def render(result: Backtest, since: str) -> str:
         "  put them in front of you cheaply, on your own work, before you switch",
         "  anything on.",
     ]
-    if result.unreadable:
-        lines.append(f"\n  {len(result.unreadable)} commit(s) could not be replayed "
-                     "(merge commits and binary-only changes are skipped).")
+    lines.extend(_unreplayable(result.unreadable))
     return "\n".join(lines)
+
+
+#: How many failed replays to name before summarising the rest.
+_SHOWN = 3
+
+
+def _unreplayable(notes: tuple[str, ...]) -> list[str]:
+    """Why each replay did not happen, not merely how many did not.
+
+    A run where every line reads "the verifier raised" is a bug report; one
+    where they all read "git could not show" is a normal replay over merge
+    commits. A count cannot tell those apart.
+    """
+    if not notes:
+        return []
+    out = [f"\n  {len(notes)} commit(s) could not be replayed:"]
+    out.extend(f"    {note}" for note in notes[:_SHOWN])
+    if len(notes) > _SHOWN:
+        out.append(f"    ... and {len(notes) - _SHOWN} more")
+    return out
 
 
 __all__ = ["Backtest", "CommitResult", "run", "render", "CONTRACT_RULES"]

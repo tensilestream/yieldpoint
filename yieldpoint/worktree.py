@@ -66,7 +66,8 @@ def uncommitted(root: str | Path = ".", *, staged: bool = False,
     # files — which is the most interesting change an agent makes.
     if not text.strip():
         scope = "staged" if staged else ("branch" if against else "uncommitted")
-        return Diff(reason=f"no {scope} changes to check", root=str(top))
+        return Diff(reason=f"no {scope} changes to check{_also_dirty(top, against)}",
+                    root=str(top))
     return Diff(text=text, root=str(top))
 
 
@@ -87,6 +88,23 @@ def _ran(completed) -> str:
         detail = (completed.stderr or "").strip().splitlines()
         return f"git diff failed: {detail[0] if detail else 'unknown error'}"
     return ""
+
+
+def _also_dirty(top: Path, against: str) -> str:
+    """Warn when a branch review found nothing while the tree is not clean.
+
+    ``git diff <rev>...`` compares the merge base with HEAD, so work that is
+    only in the working tree is outside the question being asked. That is
+    correct and it is surprising: being told there is nothing to check while
+    holding unsaved edits reads as the tool failing to see them.
+    """
+    if not against:
+        return ""
+    listing = _git(["status", "--porcelain"], top)
+    if listing is None or listing.returncode != 0 or not listing.stdout.strip():
+        return ""
+    return (" — uncommitted work is not part of a branch comparison; "
+            "run without --against to check it")
 
 
 def _untracked(top: Path) -> str:

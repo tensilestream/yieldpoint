@@ -12,6 +12,7 @@ that cannot be analysed is recorded in ``skipped`` and never counted as passing
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
@@ -19,7 +20,7 @@ from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
 from .core import (acknowledge, boundaries, glob, monotonicity, policychange,
-                   refactor, structure, workflows)
+                   refactor, structure, swallow, workflows)
 from .core.assertions import extract
 from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
 from .core.linters import report as lintreport
@@ -48,6 +49,48 @@ def _fold(result, path: str, findings: list, checked: list, skipped: list) -> No
     skipped.extend(unread)
     if not unread:
         checked.append(path)
+
+
+@dataclass(frozen=True)
+class _Source:
+    """One file's transition, carried as a unit rather than three arguments."""
+
+    before: str | None
+    after: str | None
+    path: str
+
+
+@dataclass(frozen=True)
+class _Run:
+    """The lists a verification is filling in. Holds references, not copies."""
+
+    findings: list
+    checked: list
+    skipped: list
+
+
+def _python_rules(source: _Source, resolved, also_defined, run: _Run) -> None:
+    """Every rule that needs a Python syntax tree, folded into one run.
+
+    Grouped because they share a precondition and a verdict: if the names pass
+    could not read the file, none of the others looked at it either, so the
+    path is recorded as examined exactly once for the whole group.
+    """
+    before, after, path = source.before, source.after, source.path
+    names, names_skipped = refactor.check(
+        before, after, path,
+        on_dangling=resolved.refactor.dangling_reference,
+        on_export_removed=resolved.refactor.export_removed,
+        also_defined=also_defined or (),
+    )
+    shape, shape_skipped = structure.check(before, after, path, resolved.structure)
+    layers, layers_skipped = boundaries.check(before, after, path, resolved.boundaries)
+
+    run.findings.extend(names + shape + layers)
+    run.findings.extend(swallow.check(before, after, path, resolved.refactor))
+    run.skipped.extend(names_skipped + shape_skipped + layers_skipped)
+    if not names_skipped:
+        run.checked.append(path)
 
 
 def verify_change(
@@ -85,24 +128,8 @@ def verify_change(
     skipped.extend(lint_skipped)
 
     if path.endswith(EXACT_SUFFIXES):
-        names, names_skipped = refactor.check(
-            before, after, path,
-            on_dangling=resolved.refactor.dangling_reference,
-            on_export_removed=resolved.refactor.export_removed,
-            also_defined=also_defined or (),
-        )
-        findings.extend(names)
-        skipped.extend(names_skipped)
-
-        shape, shape_skipped = structure.check(before, after, path, resolved.structure)
-        findings.extend(shape)
-        skipped.extend(shape_skipped)
-
-        layers, layers_skipped = boundaries.check(before, after, path, resolved.boundaries)
-        findings.extend(layers)
-        skipped.extend(layers_skipped)
-        if not names_skipped:
-            checked.append(path)
+        _python_rules(_Source(before, after, path), resolved, also_defined,
+                      _Run(findings, checked, skipped))
 
     if glob.matches_any(resolved.ci.paths, path):
         _fold(workflows.check(before, after, path, resolved.ci),
@@ -175,7 +202,19 @@ def verify_diff(
         ),
         _change_size(states, resolved),
         _duplication(states, resolved),
+        _layout(states, base, resolved),
     ])
+
+
+def _layout(states, base: Path, policy: Policy) -> Verdict:
+    """Where new files were placed, which only the tree around them can answer."""
+    from .core import layout
+
+    # An added file reconstructs to an empty before-state rather than to
+    # ``None``, so emptiness is the test. A file that existed but held nothing
+    # counts too: it is being written for the first time either way.
+    new = [path for path, before, after in states if not before and after]
+    return Verdict.of(layout.check(new, base, policy.structure.severity))
 
 
 def _duplication(states, policy: Policy) -> Verdict:

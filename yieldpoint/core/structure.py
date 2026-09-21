@@ -38,6 +38,7 @@ CHANGE_TOO_LARGE = "change_too_large"
 #: took something away. Naming the set here, beside where they are emitted, is
 #: what lets a caller report them without letting them stop a commit.
 MAINTAINABILITY_RULES = frozenset({
+    "sibling_module_shadows_package",
     FILE_TOO_LONG, FUNCTION_TOO_LONG, TOO_MANY_PARAMETERS, NESTING_TOO_DEEP,
     COMPLEXITY_TOO_HIGH, UTILITY_MODULE, DUPLICATE_IMPLEMENTATION, CHANGE_TOO_LARGE,
 })

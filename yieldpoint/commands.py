@@ -135,8 +135,13 @@ def review_command(args) -> int:
         print(f"yieldpoint: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
+    from .basis import resolve
+
     _use_cache_for(args.root)
-    diff = uncommitted(args.root, staged=args.staged, against=args.against or "")
+    # Resolved before the diff, because the answer changes what "worse" means:
+    # against a branch base, every commit on this branch is this change's.
+    basis = resolve(args.root, args.against or "")
+    diff = uncommitted(args.root, staged=args.staged, against=basis.revision)
     if not diff.ok:
         # Nothing to check is not a failure, and neither is "not a git
         # repository" — the other commands still work there.
@@ -150,6 +155,7 @@ def review_command(args) -> int:
     _record(verdict, Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
     code = _emit(verdict, args, policy)
     if not args.json:
+        print(f"  {basis.describe()}")
         console.print_pace(verdict, diff, policy)
     return code
 

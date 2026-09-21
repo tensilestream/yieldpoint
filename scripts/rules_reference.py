@@ -74,6 +74,15 @@ RULES = {
         "commit. Shape is compared, not text, so a copy-paste that renamed its "
         "variables is still found. The within-file case belongs to "
         "<code>duplicate_implementation</code>; this is the one neither reader can see."),
+    "swallowed_exception": (REFACTOR, "repair",
+        "A handler that catches everything and records nothing",
+        "A <code>try</code> block gained <code>except Exception: pass</code> "
+        "&mdash; or a bare <code>except:</code>, or one whose body is only "
+        "<code>...</code>, <code>continue</code> or a bare <code>return</code>. "
+        "Every failure on that path now looks like success, so a test covering "
+        "it keeps passing while verifying nothing. Naming the exception you "
+        "expect, logging, or re-raising are all fine; only silent breadth is "
+        "reported, and only when this change introduced it."),
     "policy_weakened": (PIPELINE, "repair", "The rules themselves were loosened",
         "A limit raised, a severity lowered, a rule switched off, a path added to "
         "the exclusions, or the ledger disabled. Raising a threshold until a finding "
@@ -84,6 +93,13 @@ RULES = {
     "duplicate_implementation": (STRUCTURE, "repair", "Structurally identical code",
         "Two functions with the same shape. Two copies drift apart, and a fix applied "
         "to one is a bug left in the other."),
+    "sibling_module_shadows_package": (STRUCTURE, "repair",
+        "New module named as a package it is not in",
+        "A new <code>foo_bar.py</code> written beside an existing "
+        "<code>foo/</code> package. The name says the code belongs to that "
+        "package; the filesystem says it does not. Characteristic of code "
+        "written by something that can see the file it is creating but not the "
+        "directory it is creating it in. Only new files are reported."),
     "utility_module": (STRUCTURE, "repair", "Module with no theme",
         "A <code>utils</code>-shaped file: unrelated functions with nothing in common "
         "but the fact that nobody knew where else to put them."),

@@ -46,7 +46,8 @@ def _add_reporting_commands(sub) -> None:
     review_cmd.add_argument("--root", default=".", help="repository directory")
     review_cmd.add_argument("--staged", action="store_true", help="only what is staged")
     review_cmd.add_argument(
-        "--against", default="", help="compare with a branch or commit instead")
+        "--against", default="",
+        help="compare with a branch or commit, or `auto` for the default branch")
     review_cmd.add_argument("--policy", default=None, help="path to .yieldpoint.json")
     review_cmd.add_argument("--json", action="store_true", help="machine-readable output")
     review_cmd.set_defaults(handler=review_command)
@@ -273,6 +274,9 @@ def _parser() -> argparse.ArgumentParser:
 
     from .recall import add_command as add_recall
     add_recall(sub)
+
+    from .schema import add_command as add_policy
+    add_policy(sub)
     _add_reporting_commands(sub)
 
 

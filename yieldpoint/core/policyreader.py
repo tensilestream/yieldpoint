@@ -120,6 +120,14 @@ def _tokenizer(value: object, warnings: list[str]) -> str:
     return ""
 
 
+def _refactor(raw: dict, warnings: list) -> Refactor:
+    """Rules that parse cleanly and fail only when the path runs."""
+    return Refactor(**{
+        name: _status(raw.get(name), Status.REPAIR, warnings, f"refactor.{name}")
+        for name in ("dangling_reference", "export_removed", "swallowed_exception")
+    })
+
+
 def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     """Normalise a parsed `.yieldpoint.json` document into a :class:`Policy`."""
     warnings: list[str] = []
@@ -174,14 +182,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
             max_file_bytes=_int(
                 scanning.get("max_file_bytes"), 1_000_000, warnings, "scan.max_file_bytes"),
         ),
-        refactor=Refactor(
-            dangling_reference=_status(
-                refactor.get("dangling_reference"), Status.REPAIR, warnings,
-                "refactor.dangling_reference"),
-            export_removed=_status(
-                refactor.get("export_removed"), Status.REPAIR, warnings,
-                "refactor.export_removed"),
-        ),
+        refactor=_refactor(refactor, warnings),
         subjects=Subjects(
             accessor_equivalence=bool(subjects.get("accessor_equivalence", True)),
         ),
