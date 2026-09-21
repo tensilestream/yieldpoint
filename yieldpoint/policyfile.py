@@ -54,6 +54,31 @@ class Written:
                 else f"{self.path} already exists, left alone")
 
 
+#: Records which build wrote the values below. They are written explicitly so
+#: a verdict does not change under a repository when Yieldpoint is upgraded —
+#: which means a repository also never *gains* an improved default. This stamp
+#: is what lets `yieldpoint policy --drift` say when the frozen values are from.
+WRITTEN_BY = "_written_by"
+
+
+def _stamped() -> dict:
+    from . import __version__
+
+    return {WRITTEN_BY: __version__, **STARTER_CONFIG}
+
+
+def written_by(root: str | Path = ".") -> str:
+    """Which build wrote this policy, or empty if it does not say."""
+    found = locate(root)
+    if found is None:
+        return ""
+    try:
+        loaded = json.loads(found.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeError):
+        return ""
+    return str(loaded.get(WRITTEN_BY, "")) if isinstance(loaded, dict) else ""
+
+
 def locate(root: str | Path = ".") -> Path | None:
     """The policy file in force here, or nothing if there is none."""
     path = Path(root) / FILENAME
@@ -70,7 +95,7 @@ def ensure(root: str | Path = ".") -> Written:
     if path.is_file():
         return Written(path, created=False)
     try:
-        path.write_text(json.dumps(STARTER_CONFIG, indent=2) + "\n", encoding="utf-8")
+        path.write_text(json.dumps(_stamped(), indent=2) + "\n", encoding="utf-8")
     except OSError as exc:
         return Written(path, created=False, error=str(exc))
     return Written(path, created=True)
@@ -91,4 +116,5 @@ def where(root: str | Path = ".") -> str:
             "rule and limit in force, and change it there")
 
 
-__all__ = ["FILENAME", "Written", "ensure", "locate", "where"]
+__all__ = ["FILENAME", "WRITTEN_BY", "Written", "ensure", "locate",
+           "where", "written_by"]

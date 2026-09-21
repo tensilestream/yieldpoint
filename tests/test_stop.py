@@ -195,3 +195,52 @@ class TestTheCommand(unittest.TestCase):
     def test_a_clean_tree_writes_nothing_to_stdout(self):
         with _Repository() as repo:
             self.assertEqual(self._run({}, repo.path).stdout.strip(), "")
+
+
+class TestItOnlyOffersAWayOutThatExists(unittest.TestCase):
+    """The hook blocked on `change_too_large` and told the reader to
+    acknowledge it in the source. The finding's location is "24 files", line 0
+    — there is no source line, so the advertised route did not exist.
+
+    The other route it named, raising the limit in the config, is the one
+    `policy_weakened` reports as loosening a rule under pressure. Between them
+    the message offered a reader no action they could actually take.
+    """
+
+    def _finding(self, rule, file, line):
+        from yieldpoint.core.verdict import Finding, Status
+
+        return Finding(rule=rule, status=Status.REPAIR, file=file, line=line,
+                       detail="d", prescription="p")
+
+    def test_a_change_level_finding_has_no_line_to_acknowledge(self):
+        self.assertIs(self._placeable_for("change_too_large", "24 files", 0), False)
+
+    def _placeable_for(self, rule, file, line):
+        from yieldpoint.stop import _placeable
+
+        return _placeable(self._finding(rule, file, line))
+
+    def test_a_finding_in_a_file_does(self):
+        self.assertIs(self._placeable_for("file_too_long", "src/a.py", 1), True)
+
+    def test_the_message_omits_the_route_when_nothing_can_take_it(self):
+        from yieldpoint.stop import _ways_out
+
+        text = _ways_out([self._finding("change_too_large", "24 files", 0)], ".")
+        self.assertNotIn("yieldpoint: allow", text)
+        self.assertIn("smaller pieces", text)
+
+    def test_the_message_keeps_the_route_when_something_can(self):
+        from yieldpoint.stop import _ways_out
+
+        text = _ways_out([self._finding("change_too_large", "24 files", 0),
+                          self._finding("file_too_long", "src/a.py", 1)], ".")
+        self.assertIn("yieldpoint: allow", text)
+
+    def test_it_always_names_somewhere_to_change_the_rule(self):
+        from yieldpoint.stop import _ways_out
+
+        for findings in ([self._finding("change_too_large", "24 files", 0)],
+                         [self._finding("file_too_long", "src/a.py", 1)]):
+            self.assertIn("yieldpoint", _ways_out(findings, "."))

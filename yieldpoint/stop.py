@@ -138,14 +138,33 @@ def render(outcome: Outcome) -> str:
         lines.append(f"    {finding.detail}")
         lines.append(f"    Fix: {finding.prescription}")
         lines.append("")
+    lines.append(_ways_out(verdict.findings, outcome.root))
+    return "\n".join(lines)
+
+
+def _placeable(finding) -> bool:
+    """Whether an acknowledgement has a line to sit on.
+
+    Not every finding does. ``change_too_large`` is reported against the change
+    itself — "24 files", line 0 — so there is no source to write a comment in.
+    Offering that route anyway advertises an escape hatch the reader cannot
+    take, and sends them looking for a file that does not exist.
+    """
+    return finding.line > 0
+
+
+def _ways_out(findings, root) -> str:
+    """What the reader can actually do, given what was found."""
     from .policyfile import where
 
-    lines.append(
-        f"Fix these, then stop. If a rule is wrong for this repository, "
-        f"{where(outcome.root)}, or acknowledge the finding in the source with "
-        "`# yieldpoint: allow <rule> - reason`, rather than working around it."
-    )
-    return "\n".join(lines)
+    out = f"Fix these, then stop. If a rule is wrong for this repository, {where(root)}"
+    if any(_placeable(f) for f in findings):
+        out += (", or acknowledge the finding in the source with "
+                "`# yieldpoint: allow <rule> - reason`")
+    else:
+        out += (". A finding about the change as a whole has no line to "
+                "acknowledge: land it in smaller pieces instead")
+    return out + ", rather than working around it."
 
 
 def summary(outcome: Outcome) -> str:

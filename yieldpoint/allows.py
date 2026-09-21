@@ -43,10 +43,25 @@ class Allow:
     """The commit date of the line, ``YYYY-MM-DD``, or empty when unknown."""
 
     author: str = ""
+    """Who committed the line, per git."""
+
+    until: str = ""
+    """The date the author wrote it should stop being acceptable, as written.
+    Never judged except by ``--expired``, which says it is reading the clock."""
+
+    owner: str = ""
+    """Who the debt belongs to, as declared. Distinct from ``author``: the
+    person who wrote the acknowledgement is often not the one who owns the
+    fix, and making the last person to trip over it responsible is how debt
+    gets acknowledged rather than assigned."""
 
     @property
     def dated(self) -> bool:
         return bool(self.written)
+
+    @property
+    def expires(self) -> bool:
+        return bool(self.until)
 
 
 def _blame(root: Path, relative: str) -> dict[int, tuple[str, str]]:
@@ -125,10 +140,24 @@ def collect(root: str | Path = ".", policy: Policy | None = None) -> list[Allow]
             blamed += 1
         for line, entries in sorted(marks.items()):
             when, author = dates.get(line, ("", ""))
-            found.extend(Allow(relative, line, mark.rule, mark.reason, when, author)
-                         for mark in entries)
+            found.extend(
+                Allow(relative, line, mark.rule, mark.reason, when, author,
+                      until=mark.until, owner=mark.owner)
+                for mark in entries)
     # Undated last: a missing date is not "written at the epoch".
     return sorted(found, key=lambda a: (not a.dated, a.written, a.file, a.line))
+
+
+def _written(allow: Allow) -> str:
+    """When it was written, who owns it, and when they said it should end."""
+    parts = [allow.written or "date unknown"]
+    if allow.owner:
+        parts.append(f"owner {allow.owner}")
+    elif allow.author:
+        parts.append(allow.author)
+    if allow.until:
+        parts.append(f"until {allow.until}")
+    return ", ".join(parts)
 
 
 def _group(found: list[Allow]) -> dict[str, list[Allow]]:
@@ -149,14 +178,19 @@ def render(found: list[Allow]) -> str:
                                 key=lambda item: (-len(item[1]), item[0])):
         lines.append(f"  {rule}  ({len(entries)})")
         for allow in entries:
-            when = allow.written or "date unknown"
-            who = f", {allow.author}" if allow.author else ""
-            lines.append(f"    {when}{who}  {allow.file}:{allow.line}")
+            lines.append(f"    {_written(allow)}  {allow.file}:{allow.line}")
             lines.append(f"      {allow.reason[:96]}")
         lines.append("")
     if undated:
         lines.append(f"  {undated} have no date: not committed yet, or git "
                      f"could not say. Not treated as new.")
+    dated = sum(1 for a in found if a.expires)
+    lines.append(f"  {dated} carry an expiry. It is never enforced here: an "
+                 f"acknowledgement that stopped")
+    lines.append("  working overnight would make the same commit pass today "
+                 "and fail tomorrow.")
+    lines.append("  Run `yieldpoint allows --expired` — which does read the "
+                 "clock — to enforce them.")
     lines.append("  Dates are the commit's, not today's — this report is the "
                  "same tomorrow.")
     lines.append("  An acknowledgement answers one rule at one place. It is "
@@ -168,7 +202,61 @@ def render(found: list[Allow]) -> str:
 def to_dict(found: list[Allow]) -> dict:
     return {"acknowledgements": [
         {"file": a.file, "line": a.line, "rule": a.rule, "reason": a.reason,
-         "written": a.written, "author": a.author} for a in found]}
+         "written": a.written, "author": a.author, "until": a.until,
+         "owner": a.owner} for a in found]}
+
+
+#: Exit code when an expiry has passed. Distinct from 2, which means the
+#: command itself could not run.
+EXIT_EXPIRED = 1
+
+
+def expired(found: list[Allow], today: str) -> tuple[list[Allow], list[Allow]]:
+    """Which acknowledgements are past their date, and which cannot be judged.
+
+    ``today`` is passed in rather than read, so this function stays testable
+    and stays honest: the clock is read once, at the edge, by the command that
+    advertises that it does.
+    """
+    past, unreadable = [], []
+    for allow in found:
+        if not allow.expires:
+            continue
+        if not _is_date(allow.until):
+            unreadable.append(allow)
+        elif allow.until < today:
+            past.append(allow)
+    return past, unreadable
+
+
+def _is_date(text: str) -> bool:
+    import datetime
+
+    try:
+        datetime.date.fromisoformat(text)
+    except ValueError:
+        return False
+    return True
+
+
+def render_expired(past: list[Allow], unreadable: list[Allow], today: str) -> str:
+    """What has run out, said plainly, with the date it was judged against."""
+    lines = [f"Judged against {today}, read from this machine's clock. "
+             f"The same tree gives a different answer on a different day."]
+    if not past and not unreadable:
+        return "\n".join(lines + ["", "No acknowledgement has passed its date."])
+    for allow in past:
+        owner = f" ({allow.owner})" if allow.owner else ""
+        lines.append(f"  expired {allow.until}{owner}  {allow.file}:{allow.line} "
+                     f"[{allow.rule}]")
+        lines.append(f"    {allow.reason[:88]}")
+    for allow in unreadable:
+        lines.append(f"  unreadable date {allow.until!r}  {allow.file}:"
+                     f"{allow.line} [{allow.rule}]")
+    if unreadable:
+        lines.append("  A date this cannot parse is not an expiry that passed, "
+                     "and not one that did not.")
+    return "\n".join(lines)
 
 
 def allows_command(args) -> int:
@@ -183,6 +271,13 @@ def allows_command(args) -> int:
     found = collect(args.root, policy)
     if args.rule:
         found = [a for a in found if a.rule in set(args.rule)]
+    if getattr(args, "expired", False):
+        import datetime
+
+        today = datetime.date.today().isoformat()
+        past, unreadable = expired(found, today)
+        print(render_expired(past, unreadable, today))
+        return EXIT_EXPIRED if past else 0
     print(json.dumps(to_dict(found), indent=2) if args.json else render(found))
     return 0
 
@@ -194,6 +289,9 @@ def add_command(sub) -> None:
     command.add_argument("--policy", default=None)
     command.add_argument("--rule", action="append", help="only this rule")
     command.add_argument("--json", action="store_true")
+    command.add_argument("--expired", action="store_true",
+                         help="read today's date and fail if an expiry has "
+                              "passed; the only command here that reads a clock")
     command.set_defaults(handler=allows_command)
 
 

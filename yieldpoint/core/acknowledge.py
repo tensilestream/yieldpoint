@@ -32,12 +32,20 @@ comment sits where a reader will see it next to what it excuses.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-#: ``# yieldpoint: allow <rule> - <reason>``. An em dash, a hyphen or a colon all
-#: separate; people type whichever their editor gives them.
+#: ``# yieldpoint: allow <rule> [until YYYY-MM-DD] [owner=<who>] - <reason>``.
+#: An em dash, a hyphen or a colon all separate; people type whichever their
+#: editor gives them.
+#:
+#: ``until`` and ``owner`` sit before the separator, so a reason is free to
+#: contain either word. ``until`` matches only a date-shaped token, so "allow
+#: x - keep until the rewrite" is still just a reason.
 PATTERN = re.compile(
-    r"#\s*yieldpoint\s*:\s*allow\s+(?P<rule>[a-z_]+)\s*[-—:]\s*(?P<reason>\S.*)$",
+    r"#\s*yieldpoint\s*:\s*allow\s+(?P<rule>[a-z_]+)"
+    r"(?:\s+until\s+(?P<until>\d{4}-\d{2}-\d{2}))?"
+    r"(?:\s+owner\s*=\s*(?P<owner>[^\s-]+))?"
+    r"\s*[-—:]\s*(?P<reason>\S.*)$",
     re.IGNORECASE,
 )
 
@@ -50,6 +58,18 @@ class Acknowledgement:
     rule: str
     reason: str
     line: int
+
+    until: str = ""
+    """The date the author said this should stop being acceptable, as written.
+
+    Stored, never judged here. Deciding whether it has passed needs the current
+    date, and a rule that reads a clock makes the same commit pass today and
+    fail tomorrow (RULES.md section 4). An acknowledgement therefore keeps
+    suppressing whatever its expiry says; only a command that says out loud
+    that it is reading the clock may act on it."""
+
+    owner: str = ""
+    """Who this debt belongs to. Not whoever tripped over it last."""
 
 
 def _comment_lines(source: str) -> frozenset[int] | None:
@@ -88,6 +108,8 @@ def scan(source: str) -> dict[int, list[Acknowledgement]]:
                 rule=match.group("rule").strip().lower(),
                 reason=match.group("reason").strip(),
                 line=index,
+                until=(match.group("until") or "").strip(),
+                owner=(match.group("owner") or "").strip(),
             )
         )
     return found
@@ -116,11 +138,34 @@ def apply(findings, source: str | None):
 
     kept, acknowledged = [], []
     for finding in findings:
-        if covers(marks, finding.rule, finding.line):
-            acknowledged.append(finding)
-        else:
+        if not covers(marks, finding.rule, finding.line):
             kept.append(finding)
+        elif getattr(finding, "inherited", False):
+            # Acknowledged, and this change made it worse anyway.
+            kept.append(_still_growing(finding))
+        else:
+            acknowledged.append(finding)
     return kept, acknowledged
+
+
+#: What an acknowledgement is answering, and what it is not.
+STILL_GROWING = (
+    "This is acknowledged, and this change added to it anyway. An "
+    "acknowledgement answers the debt as it stood, not unlimited growth — "
+    "keep this change from adding to it, or rewrite the acknowledgement to say "
+    "the new size is the one you mean."
+)
+
+
+def _still_growing(finding):
+    """An acknowledged finding the change worsened, reported rather than muted.
+
+    Without this an acknowledgement is a permanent off switch: a file allowed
+    at four hundred lines could reach nine hundred in silence, which is how the
+    mechanism becomes decorative. Reported, never blocking — the point is that
+    the growth is visible, not that it is refused.
+    """
+    return replace(finding, prescription=STILL_GROWING)
 
 
 __all__ = ["Acknowledgement", "scan", "covers", "apply", "PATTERN", "LOOKBACK"]

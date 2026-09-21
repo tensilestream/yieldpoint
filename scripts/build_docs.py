@@ -225,7 +225,23 @@ def rules_page() -> str:
         "<pre><code># yieldpoint: allow assertion_monotonicity - broadened to cover "
         "YAML clients\ndef test_every_client_resolves_a_path():\n    ...</code></pre>"
         "<p>One rule per comment, a reason required, and the comment must sit on the "
-        "line the finding points at or within two lines above it.</p></section>")
+        "line the finding points at or within two lines above it.</p>"
+        "<p><strong>It answers the debt, not the growth.</strong> A file "
+        "acknowledged at four hundred lines that reaches nine hundred is "
+        "reported again &mdash; an acknowledgement that covered everything "
+        "after it would be an off switch with a comment attached. Reported, "
+        "never blocking: the point is that the growth is visible.</p>"
+        "<p>An acknowledgement may also name who owns the debt and when it should "
+        "stop being acceptable:</p>"
+        "<pre><code># yieldpoint: allow file_too_long until 2026-12-01 owner=platform"
+        " - owed a split, tracked in issue 12</code></pre>"
+        "<p><strong>An expiry never changes a verdict.</strong> If a passing date "
+        "made an acknowledgement stop suppressing, the same commit would pass today "
+        "and fail tomorrow with nothing changed &mdash; so every rule ignores it. "
+        "<code>yieldpoint allows</code> lists them; "
+        "<code>yieldpoint allows --expired</code> reads today&rsquo;s date and fails "
+        "when one has passed, and is the only command here that reads a clock. Run it "
+        "on a schedule, not in a gate.</p></section>")
     return "\n".join(out)
 
 

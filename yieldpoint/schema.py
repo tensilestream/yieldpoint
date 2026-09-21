@@ -206,6 +206,38 @@ def render(found: list[Setting], path: str | None) -> str:
     return "\n".join(lines)
 
 
+def drifted(found: list[Setting]) -> list[Setting]:
+    """Settings this repository states that differ from this build's default."""
+    return [s for s in found if s.changed and s.value != s.default]
+
+
+def render_drift(found: list[Setting], stamp: str, running: str) -> str:
+    """What is frozen, and from when.
+
+    A value chosen on purpose and a default frozen at install look identical in
+    the file. Both are listed, because the tool cannot tell them apart and
+    should not pretend to — the stamp says which build wrote the file, which is
+    the most this can honestly offer.
+    """
+    apart = drifted(found)
+    origin = (f"written by {stamp}; running {running}" if stamp
+              else f"this policy does not record which build wrote it; "
+                   f"running {running}")
+    if not apart:
+        return f"POLICY DRIFT — nothing differs from this build's defaults\n  {origin}"
+    lines = [f"POLICY DRIFT — {len(apart)} setting(s) differ from this build's "
+             f"defaults", f"  {origin}", ""]
+    for setting in apart:
+        lines.append(f"  {setting.key:44} {str(setting.value):<20} "
+                     f"(this build defaults to {setting.default})")
+    lines.append("")
+    lines.append("  A value chosen on purpose and a default frozen at install "
+                 "look the same here.")
+    lines.append("  Nothing is changed by this command. Deciding which is which "
+                 "is yours.")
+    return "\n".join(lines)
+
+
 def policy_command(args) -> int:
     from .policyfile import locate
 
@@ -217,6 +249,12 @@ def policy_command(args) -> int:
         print(f"yieldpoint: {exc}")
         return 2
     found = settings(policy, found_at)
+    if getattr(args, "drift", False):
+        from . import __version__
+        from .policyfile import written_by
+
+        print(render_drift(found, written_by(root), __version__))
+        return 0
     print(json.dumps(to_dict(found), indent=2) if args.json else render(found, found_at))
     return 0
 
@@ -228,7 +266,11 @@ def add_command(sub) -> None:
     command.add_argument("--policy", default=None)
     command.add_argument("--json", action="store_true",
                          help="machine-readable, for an agent tuning the config")
+    command.add_argument("--drift", action="store_true",
+                         help="what this repository states that this build no "
+                              "longer defaults to")
     command.set_defaults(handler=policy_command)
 
 
-__all__ = ["Setting", "settings", "render", "to_dict", "policy_command", "add_command"]
+__all__ = ["Setting", "settings", "render", "render_drift", "drifted",
+           "to_dict", "policy_command", "add_command"]

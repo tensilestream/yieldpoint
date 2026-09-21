@@ -163,3 +163,92 @@ class TestOutput(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDrift(unittest.TestCase):
+    """Freezing the thresholds keeps a verdict stable across upgrades.
+
+    The cost is that a repository never *gains* an improved default either, and
+    nothing told it so. This is the command that does — and the one thing it
+    must not do is claim to know which frozen values were deliberate.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.path = self.root / ".yieldpoint.json"
+
+    def _settings(self, raw):
+        self.path.write_text(json.dumps(raw))
+        return settings(Policy.load(str(self.path)), str(self.path))
+
+    def test_a_value_matching_the_default_is_not_drift(self):
+        from yieldpoint.schema import drifted
+
+        found = self._settings({"structure": {"max_lines": 50}})
+        self.assertEqual([s.key for s in drifted(found)], [])
+
+    def test_a_value_differing_from_the_default_is(self):
+        from yieldpoint.schema import drifted
+
+        found = self._settings({"structure": {"max_lines": 77}})
+        self.assertIn("structure.max_lines", [s.key for s in drifted(found)])
+
+    def test_a_default_never_written_down_is_not_drift(self):
+        """Only what the repository states can be stale."""
+        from yieldpoint.schema import drifted
+
+        found = self._settings({})
+        self.assertEqual([s.key for s in drifted(found)], [])
+
+    def _report(self, stamp="0.1.0", running="9.9.9", raw=None):
+        from yieldpoint.schema import render_drift
+
+        return render_drift(
+            self._settings(raw or {"structure": {"max_lines": 77}}), stamp, running)
+
+    def test_the_report_names_both_values(self):
+        text = self._report()
+        self.assertIn("77", text)
+        self.assertIn("50", text)
+
+    def test_it_says_which_build_wrote_the_policy(self):
+        text = self._report()
+        self.assertIn("written by 0.1.0", text)
+        self.assertIn("running 9.9.9", text)
+
+    def test_a_policy_with_no_stamp_says_it_does_not_know(self):
+        self.assertIn("does not record which build wrote it",
+                      self._report(stamp=""))
+
+    def test_it_admits_it_cannot_tell_a_choice_from_a_frozen_default(self):
+        self.assertIn("look the same here", self._report())
+
+    def test_it_changes_nothing(self):
+        raw = {"structure": {"max_lines": 77}}
+        self._report(raw=raw)
+        self.assertEqual(json.loads(self.path.read_text()), raw)
+
+
+class TestTheStamp(unittest.TestCase):
+    def test_a_freshly_written_policy_records_the_build(self):
+        from yieldpoint import __version__
+        from yieldpoint.policyfile import ensure, written_by
+
+        root = Path(tempfile.mkdtemp())
+        ensure(root)
+        self.assertEqual(written_by(root), __version__)
+
+    def test_a_policy_without_one_reports_absence_rather_than_guessing(self):
+        from yieldpoint.policyfile import written_by
+
+        root = Path(tempfile.mkdtemp())
+        (root / ".yieldpoint.json").write_text('{"version": 1}')
+        self.assertEqual(written_by(root), "")
+
+    def test_the_stamp_does_not_stop_the_policy_being_read(self):
+        from yieldpoint.policyfile import ensure
+
+        root = Path(tempfile.mkdtemp())
+        ensure(root)
+        self.assertEqual(
+            Policy.load(str(root / ".yieldpoint.json")).structure.max_lines, 50)
