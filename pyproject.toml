@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "yieldpoint"
-version = "0.1.3"
+version = "0.1.4"
 description = "Deterministic verification for agents that write code"
 readme = "README.md"
 requires-python = ">=3.10"
