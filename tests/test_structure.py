@@ -330,3 +330,43 @@ class TestWhoseDebtItIs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestElifIsNotNesting(unittest.TestCase):
+    """Python has no `elif` node.
+
+    An `elif` is an `If` sitting alone in the previous `If`'s `orelse`, so a
+    flat four-branch chain measured as four levels of nesting. Nobody reads it
+    that way: it is one decision with four answers. Reporting it as deeply
+    nested sends people to restructure code that was already flat — found when
+    `nesting_too_deep` fired on a four-branch dispatch inside one loop.
+    """
+
+    def _nesting(self, source):
+        from yieldpoint.core.metrics import measure
+
+        return measure(source).functions[0].nesting
+
+    def test_a_flat_chain_counts_one_level_for_the_chain(self):
+        source = ("def f(x):\n    for i in x:\n        if i == 1:\n            a()\n"
+                  "        elif i == 2:\n            b()\n"
+                  "        elif i == 3:\n            c()\n")
+        self.assertEqual(self._nesting(source), 2)
+
+    def test_an_else_block_containing_an_if_is_still_a_level(self):
+        """The same tree as `elif`; only the column separates them, and the
+        author who indented it wrote a real level."""
+        source = ("def h(x):\n    if x:\n        a()\n    else:\n"
+                  "        if x:\n            b()\n")
+        self.assertEqual(self._nesting(source), 2)
+
+    def test_real_nesting_is_unchanged(self):
+        source = ("def g(x):\n    for i in x:\n        if i:\n"
+                  "            for j in i:\n                if j:\n"
+                  "                    k()\n")
+        self.assertEqual(self._nesting(source), 4)
+
+    def test_nesting_inside_an_elif_branch_still_counts(self):
+        source = ("def k(x):\n    if x == 1:\n        a()\n    elif x == 2:\n"
+                  "        for i in x:\n            if i:\n                b()\n")
+        self.assertEqual(self._nesting(source), 3)

@@ -224,45 +224,6 @@ def panel(turns: tuple[Turn, ...], price_per_million: float = 0.0, paint=None) -
     return "\n".join(lines)
 
 
-def render(turns: tuple[Turn, ...], limit: int = RECENT,
-           price_per_million: float = 0.0, paint=None) -> str:
-    """The per-turn table, most recent last, under the headline panel."""
-    if not turns:
-        return ""
-    paint = paint or _palette()
-    shown = turns[-limit:]
-    lines = [
-        panel(turns, price_per_million, paint),
-        "",
-        f"{paint.bold}PER TURN{paint.reset}  {paint.dim}when each verdict happened, "
-        f"and the running total after it{paint.reset}",
-        f"  {paint.dim}{'when':<19}  {'surface':<8} {'status':<10} "
-        f"{'found':>5} {'ms':>6} {'input':>7} {'feedback':>9} {'delta':>7} {'ratio':>7}"
-        f"  feedback ratio so far{paint.reset}",
-    ]
-    for turn in shown:
-        tint = getattr(paint, _TINT.get(turn.status, "steel"))
-        found = f"{turn.findings:>5}"
-        lines.append(
-            f"  {turn.when:<19}  {turn.surface:<8} "
-            f"{tint}{turn.status:<10}{paint.reset} "
-            f"{tint if turn.findings else paint.dim}{found}{paint.reset} "
-            f"{paint.dim}{turn.duration_ms:>6}{paint.reset} "
-            f"{_tokens(turn.compaction_source_tokens, turn.compared):>7} "
-            f"{paint.amber}{_tokens(turn.compacted_tokens, turn.compared):>9}{paint.reset}"
-            f" {_tokens(turn.compaction_saved_tokens, turn.compared):>7}"
-            f" {paint.amber}{_ratio(turn.compaction_ratio):>7}{paint.reset}"
-            f"  {paint.dim}{_compaction_label(turn.cum_compaction_ratio)} on repair turns{paint.reset}"
-        )
-    if len(turns) > len(shown):
-        lines.append(f"  {paint.dim}… {len(turns) - len(shown):,} earlier turn(s) not "
-                     f"shown; `yieldpoint export` has every one{paint.reset}")
-    lines.append("")
-    lines.append(f"  {paint.dim}input/feedback — source and prescription tokens. "
-                 f"A clean turn prescribes nothing, so it shows — rather than a "
-                 f"count. All token counts use {CHARS_PER_TOKEN} chars/token.{paint.reset}")
-    return "\n".join(lines)
-
 
 def _tokens(value: int, compared: bool) -> str:
     """A token count, or a dash when this turn had nothing to compare.
@@ -298,3 +259,10 @@ def _palette():
 
 __all__ = ["Turn", "timeline", "render", "panel", "cost", "repetition",
            "RECENT"]
+
+
+def render(*args, **kwargs):
+    """Re-exported so callers need not know where the rendering lives."""
+    from .turnreport import render as _render
+
+    return _render(*args, **kwargs)

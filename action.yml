@@ -1,0 +1,86 @@
+name: Yieldpoint
+description: >-
+  Reports whether a change weakens what the tests verify, and which findings
+  the change introduced rather than inherited.
+author: tensilestream
+
+branding:
+  icon: shield
+  color: purple
+
+inputs:
+  against:
+    description: >-
+      Branch or commit to compare with. `auto` detects this repository's
+      default branch. On a pull request, leave it as the default so findings
+      are attributed to the branch rather than to the last commit on it.
+    required: false
+    default: ${{ github.event.pull_request.base.ref && format('origin/{0}', github.event.pull_request.base.ref) || 'auto' }}
+  policy:
+    description: Path to .yieldpoint.json. Discovered upward when unset.
+    required: false
+    default: ''
+  sarif-file:
+    description: Where to write the SARIF document.
+    required: false
+    default: yieldpoint.sarif
+  fail-on-findings:
+    description: >-
+      Fail the job when a gating finding is reported. Maintainability findings
+      never gate unless the policy sets structure.gates.
+    required: false
+    default: 'true'
+
+outputs:
+  sarif-file:
+    description: The SARIF document that was written.
+    value: ${{ inputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    # Full history, or there is no merge base to compare against and every
+    # finding is attributed to whoever pushed last.
+    - name: Check the checkout has history
+      shell: bash
+      run: |
+        if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+          echo "::warning::Shallow checkout. Yieldpoint cannot resolve a merge base, so it cannot tell new findings from inherited ones. Use actions/checkout with fetch-depth: 0."
+        fi
+
+    - name: Install Yieldpoint
+      shell: bash
+      run: python -m pip install --quiet yieldpoint
+
+    - name: Review
+      id: review
+      shell: bash
+      run: |
+        set +e
+        yieldpoint review \
+          --against "${{ inputs.against }}" \
+          ${{ inputs.policy && format('--policy {0}', inputs.policy) || '' }} \
+          --sarif > "${{ inputs.sarif-file }}"
+        echo "code=$?" >> "$GITHUB_OUTPUT"
+
+    # Written before the job can fail, so the summary exists either way.
+    - name: Summarise
+      if: always()
+      shell: bash
+      run: |
+        yieldpoint summary \
+          --against "${{ inputs.against }}" \
+          ${{ inputs.policy && format('--policy {0}', inputs.policy) || '' }} \
+          >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Annotate the pull request
+      if: always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: yieldpoint
+
+    - name: Fail on gating findings
+      if: inputs.fail-on-findings == 'true'
+      shell: bash
+      run: exit ${{ steps.review.outputs.code }}

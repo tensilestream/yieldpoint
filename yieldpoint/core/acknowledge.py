@@ -52,12 +52,36 @@ class Acknowledgement:
     line: int
 
 
+def _comment_lines(source: str) -> frozenset[int] | None:
+    """Lines holding a real Python comment, or ``None`` if that cannot be told.
+
+    Without this, an acknowledgement written *about* acknowledgements — in a
+    docstring, a README example, a test fixture string — suppresses findings on
+    the lines beneath it. This module's own docstring did exactly that: the
+    example on line 10 silenced any monotonicity finding on lines 10 to 12.
+
+    ``None`` rather than an empty set when the source will not tokenize, so a
+    file this cannot read keeps the old behaviour instead of silently losing
+    every acknowledgement in it.
+    """
+    import io
+    import tokenize
+
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (SyntaxError, tokenize.TokenError, IndentationError, ValueError):
+        return None
+    return frozenset(token.start[0] for token in tokens
+                     if token.type == tokenize.COMMENT)
+
+
 def scan(source: str) -> dict[int, list[Acknowledgement]]:
     """Every acknowledgement in ``source``, keyed by the line it appears on."""
+    real = _comment_lines(source)
     found: dict[int, list[Acknowledgement]] = {}
     for index, text in enumerate(source.splitlines(), start=1):
         match = PATTERN.search(text)
-        if match is None:
+        if match is None or (real is not None and index not in real):
             continue
         found.setdefault(index, []).append(
             Acknowledgement(

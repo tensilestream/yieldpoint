@@ -22,6 +22,8 @@ from .verify import verify_change, verify_diff
 
 EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
 
+from .audit import linters_command, scan_command  # noqa: E402,F401
+
 #: Nothing in the change could be analysed — no rule ran, so there is no result
 #: to trust. Distinct from EXIT_FINDINGS because "I found a problem" and "I
 #: cannot tell you anything" are different facts and CI should be able to treat
@@ -103,6 +105,11 @@ def _emit(verdict, args, policy, deletions: tuple = ()) -> int:
     """Print a verdict in whichever form was asked for, and pick the exit code."""
     if getattr(args, "speak", False):
         return _print_spoken(verdict, policy, deletions=deletions)
+    if getattr(args, "sarif", False):
+        from . import sarif
+
+        print(sarif.dumps(verdict, advisory=sarif.advisory_rules(policy)))
+        return _exit_for(verdict, policy)
     if args.json:
         print(verdict.to_json(indent=2))
     else:
@@ -154,10 +161,19 @@ def review_command(args) -> int:
         verdict = verify_diff(diff.text, root=diff.root, policy=policy)
     _record(verdict, Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
     code = _emit(verdict, args, policy)
-    if not args.json:
+    if not _machine_readable(args):
         print(f"  {basis.describe()}")
         console.print_pace(verdict, diff, policy)
     return code
+
+
+def _machine_readable(args) -> bool:
+    """Whether stdout is being parsed rather than read.
+
+    Anything printed beside the payload corrupts it, so every human-facing
+    extra — the comparison basis, the pacing bar — has to ask first.
+    """
+    return bool(getattr(args, "json", False) or getattr(args, "sarif", False))
 
 
 def check_diff(args) -> int:
@@ -302,82 +318,6 @@ def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> in
     if utterance.confirmation:
         print(f"\n  {utterance.confirmation.question}")
     return _exit_for(verdict, policy)
-
-
-def scan_command(args) -> int:
-    from .scan import scan
-
-    try:
-        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
-    except (OSError, ValueError) as exc:
-        print(f"yieldpoint: {exc}", file=sys.stderr)
-        return EXIT_ERROR
-
-    result = scan(args.path, policy)
-    verdict = result.verdict
-    if args.rule:
-        wanted = set(args.rule)
-        verdict = Verdict.of(
-            [f for f in verdict.findings if f.rule in wanted],
-            checked=verdict.checked, skipped=verdict.skipped,
-        )
-
-    if args.json:
-        print(verdict.to_json(indent=2))
-        return _exit_for(verdict, policy)
-
-    for note in result.unreadable:
-        print(f"unreadable: {note}", file=sys.stderr)
-
-    if not verdict.findings:
-        print(f"ok  {result.files} file(s) audited, nothing to report")
-        return EXIT_OK
-
-    print(f"{result.files} file(s) audited, {len(verdict.findings)} finding(s)\n")
-    for finding in verdict.findings:
-        symbol = f" in {finding.symbol}" if finding.symbol else ""
-        print(f"  {finding.file}:{finding.line}{symbol}  [{finding.rule}]")
-        print(f"    {finding.detail}")
-
-    print("\n  summary")
-    counts: dict[str, int] = {}
-    for finding in verdict.findings:
-        counts[finding.rule] = counts.get(finding.rule, 0) + 1
-    for rule, count in sorted(counts.items(), key=lambda item: (-item[1], item[0])):
-        print(f"    {count:4}  {rule}")
-    print(
-        "\n  A scan reports the state of the repository, not the effect of a change. "
-        "\n  Rules that are differential when verifying an edit run absolutely here."
-    )
-    return EXIT_FINDINGS
-
-
-def linters_command(args) -> int:
-    """Show the catalogue, which tools are enabled, and which are installed."""
-    import shutil
-
-    from .core.linters import registry
-    from .core.linters.adapter import FAST
-
-    try:
-        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
-    except (OSError, ValueError):
-        policy = Policy()
-
-    enabled = set(policy.linters.tools)
-    state = "enabled" if policy.linters.enabled else "disabled"
-    print(f"linters: {state}  ({len(enabled)} tool(s) selected)\n")
-    print(f"  {'tool':22} {'cost':6} {'installed':10} {'on':4} description")
-    for name in registry.names():
-        adapter = registry.get(name)
-        print(
-            f"  {name:22} {'fast' if adapter.cost == FAST else 'slow':6} "
-            f"{'yes' if shutil.which(adapter.argv[0]) else 'no':10} "
-            f"{'*' if name in enabled else '':4} {adapter.description}"
-        )
-    print('\nEnable with: "linters": {"enabled": true, "tools": ["ruff"]} in .yieldpoint.json')
-    print("Linter findings are advisory — they can never block an edit.")
-    return EXIT_OK
 
 
 def _read_source(value: str | None) -> str | None:

@@ -112,6 +112,16 @@ class Finding:
     symbol: str | None = None
     confidence: Confidence = Confidence.EXACT
 
+    inherited: bool = False
+    """The violation predates this change, which only made it worse.
+
+    A separate field for the same reason ``kind`` is one: the detail text says
+    so in prose, and recovering it by matching on that prose would break the
+    moment the wording improves. Surfaces need it structurally — a pull-request
+    comment that cannot separate "you introduced this" from "you added a line
+    to a file that was already over" is back to blaming a change for its
+    inheritance, which is the whole complaint this work answers."""
+
     kind: str = ""
     """How the rule was broken, when it has more than one way.
 
@@ -153,6 +163,8 @@ class Finding:
         }
         if self.kind:
             out["kind"] = self.kind
+        if self.inherited:
+            out["inherited"] = True
         for key in ("before", "after", "symbol"):
             value = getattr(self, key)
             if value is not None:
@@ -162,6 +174,7 @@ class Finding:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Finding":
         return cls(
+            inherited=bool(data.get("inherited", False)),
             rule=data["rule"],
             status=Status(data["status"]),
             file=data["file"],

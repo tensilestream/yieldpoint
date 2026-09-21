@@ -185,6 +185,27 @@ def _function(node: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str,
     )
 
 
+def _deeper(parent: ast.AST, child: ast.AST) -> int:
+    """Whether stepping to ``child`` goes a level in, as a reader would count it.
+
+    ``elif`` is the exception, and it matters. Python has no elif node: it is an
+    ``If`` sitting alone in the previous ``If``'s ``orelse``, so a flat
+    four-branch chain measured as four levels of nesting. Nobody reads it that
+    way — it is one decision with four answers, and reporting it as deeply
+    nested sends people to restructure code that was already flat.
+    """
+    if not isinstance(child, _NESTING):
+        return 0
+    if (isinstance(parent, ast.If) and isinstance(child, ast.If)
+            and parent.orelse == [child]
+            and child.col_offset == parent.col_offset):
+        # The column is the only thing separating `elif` from `else:` followed
+        # by an `if`: the two are the same tree. The second is indented, and is
+        # a real level — the author wrote it as one.
+        return 0
+    return 1
+
+
 def _survey(node: ast.AST) -> tuple[int, int, int]:
     """Statements, deepest nesting and complexity, in a single descent.
 
@@ -211,7 +232,7 @@ def _survey(node: ast.AST) -> tuple[int, int, int]:
         elif isinstance(current, ast.match_case):
             branches += 1
         for child in ast.iter_child_nodes(current):
-            stack.append((child, depth + 1 if isinstance(child, _NESTING) else depth))
+            stack.append((child, depth + _deeper(current, child)))
 
     return statements, deepest, branches + 1
 
@@ -262,15 +283,32 @@ def _imports(tree: ast.Module) -> list[str]:
     return found
 
 
+def _dotted(func: ast.expr) -> list[str]:
+    """Every spelling a caller might forbid, for one call.
+
+    ``os.getenv(...)`` is recorded as both ``getenv`` and ``os.getenv``. Only
+    the bare attribute was recorded before, so a project writing
+    ``"forbid_call": "os.getenv"`` — the obvious spelling, and the one any
+    reader would choose — configured a rule that could never match and was
+    told nothing. A rule that is on and silent is worse than one that is off.
+    """
+    if isinstance(func, ast.Name):
+        return [func.id]
+    if not isinstance(func, ast.Attribute):
+        return []
+    names = [func.attr]
+    if isinstance(func.value, ast.Name):
+        names.append(f"{func.value.id}.{func.attr}")
+    elif isinstance(func.value, ast.Attribute) and isinstance(func.value.value, ast.Name):
+        names.append(f"{func.value.value.id}.{func.value.attr}.{func.attr}")
+    return names
+
+
 def _calls(tree: ast.Module) -> dict[str, int]:
     counts: dict[str, int] = {}
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
-        name = (
-            node.func.id if isinstance(node.func, ast.Name)
-            else node.func.attr if isinstance(node.func, ast.Attribute) else None
-        )
-        if name:
+        for name in _dotted(node.func):
             counts[name] = counts.get(name, 0) + 1
     return counts

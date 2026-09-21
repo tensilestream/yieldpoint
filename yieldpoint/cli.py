@@ -39,8 +39,8 @@ __all__ = ["main", "EXIT_OK", "EXIT_FINDINGS", "EXIT_UNVERIFIED", "EXIT_ERROR"]
 
 
 
-def _add_reporting_commands(sub) -> None:
-    """Subcommands that answer "what happened?" rather than verify a change."""
+def _add_review_command(sub) -> None:
+    """The zero-argument entry point, and the flags that shape its output."""
     review_cmd = sub.add_parser(
         "review", help="verify uncommitted work — no arguments needed")
     review_cmd.add_argument("--root", default=".", help="repository directory")
@@ -50,7 +50,14 @@ def _add_reporting_commands(sub) -> None:
         help="compare with a branch or commit, or `auto` for the default branch")
     review_cmd.add_argument("--policy", default=None, help="path to .yieldpoint.json")
     review_cmd.add_argument("--json", action="store_true", help="machine-readable output")
+    review_cmd.add_argument("--sarif", action="store_true",
+                            help="SARIF 2.1.0, which GitHub and GitLab annotate PRs from")
     review_cmd.set_defaults(handler=review_command)
+
+
+def _add_reporting_commands(sub) -> None:
+    """Subcommands that answer "what happened?" rather than verify a change."""
+    _add_review_command(sub)
 
     doctor_cmd = sub.add_parser(
         "doctor", help="check that Yieldpoint is actually working")
@@ -277,6 +284,12 @@ def _parser() -> argparse.ArgumentParser:
 
     from .schema import add_command as add_policy
     add_policy(sub)
+
+    from .summary import add_command as add_summary
+    add_summary(sub)
+
+    from .allows import add_command as add_allows
+    add_allows(sub)
     _add_reporting_commands(sub)
 
 

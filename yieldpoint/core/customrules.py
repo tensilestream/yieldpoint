@@ -58,6 +58,14 @@ def _misnamed(rule, now, path: str) -> list[Finding]:
 
 
 def _applies(rule, path: str) -> bool:
+    """Whether this rule has anything to say about this file.
+
+    ``allow_in`` wins over ``path``: a rule that applies everywhere except one
+    place is the normal shape, and the exemption has to be able to carve out of
+    a broad match rather than compete with it.
+    """
+    if rule.allow_in and glob.matches(rule.allow_in, path):
+        return False
     return not rule.path or glob.matches(rule.path, path)
 
 

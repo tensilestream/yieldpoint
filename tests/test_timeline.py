@@ -289,3 +289,51 @@ class TestRepeatsAreDisclosed(unittest.TestCase):
         rows = timeline.timeline([self._event(n, ["t.py"]) for n in range(1, 6)])
         self.assertEqual(rows[-1].cum_calls_saved, 5)
         self.assertEqual(rows[-1].cum_tokens_saved, 5000)
+
+
+class TestWhatItCaught(unittest.TestCase):
+    """A tail of clean turns hides everything the tool has ever found.
+
+    The steady state of using this is: it finds something, you fix it, you
+    re-run until clean. So the last dozen turns are clean by construction, and
+    a pure tail shows a tool that appears never to have caught anything.
+    """
+
+    def _turns(self, statuses):
+        from yieldpoint.ledger import Event
+
+        events = [
+            Event(surface="review", status=status, at=1_000 + index,
+                  findings=found, analysed_chars=400,
+                  prescription_chars=40 if found else 0)
+            for index, (status, found) in enumerate(statuses)
+        ]
+        return timeline.timeline(events)
+
+    def test_a_past_finding_is_shown_even_when_every_recent_turn_is_clean(self):
+        turns = self._turns([("repair", 3)] + [("pass", 0)] * 20)
+        text = timeline.render(turns, paint=_plain())
+        self.assertIn("WHAT IT CAUGHT", text)
+        self.assertIn("repair", text.split("WHAT IT CAUGHT")[1])
+
+    def test_it_says_how_many_turns_found_something(self):
+        turns = self._turns([("repair", 1)] * 3 + [("pass", 0)] * 20)
+        self.assertIn("3 of 23 turn(s) found something",
+                      timeline.render(turns, paint=_plain()))
+
+    def test_a_ledger_that_never_found_anything_says_so(self):
+        """Distinct from a ledger whose recent turns happen to be clean."""
+        text = timeline.render(self._turns([("pass", 0)] * 5), paint=_plain())
+        self.assertIn("Nothing has been found in 5 turn(s)", text)
+        self.assertNotIn("WHAT IT CAUGHT", text)
+
+    def test_findings_already_on_screen_are_not_repeated(self):
+        turns = self._turns([("repair", 2)] * 2)
+        text = timeline.render(turns, paint=_plain())
+        self.assertIn("already listed above", text)
+
+    def test_the_running_total_is_printed_once_not_per_row(self):
+        """It is a running total; per-row it repeated one number down the table."""
+        turns = self._turns([("repair", 1)] * 4 + [("pass", 0)] * 4)
+        text = timeline.render(turns, paint=_plain())
+        self.assertEqual(text.count("on repair turns"), 1)

@@ -20,6 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import glob
+from dataclasses import replace
+
 from .baseline import CARRIED, IMPROVING, INHERITED_NOTE, WORSENED, Baseline
 from .metrics import FunctionMetrics, ModuleMetrics, measure
 from .verdict import Confidence, Finding, Status
@@ -163,11 +165,12 @@ def _file_length(now, path, config, before: int | None) -> list[Finding]:
     state = Baseline(now.code_lines, config.max_file_lines or 0, before)
     if not state.over or state.classification in (CARRIED, IMPROVING):
         return []
-    return [_finding(
+    worsened = state.classification == WORSENED
+    return [replace(_finding(
         FILE_TOO_LONG, config.severity, path, 1,
         state.describe(path, "lines of code"),
-        _INHERITED if state.classification == WORSENED else _SPLIT,
-    )]
+        _INHERITED if worsened else _SPLIT,
+    ), inherited=worsened)]
 
 
 def _module_rules(was, now, path, config, known: bool = True) -> list[Finding]:
@@ -200,13 +203,13 @@ def _function_rules(was, now, path, config, known: bool = True) -> list[Finding]
                              _before(old, limit.attribute, config, known))
             if not state.over or state.classification in (CARRIED, IMPROVING):
                 continue  # within the limit, or already this bad and not worsened here
-            findings.append(_finding(
+            worsened = state.classification == WORSENED
+            findings.append(replace(_finding(
                 limit.rule, config.severity, path, function.line,
                 state.describe(f"`{function.qualname}`", limit.noun),
-                limit.advice + (f" {INHERITED_NOTE}"
-                                if state.classification == WORSENED else ""),
+                limit.advice + (f" {INHERITED_NOTE}" if worsened else ""),
                 symbol=function.qualname,
-            ))
+            ), inherited=worsened))
     return findings
 
 

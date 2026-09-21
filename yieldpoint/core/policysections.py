@@ -73,6 +73,17 @@ class CustomRule:
     name: str
     severity: Status | None = Status.REPAIR
     path: str = ""
+    """Where the rule applies, as a glob. Empty means everywhere."""
+
+    allow_in: str = ""
+    """Where it does not, as a glob, whatever ``path`` says.
+
+    The shape almost every real rule of this kind has: *this call belongs in
+    one place and nowhere else*. "No ``os.getenv`` outside the config module"
+    cannot be written as a path alone — it is the complement of a path, and
+    without this it has to be spelled as a list of every directory that is not
+    the config module, which is wrong the day someone adds a directory."""
+
     forbid_call: str = ""
     forbid_import: str = ""
     require_name_pattern: str = ""

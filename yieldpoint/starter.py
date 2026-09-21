@@ -51,6 +51,17 @@ STARTER_CONFIG = {
                             "exact file, or an extension. Only maintainability is "
                             "skipped: an excluded file is still checked for a "
                             "weakened test contract.",
+        "_custom_comment": "Rules this project declares for itself. Declarative "
+                           "only — a committed config that could name code to run "
+                           "would mean cloning a repository executes it. Example, "
+                           "left empty so nothing fires until you mean it: "
+                           "{\"name\": \"config_read_outside_config\", "
+                           "\"forbid_call\": \"os.getenv\", "
+                           "\"allow_in\": \"**/config.py\", "
+                           "\"message\": \"Read configuration through the config "
+                           "module.\"}. `path` says where a rule applies; "
+                           "`allow_in` says where it does not, and wins.",
+        "custom": [],
         "exclude": [
             "**/*_pb2.py",
             "**/migrations/**",

@@ -194,6 +194,7 @@ def _custom_rules(value: Any, warnings: list[str]) -> tuple[CustomRule, ...]:
                 item.get("severity"), Status.REPAIR, warnings,
                 f"structure.custom[{index}].severity"),
             path=str(item.get("path", "")),
+            allow_in=str(item.get("allow_in", "")),
             forbid_call=str(item.get("forbid_call", "")),
             forbid_import=str(item.get("forbid_import", "")),
             require_name_pattern=str(item.get("require_name_pattern", "")),
