@@ -18,7 +18,8 @@ from typing import Callable, Iterable, Mapping
 from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
-from .core import acknowledge, boundaries, glob, monotonicity, refactor, structure, workflows
+from .core import (acknowledge, boundaries, glob, monotonicity, policychange,
+                   refactor, structure, workflows)
 from .core.assertions import extract
 from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
 from .core.linters import report as lintreport
@@ -34,6 +35,19 @@ __all__ = [
     "verify_change", "verify_diff",
     "ASSERTION_MONOTONICITY", "GENERATED_FILE_EDITED", "EXACT_SUFFIXES",
 ]
+
+
+def _fold(result, path: str, findings: list, checked: list, skipped: list) -> None:
+    """Fold one rule family's output into the run being assembled.
+
+    A family that reported why it could not look has not checked the file, and
+    saying otherwise would let an unexamined path count as examined.
+    """
+    family, unread = result
+    findings.extend(family)
+    skipped.extend(unread)
+    if not unread:
+        checked.append(path)
 
 
 def verify_change(
@@ -91,11 +105,11 @@ def verify_change(
             checked.append(path)
 
     if glob.matches_any(resolved.ci.paths, path):
-        ci_findings, ci_skipped = workflows.check(before, after, path, resolved.ci)
-        findings.extend(ci_findings)
-        skipped.extend(ci_skipped)
-        if not ci_skipped:
-            checked.append(path)
+        _fold(workflows.check(before, after, path, resolved.ci),
+              path, findings, checked, skipped)
+
+    if path.endswith(policychange.FILENAME):
+        _fold(policychange.check(before, after, path), path, findings, checked, skipped)
 
     contract = contractrules.check(before, after, path, resolved, also_covered)
     findings.extend(contract.findings)

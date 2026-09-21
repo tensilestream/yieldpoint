@@ -106,7 +106,7 @@ def _measure(source: str, filename: str) -> ModuleMetrics:
         return ModuleMetrics(error=f"could not parse {filename}: {exc}")
 
     functions: list[FunctionMetrics] = []
-    _walk(tree, prefix="", out=functions)
+    _walk(tree, prefix="", out=functions, annotations=_annotations(source))
 
     return ModuleMetrics(
         lines=len(source.splitlines()),
@@ -131,24 +131,49 @@ def _code_lines(source: str) -> int:
     return total
 
 
-def _walk(node: ast.AST, *, prefix: str, out: list[FunctionMetrics]) -> None:
+def _annotations(source: str) -> frozenset[int]:
+    """Lines that exist only to carry one of Yieldpoint's own acknowledgements.
+
+    Discounted from a function's length, because the alternative is a tool that
+    lengthens a function as the price of admitting the length was intended.
+    Worse than merely absurd: a comment written to answer *one* rule would push
+    an unrelated length rule over its limit, so the escape hatch manufactures
+    the finding it was used to answer.
+
+    Only whole-line comments count. An acknowledgement appended to a statement
+    rides on a line that would have existed anyway, so discounting it would
+    undercount real code.
+    """
+    from .acknowledge import scan
+
+    lines = source.splitlines()
+    return frozenset(number for number in scan(source)
+                     if lines[number - 1].strip().startswith("#"))
+
+
+def _walk(node: ast.AST, *, prefix: str, out: list[FunctionMetrics],
+          annotations: frozenset[int]) -> None:
     for child in getattr(node, "body", []):
         if isinstance(child, ast.ClassDef):
-            _walk(child, prefix=f"{prefix}{child.name}.", out=out)
+            _walk(child, prefix=f"{prefix}{child.name}.", out=out,
+                  annotations=annotations)
         elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            out.append(_function(child, prefix))
-            _walk(child, prefix=f"{prefix}{child.name}.", out=out)
+            out.append(_function(child, prefix, annotations))
+            _walk(child, prefix=f"{prefix}{child.name}.", out=out,
+                  annotations=annotations)
 
 
-def _function(node: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str) -> FunctionMetrics:
+def _function(node: ast.FunctionDef | ast.AsyncFunctionDef, prefix: str,
+              annotations: frozenset[int] = frozenset()) -> FunctionMetrics:
     args = node.args
     end = getattr(node, "end_lineno", node.lineno) or node.lineno
     statements, nesting, complexity = _survey(node)
+    excused = sum(1 for number in annotations if node.lineno <= number <= end)
     return FunctionMetrics(
         name=node.name,
         qualname=f"{prefix}{node.name}",
         line=node.lineno,
-        lines=max(1, end - node.lineno + 1),
+        lines=max(1, end - node.lineno + 1 - excused),
         parameters=(
             len(args.posonlyargs) + len(args.args) + len(args.kwonlyargs)
             + (1 if args.vararg else 0) + (1 if args.kwarg else 0)

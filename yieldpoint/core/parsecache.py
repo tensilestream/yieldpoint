@@ -37,7 +37,7 @@ DEFAULT_PATH = ".yieldpoint/analysis.sqlite3"
 
 #: Bumped whenever a cached payload's shape changes, so entries written by an
 #: older build are ignored rather than misread.
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 #: Rows kept. Beyond this the oldest are dropped — an accounting aid, not a
 #: data store, and an unbounded file in someone's repository is a bug.

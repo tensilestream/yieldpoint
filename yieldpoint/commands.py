@@ -38,11 +38,18 @@ def only_maintainability(verdict, policy) -> bool:
     ``--no-verify``, and the habit does not distinguish that finding from the
     one that says an assertion is gone.
     """
+    from .core.policychange import POLICY_WEAKENED
     from .core.structure import MAINTAINABILITY_RULES
 
-    if policy.structure.gates or not verdict.findings:
+    if not verdict.findings:
         return False
-    return all(f.rule in MAINTAINABILITY_RULES for f in verdict.findings)
+    rules = {f.rule for f in verdict.findings}
+    # A loosened policy is reported and never enforced, whatever `gates` says.
+    # Denying the edit that relaxes a rule would leave a project unable to
+    # change its own standards without first defeating the tool enforcing them.
+    if policy.structure.gates:
+        return rules <= {POLICY_WEAKENED}
+    return rules <= MAINTAINABILITY_RULES | {POLICY_WEAKENED}
 
 
 def _exit_for(verdict, policy=None) -> int:

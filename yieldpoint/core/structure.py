@@ -17,10 +17,10 @@ absolute, which is the right default for a project starting clean.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 from . import glob
+from .baseline import CARRIED, IMPROVING, INHERITED_NOTE, WORSENED, Baseline
 from .metrics import FunctionMetrics, ModuleMetrics, measure
 from .verdict import Confidence, Finding, Status
 
@@ -114,10 +114,12 @@ def check(before: str | None, after: str | None, path: str, config) -> tuple[lis
 
     findings: list[Finding] = []
     findings.extend(_change_size(was, now, path, config))
-    findings.extend(_module_rules(was, now, path, config))
-    findings.extend(_function_rules(was, now, path, config))
+    findings.extend(_module_rules(was, now, path, config, before is not None))
+    findings.extend(_function_rules(was, now, path, config, before is not None))
     findings.extend(_duplicates(was, now, path, config))
-    findings.extend(_custom(now, path, config))
+    from .customrules import custom
+
+    findings.extend(custom(now, path, config))
     return findings, []
 
 
@@ -144,16 +146,34 @@ def _change_size(was, now, path, config) -> list[Finding]:
     )]
 
 
-def _module_rules(was, now, path, config) -> list[Finding]:
-    findings = []
-    limit = config.max_file_lines
-    if limit and now.code_lines > limit and (config.greenfield or now.code_lines > was.code_lines):
-        findings.append(_finding(
-            FILE_TOO_LONG, config.severity, path, 1,
-            f"{path} has {now.code_lines} lines of code, over the limit of {limit}.",
-            "Split it into modules with one responsibility each. A file this size "
-            "usually has more than one reason to change.",
-        ))
+#: What to do about a file already over the limit before this change. Telling
+#: someone to split a 1,400-line module because they added a line is advice
+#: they cannot act on inside the task they were given, and unactionable advice
+#: is how an escape hatch becomes a reflex.
+_INHERITED = ("Splitting it is owed, but it is not this change's debt. Keep this "
+              "change from adding to it, or acknowledge the growth with a reason.")
+
+_SPLIT = ("Split it into modules with one responsibility each. A file this size "
+          "usually has more than one reason to change.")
+
+
+def _file_length(now, path, config, before: int | None) -> list[Finding]:
+    """The file-length rule, attributing the count to whoever earned it."""
+    state = Baseline(now.code_lines, config.max_file_lines or 0, before)
+    if not state.over or state.classification in (CARRIED, IMPROVING):
+        return []
+    return [_finding(
+        FILE_TOO_LONG, config.severity, path, 1,
+        state.describe(path, "lines of code"),
+        _INHERITED if state.classification == WORSENED else _SPLIT,
+    )]
+
+
+def _module_rules(was, now, path, config, known: bool = True) -> list[Finding]:
+    # Greenfield declares the project starts clean, so everything over a limit
+    # is the project's own — the same shape as a baseline of zero.
+    before = 0 if config.greenfield else (was.code_lines if known else None)
+    findings = _file_length(now, path, config, before)
 
     if config.forbid_utility_modules and (config.greenfield or not was.ok or was.lines == 0):
         stem = path.replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
@@ -167,7 +187,7 @@ def _module_rules(was, now, path, config) -> list[Finding]:
     return findings
 
 
-def _function_rules(was, now, path, config) -> list[Finding]:
+def _function_rules(was, now, path, config, known: bool = True) -> list[Finding]:
     previous = {f.qualname: f for f in was.functions}
     findings = []
     for function in now.functions:
@@ -175,17 +195,32 @@ def _function_rules(was, now, path, config) -> list[Finding]:
         for limit in _FUNCTION_LIMITS:
             threshold = getattr(config, f"max_{limit.attribute}", None)
             value = getattr(function, limit.attribute)
-            if not threshold or value <= threshold:
-                continue
-            if not config.greenfield and old is not None and value <= getattr(old, limit.attribute):
-                continue  # already this bad, and not made worse here
+            state = Baseline(value, threshold or 0,
+                             _before(old, limit.attribute, config, known))
+            if not state.over or state.classification in (CARRIED, IMPROVING):
+                continue  # within the limit, or already this bad and not worsened here
             findings.append(_finding(
                 limit.rule, config.severity, path, function.line,
-                f"`{function.qualname}` has {value} {limit.noun}, over the limit "
-                f"of {threshold}.",
-                limit.advice, symbol=function.qualname,
+                state.describe(f"`{function.qualname}`", limit.noun),
+                limit.advice + (f" {INHERITED_NOTE}"
+                                if state.classification == WORSENED else ""),
+                symbol=function.qualname,
             ))
     return findings
+
+
+def _before(old, attribute: str, config, known: bool) -> int | None:
+    """This function's measure at the baseline, or nothing if there is none.
+
+    A function absent from the baseline was written by this change, which is a
+    baseline of zero. A function absent because there *is* no baseline is a
+    different fact and must not be reported as though this change wrote it.
+    """
+    if config.greenfield:
+        return 0
+    if old is not None:
+        return getattr(old, attribute)
+    return 0 if known else None
 
 
 def _duplicates(was, now, path, config) -> list[Finding]:
@@ -236,41 +271,6 @@ def _is_fixture(function) -> bool:
 
 def _shape_pairs(functions) -> set[str]:
     return {shape for shape, group in _shape_groups(functions).items() if len(group) > 1}
-
-
-def _custom(now, path, config) -> list[Finding]:
-    """Project-defined rules, declared in configuration rather than in code."""
-    findings = []
-    for rule in config.custom:
-        if rule.path and not glob.matches(rule.path, path):
-            continue
-        if rule.forbid_call and rule.forbid_call in now.calls:
-            findings.append(_finding(
-                rule.name, rule.severity, path, 1,
-                rule.message or f"`{rule.forbid_call}` may not be called here.",
-                rule.message or f"Remove the call to `{rule.forbid_call}`.",
-            ))
-        if rule.forbid_import:
-            for module in now.imports:
-                if module == rule.forbid_import or module.startswith(f"{rule.forbid_import}."):
-                    findings.append(_finding(
-                        rule.name, rule.severity, path, 1,
-                        rule.message or f"`{module}` may not be imported here.",
-                        rule.message or f"Remove the import of `{module}`.",
-                    ))
-                    break
-        if rule.require_name_pattern:
-            pattern = re.compile(rule.require_name_pattern)
-            for function in now.functions:
-                if "." not in function.qualname and not pattern.search(function.name):
-                    findings.append(_finding(
-                        rule.name, rule.severity, path, function.line,
-                        rule.message
-                        or f"`{function.name}` does not match {rule.require_name_pattern}.",
-                        f"Rename it to match `{rule.require_name_pattern}`.",
-                        symbol=function.qualname,
-                    ))
-    return findings
 
 
 def _finding(rule, status, path, line, detail, prescription, symbol=None) -> Finding:

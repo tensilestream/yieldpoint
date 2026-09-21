@@ -138,9 +138,11 @@ def render(outcome: Outcome) -> str:
         lines.append(f"    {finding.detail}")
         lines.append(f"    Fix: {finding.prescription}")
         lines.append("")
+    from .policyfile import where
+
     lines.append(
-        "Fix these, then stop. If a rule is wrong for this repository, change it "
-        "in .yieldpoint.json, or acknowledge the finding in the source with "
+        f"Fix these, then stop. If a rule is wrong for this repository, "
+        f"{where(outcome.root)}, or acknowledge the finding in the source with "
         "`# yieldpoint: allow <rule> - reason`, rather than working around it."
     )
     return "\n".join(lines)

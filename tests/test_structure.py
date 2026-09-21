@@ -253,5 +253,80 @@ class TestDogfooding(unittest.TestCase):
             self.assertNotIn(DUPLICATE_IMPLEMENTATION, found, str(path))
 
 
+class TestAcknowledgementIsNotCode(unittest.TestCase):
+    """The escape hatch must not create work for the rule it answers.
+
+    Measured before this was fixed: acknowledging ``too_many_parameters`` on a
+    function sitting exactly at the line limit pushed it to 51 and produced a
+    ``function_too_long`` finding that had not existed. The tool manufactured
+    the finding as the price of using its own escape hatch.
+    """
+
+    def _function(self, limit, *, comment=""):
+        head = "def f(a, b, c, d, e, g):\n"
+        body = "\n".join(f"    x{i} = 1" for i in range(limit - 1))
+        return head + comment + body + "\n"
+
+    def test_acknowledging_one_rule_does_not_trip_another(self):
+        config = Structure(greenfield=True)
+        at_limit = self._function(config.max_lines)
+        acknowledged = self._function(
+            config.max_lines,
+            comment="    # yieldpoint: allow too_many_parameters - intentional\n")
+        plain = [f.rule for f in check(None, at_limit, "m.py", config)[0]]
+        after = [f.rule for f in check(None, acknowledged, "m.py", config)[0]]
+        self.assertNotIn(FUNCTION_TOO_LONG, plain)
+        self.assertNotIn(FUNCTION_TOO_LONG, after)
+
+    def test_an_acknowledgement_sharing_a_line_with_code_still_counts(self):
+        """Only a line that exists solely to carry the comment is discounted."""
+        config = Structure(greenfield=True)
+        trailing = ("def f():  # yieldpoint: allow too_many_parameters - yes\n"
+                    + "\n".join(f"    x{i} = 1" for i in range(config.max_lines)))
+        found = [f.rule for f in check(None, trailing, "m.py", config)[0]]
+        self.assertIn(FUNCTION_TOO_LONG, found)
+
+
+class TestWhoseDebtItIs(unittest.TestCase):
+    """A change that adds one line to a long file did not write the long file."""
+
+    def _file(self, lines):
+        return "\n".join(f"x{i} = 1" for i in range(lines)) + "\n"
+
+    def setUp(self):
+        self.config = Structure(max_file_lines=300)
+
+    def test_growing_an_already_long_file_names_both_numbers(self):
+        big = self._file(1385)
+        found = check(big, big + "y = 2\n", "wb.py", self.config)[0]
+        self.assertEqual([f.rule for f in found], [FILE_TOO_LONG])
+        self.assertIn("1,385", found[0].detail)
+        self.assertIn("1,386", found[0].detail)
+
+    def test_inherited_debt_is_not_prescribed_as_this_change_s_work(self):
+        big = self._file(1385)
+        found = check(big, big + "y = 2\n", "wb.py", self.config)[0]
+        self.assertIn("not this change's debt", found[0].prescription)
+
+    def test_a_file_this_change_wrote_gets_the_full_prescription(self):
+        found = check("", self._file(400), "wb.py", self.config)[0]
+        self.assertIn("Split it into modules", found[0].prescription)
+        self.assertNotIn("not this change's debt", found[0].prescription)
+
+    def test_a_file_left_alone_is_not_reported(self):
+        big = self._file(1385)
+        self.assertEqual(check(big, big, "wb.py", self.config)[0], [])
+
+    def test_a_file_being_paid_down_is_not_reported(self):
+        self.assertEqual(
+            check(self._file(1385), self._file(1300), "wb.py", self.config)[0], [])
+
+    def test_without_a_baseline_the_finding_says_it_cannot_attribute(self):
+        found = check(None, self._file(400), "wb.py", self.config)[0]
+        lengths = [f for f in found if f.rule == FILE_TOO_LONG]
+        self.assertEqual(len(lengths), 1)
+        self.assertIn("not known", lengths[0].detail)
+
+
 if __name__ == "__main__":
     unittest.main()

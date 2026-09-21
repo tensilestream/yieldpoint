@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from .starter import STARTER_CONFIG
+from .policyfile import ensure
 from .mcp.clients import (
     BY_KEY, CLIENTS, UnwritableFormat, command_line, config_path,
     install as install_client, snippet,
@@ -178,6 +178,9 @@ def install_hook(args) -> int:
         _compact_tool_output(hooks)
 
     path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+    # Before announcing that anything is enforced: a hook installed over an
+    # unwritten policy enforces numbers no file in the repository states.
+    print(f"policy   {ensure(getattr(args, 'root', None) or '.').describe()}")
     mode = "advisory" if args.advisory else "blocking"
     print(f"registered '{command}' on {HOOK_MATCHER} in {path} ({mode} mode)")
     print(f"registered '{command_line('hook', '--stop')}' on Stop, which catches")
@@ -266,12 +269,7 @@ def init(args) -> int:
     root = Path(args.root or ".")
     print(f"Setting up Yieldpoint in {root.resolve()}\n")
 
-    config = root / ".yieldpoint.json"
-    if config.is_file():
-        print(f"  config   {config} already exists, left alone")
-    else:
-        config.write_text(json.dumps(STARTER_CONFIG, indent=2) + "\n", encoding="utf-8")
-        print(f"  config   wrote {config}")
+    print(f"  config   {ensure(root).describe()}")
 
     client = BY_KEY.get(args.client or "claude-code")
     if client is None:
@@ -296,6 +294,7 @@ def init(args) -> int:
             settings=str(root / ".claude" / "settings.json"),
             advisory=not args.enforce,
             no_report=bool(getattr(args, "no_report", False)),
+            root=str(root),
         )
         install_hook(hook_args)
 
@@ -366,6 +365,9 @@ class _HookArgs:
     settings: str
     advisory: bool
     no_report: bool = False
+    root: str = "."
+    """Where the policy goes. Without it ``init --root elsewhere`` would write
+    one config where it was told to and a second beside the shell's cwd."""
 
 
 # ------------------------------------------------------------------- helpers
