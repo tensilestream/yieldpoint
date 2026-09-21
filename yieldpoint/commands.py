@@ -41,17 +41,21 @@ def only_maintainability(verdict, policy) -> bool:
     one that says an assertion is gone.
     """
     from .core.policychange import POLICY_WEAKENED
+    from .core.scope import NEW_FILE_OUT_OF_SCOPE, OUT_OF_SCOPE_EDIT
     from .core.structure import MAINTAINABILITY_RULES
 
     if not verdict.findings:
         return False
+    # Reported, never enforced: a scope is intent, and intent legitimately
+    # changes mid-task. What must not happen is the drift going unnoticed.
+    advisory = {POLICY_WEAKENED, OUT_OF_SCOPE_EDIT, NEW_FILE_OUT_OF_SCOPE}
     rules = {f.rule for f in verdict.findings}
     # A loosened policy is reported and never enforced, whatever `gates` says.
     # Denying the edit that relaxes a rule would leave a project unable to
     # change its own standards without first defeating the tool enforcing them.
     if policy.structure.gates:
-        return rules <= {POLICY_WEAKENED}
-    return rules <= MAINTAINABILITY_RULES | {POLICY_WEAKENED}
+        return rules <= advisory
+    return rules <= MAINTAINABILITY_RULES | advisory
 
 
 def _exit_for(verdict, policy=None) -> int:
@@ -160,6 +164,7 @@ def review_command(args) -> int:
     with Timer() as timer:
         verdict = verify_diff(diff.text, root=diff.root, policy=policy)
     _record(verdict, Run("review", len(diff.text), timer.elapsed_ms, diff.root), policy)
+    verdict = _within_scope(verdict, diff, policy, args.root)
     code = _emit(verdict, args, policy)
     if not _machine_readable(args):
         print(f"  {basis.describe()}")
@@ -188,6 +193,27 @@ def _nothing_to_check(args, policy, reason: str) -> int:
     elif getattr(args, "json", False):
         print(empty.to_json(indent=2))
     return EXIT_OK
+
+
+def _within_scope(verdict, diff, policy, root):
+    """Add findings for changes outside what this task said it would touch.
+
+    Only here, not in ``verify_change``: a scope is a property of the piece of
+    work, and a single file's verdict has no way to know one exists.
+    """
+    from .core import diff as diffmod
+    from .core import scope
+    from .task import load
+
+    task = load(root)
+    if not task.declared:
+        return verdict
+
+    files = diffmod.parse(diff.text)
+    extra = scope.check(
+        task, [f.path for f in files], created=[f.path for f in files if f.added],
+        severity=policy.structure.severity)
+    return Verdict.combine([verdict, Verdict.of(extra)]) if extra else verdict
 
 
 def _machine_readable(args) -> bool:

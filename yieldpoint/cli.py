@@ -293,6 +293,9 @@ def _parser() -> argparse.ArgumentParser:
 
     from .languages import add_command as add_languages
     add_languages(sub)
+
+    from .task import add_command as add_task
+    add_task(sub)
     _add_reporting_commands(sub)
 
 

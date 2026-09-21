@@ -83,6 +83,19 @@ RULES = {
         "it keeps passing while verifying nothing. Naming the exception you "
         "expect, logging, or re-raising are all fine; only silent breadth is "
         "reported, and only when this change introduced it."),
+    "out_of_scope_edit": (PIPELINE, "repair",
+        "A file outside what this task said it would touch",
+        "Declared with <code>yieldpoint task --touch</code>. The only rule here "
+        "that knows something the code cannot tell it: every other rule reads "
+        "the source and concludes, this one compares what changed against what "
+        "somebody said would change. <strong>Reported, never enforced</strong> "
+        "&mdash; intent legitimately changes mid-task; what must not happen is "
+        "the drift going unnoticed until review."),
+    "new_file_out_of_scope": (PIPELINE, "repair",
+        "A new file, in a task that said it would add none",
+        "The same contract, for <code>--no-new-files</code>. Aimed at the "
+        "habit of answering a question with a new module rather than the one "
+        "that already covers the concern."),
     "policy_weakened": (PIPELINE, "repair", "The rules themselves were loosened",
         "A limit raised, a severity lowered, a rule switched off, a path added to "
         "the exclusions, or the ledger disabled. Raising a threshold until a finding "
