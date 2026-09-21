@@ -117,12 +117,49 @@ class TestTheDocument(unittest.TestCase):
 
 
 class TestThroughTheCommand(unittest.TestCase):
-    def test_nothing_but_the_document_reaches_stdout(self):
-        """The basis line and the pacing bar would corrupt a parsed payload."""
+    """CI parses this, so stdout must always be a document or nothing at all."""
+
+    def setUp(self):
+        import subprocess
+        import tempfile
+        from pathlib import Path as _Path
+
+        self.root = _Path(tempfile.mkdtemp())
+        for args in (["init", "-q", "-b", "main", "."],
+                     ["config", "user.email", "t@t"], ["config", "user.name", "T"]):
+            subprocess.run(["git", *args], cwd=self.root, capture_output=True)
+        (self.root / "a.py").write_text("x = 1\n")
+        subprocess.run(["git", "add", "-A"], cwd=self.root, capture_output=True)
+        subprocess.run(["git", "commit", "-qm", "base"], cwd=self.root,
+                       capture_output=True)
+
+    def _run(self, *extra):
         from tests.test_cli import run
 
-        _, out, _ = run(["review", "--sarif"])
+        _, out, _ = run(["review", "--root", str(self.root), *extra])
+        return out
+
+    def test_nothing_but_the_document_reaches_stdout(self):
+        """The basis line and the pacing bar would corrupt a parsed payload."""
+        (self.root / "b.py").write_text("y = 2\n")
+        out = self._run("--sarif")
         self.assertEqual(json.loads(out)["version"], "2.1.0")
+
+    def test_a_clean_tree_still_emits_a_document(self):
+        """Empty stdout cannot be told from a command that fell over."""
+        payload = json.loads(self._run("--sarif"))
+        self.assertEqual(payload["runs"][0]["results"], [])
+
+    def test_the_empty_document_says_why_it_is_empty(self):
+        """An unqualified pass would be the green banner in its quietest form."""
+        payload = json.loads(self._run("--sarif"))
+        notes = payload["runs"][0]["invocations"][0]["toolExecutionNotifications"]
+        self.assertIn("no uncommitted changes", notes[0]["message"]["text"])
+
+    def test_the_json_form_does_the_same(self):
+        payload = json.loads(self._run("--json"))
+        self.assertEqual(payload["status"], "unverified")
+        self.assertEqual(list(payload["skipped"]), ["no uncommitted changes to check"])
 
 
 if __name__ == "__main__":

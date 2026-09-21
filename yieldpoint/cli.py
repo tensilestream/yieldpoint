@@ -290,6 +290,9 @@ def _parser() -> argparse.ArgumentParser:
 
     from .allows import add_command as add_allows
     add_allows(sub)
+
+    from .languages import add_command as add_languages
+    add_languages(sub)
     _add_reporting_commands(sub)
 
 

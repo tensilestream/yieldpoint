@@ -153,7 +153,7 @@ def review_command(args) -> int:
         # Nothing to check is not a failure, and neither is "not a git
         # repository" — the other commands still work there.
         print(f"yieldpoint: {diff.reason}", file=sys.stderr)
-        return EXIT_OK
+        return _nothing_to_check(args, policy, diff.reason)
 
     from .ledger import Timer
 
@@ -165,6 +165,29 @@ def review_command(args) -> int:
         print(f"  {basis.describe()}")
         console.print_pace(verdict, diff, policy)
     return code
+
+
+def _nothing_to_check(args, policy, reason: str) -> int:
+    """Exit when there was no diff, still emitting a document if one was asked for.
+
+    A parser handed an empty stdout cannot tell "nothing to report" from "the
+    command fell over". CI reads this, so silence is the wrong answer.
+
+    The document carries the reason rather than an unqualified pass, which is
+    the same call ``verify_diff`` makes on an empty diff: a surface that
+    verified nothing must not report that everything is fine (RULES.md section
+    5). The exit code stays 0 — having nothing to check is not a failure.
+    """
+    from .core.verdict import Verdict
+
+    empty = Verdict.of([], skipped=[reason])
+    if getattr(args, "sarif", False):
+        from . import sarif
+
+        print(sarif.dumps(empty, advisory=sarif.advisory_rules(policy)))
+    elif getattr(args, "json", False):
+        print(empty.to_json(indent=2))
+    return EXIT_OK
 
 
 def _machine_readable(args) -> bool:
