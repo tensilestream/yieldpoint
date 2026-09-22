@@ -72,7 +72,17 @@ def measure(source: str, *, filename: str = "<source>") -> ModuleMetrics:
     replayed file (see parsecache.py).
     """
     from .parsecache import Codec, through
+    from .typescript import SUFFIXES, measure as _typescript
 
+    # The language is part of the cache kind, not only the computation: the
+    # key is a hash of the source and `filename` is deliberately excluded from
+    # it, so without this a file of valid-in-both syntax would serve one
+    # language's measurements to the other.
+    if filename.endswith(SUFFIXES):
+        return through(
+            source, Codec("metrics-ts", _encode, _decode),
+            compute=lambda: _typescript(source, filename=filename),
+        )
     return through(
         source, Codec("metrics", _encode, _decode),
         compute=lambda: _measure(source, filename),

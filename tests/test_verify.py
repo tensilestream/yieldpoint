@@ -79,10 +79,14 @@ class TestNothingIsSilentlyPassed(unittest.TestCase):
     def test_unsupported_language_is_skipped_not_passed(self):
         verdict = verify_change(BEFORE, WEAKENED, "tests/a.test.ts", Policy())
         self.assertEqual(verdict.checked, ())
-        self.assertEqual(len(verdict.skipped), 1)
-        # The message has improved twice; the property is what matters.
-        self.assertIsNot(verdict.status, Status.PASS)
+        # The count grew from one to two when TypeScript gained structure
+        # rules: the file is now shape-checked and still assertion-blind, so
+        # it reports two distinct gaps rather than one.
+        self.assertEqual(len(verdict.skipped), 2)
         self.assertTrue(verdict.skipped)
+        self.assertIsNot(verdict.status, Status.PASS)
+        self.assertIn("assertions are not analysed",
+                      " ".join(verdict.skipped))
         self.assertEqual(verdict.checked, ())
 
     def test_unparseable_after_state_is_skipped(self):

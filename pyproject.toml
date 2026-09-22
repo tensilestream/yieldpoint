@@ -39,6 +39,10 @@ dependencies = []
 
 [project.optional-dependencies]
 langgraph = ["langgraph>=0.2"]
+# TypeScript and JavaScript structural analysis. Optional on purpose: the
+# core takes no dependencies, so without these those files stay reported as
+# not evaluated — never as clean. Depth is opt-in; silence is not.
+typescript = ["tree-sitter>=0.23", "tree-sitter-typescript>=0.23"]
 # A real token counter, for repositories that set metrics.tokenizer. Without
 # it every token figure is a 4-chars-per-token estimate and is labelled one.
 # Deliberately not a runtime dependency: loading an encoding may fetch its

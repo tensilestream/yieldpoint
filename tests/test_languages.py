@@ -40,8 +40,25 @@ class TestDepth(unittest.TestCase):
     def test_an_ordinary_yaml_file_is_not(self):
         self.assertEqual(depth_for("config/app.yml", Policy()), NONE)
 
-    def test_typescript_is_not_evaluated(self):
-        self.assertEqual(depth_for("src/app.ts", Policy()), NONE)
+    def test_typescript_gets_structure_rules_but_not_assertions(self):
+        """Listing it as supported without that caveat would be the false
+        green everything else here refuses."""
+        from yieldpoint.core import typescript
+        from yieldpoint.languages import NEEDS_PARSER, STRUCTURE_ONLY
+
+        expected = STRUCTURE_ONLY if typescript.available() else NEEDS_PARSER
+        self.assertEqual(depth_for("src/app.ts", Policy()), expected)
+
+    def test_a_language_nothing_claims_is_not_evaluated(self):
+        self.assertEqual(depth_for("src/main.go", Policy()), NONE)
+
+    def test_without_the_parser_typescript_is_unevaluated_not_clean(self):
+        """Depth is opt-in; silence is not."""
+        from yieldpoint.languages import NEEDS_PARSER
+        from unittest import mock
+
+        with mock.patch("yieldpoint.core.typescript.available", return_value=False):
+            self.assertEqual(depth_for("src/app.ts", Policy()), NEEDS_PARSER)
 
 
 class TestSurvey(unittest.TestCase):
@@ -49,15 +66,15 @@ class TestSurvey(unittest.TestCase):
         """The whole point. A survey that only sees what it covers reports
         100% on every repository ever — which is what the first version did,
         because it reused the walker that filters to analysable files."""
-        root = _tree({"a.py": "x = 1\n", "b.ts": "const x = 1;\n",
+        root = _tree({"a.py": "x = 1\n", "b.rb": "x = 1\n",
                       "c.go": "package main\n"})
         found = {c.extension: c for c in survey(root, Policy())}
-        self.assertEqual(found[".ts"].depth, NONE)
+        self.assertEqual(found[".rb"].depth, NONE)
         self.assertEqual(found[".go"].depth, NONE)
         self.assertEqual(found[".py"].depth, FULL)
 
     def test_a_repository_with_no_python_is_not_reported_as_covered(self):
-        root = _tree({"a.ts": "const x = 1;\n", "b.ts": "const y = 2;\n"})
+        root = _tree({"a.go": "package main\n", "b.go": "package x\n"})
         payload = to_dict(survey(root, Policy()))
         self.assertEqual(payload["analysed"], 0)
         self.assertEqual(payload["source_files"], 2)
@@ -83,19 +100,19 @@ class TestRender(unittest.TestCase):
         return render(survey(_tree(files), Policy()))
 
     def test_it_states_the_share_this_build_analyses(self):
-        text = self._text({"a.py": "x = 1\n", "b.ts": "const x = 1;\n"})
+        text = self._text({"a.py": "x = 1\n", "b.go": "package main\n"})
         self.assertIn("1 of 2 source files (50%)", text)
 
     def test_it_says_the_rest_are_never_reported_as_passing(self):
-        text = self._text({"a.py": "x = 1\n", "b.ts": "const x = 1;\n"})
+        text = self._text({"a.py": "x = 1\n", "b.go": "package main\n"})
         self.assertIn("never as a pass", text)
 
     def test_a_fully_covered_repository_omits_that_warning(self):
         self.assertNotIn("never as a pass", self._text({"a.py": "x = 1\n"}))
 
-    def test_it_names_python_as_the_limit_rather_than_implying_breadth(self):
-        self.assertIn("only language analysed exactly",
-                      self._text({"a.py": "x = 1\n"}))
+    def test_it_names_where_the_depth_stops_rather_than_implying_breadth(self):
+        text = self._text({"a.py": "x = 1\n"})
+        self.assertIn("only language whose *assertions* are checked", text)
 
     def test_one_line_per_extension_even_when_treated_differently(self):
         text = self._text({".github/workflows/ci.yml": "on: push\n",

@@ -33,6 +33,16 @@ FULL = "every rule"
 #: weakened build whatever it is called.
 CI_ONLY = "build-integrity rules only"
 
+#: Shape, size and complexity, but not the rule this package is really about.
+#: A weakened `expect()` in a TypeScript test is not detected today, and
+#: listing the language as supported without saying so would be the exact
+#: false green everything else here refuses.
+STRUCTURE_ONLY = "structure rules only — assertions not checked"
+
+#: The parser is an optional install. Without it these files are unevaluated,
+#: which is the honest answer; silently passing them is not.
+NEEDS_PARSER = "not evaluated — install tree-sitter for structure rules"
+
 #: No analyser claims it. Reported as skipped on every run, never as a pass.
 NONE = "not evaluated"
 
@@ -63,12 +73,16 @@ class Coverage:
 
     @property
     def analysed(self) -> bool:
-        return self.depth is not NONE
+        return self.depth not in (NONE, NEEDS_PARSER)
 
 
 def depth_for(path: str, policy: Policy) -> str:
+    from .core import typescript
+
     if path.endswith(EXACT_SUFFIXES):
         return FULL
+    if path.endswith(typescript.SUFFIXES):
+        return STRUCTURE_ONLY if typescript.available() else NEEDS_PARSER
     if glob.matches_any(policy.ci.paths, path):
         return CI_ONLY
     return NONE
@@ -144,9 +158,11 @@ def render(found: list[Coverage]) -> str:
     if covered < total:
         lines.append("  The rest are reported as not evaluated on every run — "
                      "never as a pass.")
-    lines.append("  Python is the only language analysed exactly today. That is "
-                 "the honest limit,")
-    lines.append("  and a repository is allowed to decide this is not for it yet.")
+    lines.append("  Python is the only language whose *assertions* are checked. "
+                 "TypeScript gets")
+    lines.append("  shape and size only, which is the honest limit — and a "
+                 "repository is allowed")
+    lines.append("  to decide that is not enough for it yet.")
     return "\n".join(lines)
 
 
@@ -176,13 +192,13 @@ def languages_command(args) -> int:
 
 
 def add_command(sub) -> None:
-    command = sub.add_parser(
-        "languages", help="how much of this repository this build can analyse")
-    command.add_argument("--root", default=".")
-    command.add_argument("--policy", default=None)
-    command.add_argument("--json", action="store_true")
-    command.set_defaults(handler=languages_command)
+    from .ledgercommand import register
+
+    register(sub, "languages",
+             "how much of this repository this build can analyse",
+             languages_command)
 
 
 __all__ = ["Coverage", "survey", "render", "to_dict", "depth_for",
+           "STRUCTURE_ONLY", "NEEDS_PARSER",
            "languages_command", "add_command"]

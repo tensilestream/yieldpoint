@@ -12,15 +12,15 @@ that cannot be analysed is recorded in ``skipped`` and never counted as passing
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable, Mapping
 
 from .core import contract as contractrules
 from .core import diff as diffmod
 from .core import generated as generatedmod
-from .core import (acknowledge, boundaries, glob, monotonicity, policychange,
-                   refactor, structure, swallow, workflows)
+from .core import (acknowledge, glob, monotonicity, policychange,
+                   structure, workflows)
+from .dispatch import _fold, _Run, _Source, by_language
 from .core.assertions import extract
 from .core.contract import ASSERTION_MONOTONICITY, EXACT_SUFFIXES
 from .core.linters import report as lintreport
@@ -36,61 +36,6 @@ __all__ = [
     "verify_change", "verify_diff",
     "ASSERTION_MONOTONICITY", "GENERATED_FILE_EDITED", "EXACT_SUFFIXES",
 ]
-
-
-def _fold(result, path: str, findings: list, checked: list, skipped: list) -> None:
-    """Fold one rule family's output into the run being assembled.
-
-    A family that reported why it could not look has not checked the file, and
-    saying otherwise would let an unexamined path count as examined.
-    """
-    family, unread = result
-    findings.extend(family)
-    skipped.extend(unread)
-    if not unread:
-        checked.append(path)
-
-
-@dataclass(frozen=True)
-class _Source:
-    """One file's transition, carried as a unit rather than three arguments."""
-
-    before: str | None
-    after: str | None
-    path: str
-
-
-@dataclass(frozen=True)
-class _Run:
-    """The lists a verification is filling in. Holds references, not copies."""
-
-    findings: list
-    checked: list
-    skipped: list
-
-
-def _python_rules(source: _Source, resolved, also_defined, run: _Run) -> None:
-    """Every rule that needs a Python syntax tree, folded into one run.
-
-    Grouped because they share a precondition and a verdict: if the names pass
-    could not read the file, none of the others looked at it either, so the
-    path is recorded as examined exactly once for the whole group.
-    """
-    before, after, path = source.before, source.after, source.path
-    names, names_skipped = refactor.check(
-        before, after, path,
-        on_dangling=resolved.refactor.dangling_reference,
-        on_export_removed=resolved.refactor.export_removed,
-        also_defined=also_defined or (),
-    )
-    shape, shape_skipped = structure.check(before, after, path, resolved.structure)
-    layers, layers_skipped = boundaries.check(before, after, path, resolved.boundaries)
-
-    run.findings.extend(names + shape + layers)
-    run.findings.extend(swallow.check(before, after, path, resolved.refactor))
-    run.skipped.extend(names_skipped + shape_skipped + layers_skipped)
-    if not names_skipped:
-        run.checked.append(path)
 
 
 def verify_change(
@@ -127,9 +72,8 @@ def verify_change(
     findings.extend(lint_findings)
     skipped.extend(lint_skipped)
 
-    if path.endswith(EXACT_SUFFIXES):
-        _python_rules(_Source(before, after, path), resolved, also_defined,
-                      _Run(findings, checked, skipped))
+    by_language(_Source(before, after, path), resolved, also_defined,
+                _Run(findings, checked, skipped))
 
     if glob.matches_any(resolved.ci.paths, path):
         _fold(workflows.check(before, after, path, resolved.ci),

@@ -256,6 +256,21 @@ def _add_gate_commands(sub) -> None:
     linters_cmd.set_defaults(handler=linters_command)
 
 
+#: Commands that answer a question about the repository rather than verifying
+#: a change. Registered together because they arrive in groups — each one is a
+#: module that owns its own flags — and listing them inline grew the parser
+#: past the length limit this project enforces on everyone else.
+_INSPECTION = ("schema", "summary", "allows", "languages", "task", "trend",
+               "adoption", "lsp")
+
+
+def _add_inspection_commands(sub) -> None:
+    from importlib import import_module
+
+    for name in _INSPECTION:
+        import_module(f".{name}", __package__).add_command(sub)
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="yieldpoint",
@@ -282,20 +297,7 @@ def _parser() -> argparse.ArgumentParser:
     from .recall import add_command as add_recall
     add_recall(sub)
 
-    from .schema import add_command as add_policy
-    add_policy(sub)
-
-    from .summary import add_command as add_summary
-    add_summary(sub)
-
-    from .allows import add_command as add_allows
-    add_allows(sub)
-
-    from .languages import add_command as add_languages
-    add_languages(sub)
-
-    from .task import add_command as add_task
-    add_task(sub)
+    _add_inspection_commands(sub)
     _add_reporting_commands(sub)
 
 

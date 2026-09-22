@@ -92,8 +92,10 @@ class TestCheck(CliCase):
         self.assertIn("yieldpoint:", err)
 
     def test_skipped_files_are_reported_on_stderr(self):
+        """A language no analyser claims. TypeScript no longer qualifies —
+        it gets structure rules — so this uses one that genuinely does not."""
         code, _, err = run(
-            ["check", "--path", "tests/t.ts", "--before", "before.py", "--after", "weaker.py"])
+            ["check", "--path", "tests/t.go", "--before", "before.py", "--after", "weaker.py"])
         self.assertEqual(code, EXIT_UNVERIFIED)
         self.assertIn("skipped:", err)
 
