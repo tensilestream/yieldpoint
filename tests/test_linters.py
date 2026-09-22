@@ -6,6 +6,7 @@ to block a verdict.
 """
 
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -91,7 +92,7 @@ class TestRunnerSafety(unittest.TestCase):
     def test_timeout_is_reported_not_raised(self):
         adapter = Adapter(
             "sleeper", "", (".py",),
-            ("python3", "-c", "import time; time.sleep(30)", "{path}"), "gnu", FAST,
+            (sys.executable, "-c", "import time; time.sleep(30)", "{path}"), "gnu", FAST,
         )
         result = runner.run(adapter, "x.py", "x = 1\n", timeout=1)
         self.assertFalse(result.ran)
@@ -100,7 +101,7 @@ class TestRunnerSafety(unittest.TestCase):
     def test_tool_failing_with_no_parseable_output_is_skipped_not_passed(self):
         adapter = Adapter(
             "broken", "", (".py",),
-            ("python3", "-c", "import sys; sys.exit(3)", "{path}"), "gnu", FAST,
+            (sys.executable, "-c", "import sys; sys.exit(3)", "{path}"), "gnu", FAST,
         )
         result = runner.run(adapter, "x.py", "x = 1\n")
         self.assertFalse(result.ran)
