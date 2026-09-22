@@ -41,6 +41,12 @@ class Written:
     created: bool = False
     error: str = ""
 
+    measured: str = ""
+    """What the repository was found to look like, when a limit was proposed
+    from it. Printed because a threshold nobody can trace is the defect §11
+    exists to fix — a measured number is only better than an arbitrary one if
+    the measurement is shown."""
+
     @property
     def visible(self) -> bool:
         """Whether a person can now open a file and read the rules in force."""
@@ -50,8 +56,10 @@ class Written:
         if self.error:
             return (f"could not write {self.path} ({self.error}); running on "
                     "built-in defaults, which no file in this repository states")
-        return (f"wrote {self.path}" if self.created
-                else f"{self.path} already exists, left alone")
+        if not self.created:
+            return f"{self.path} already exists, left alone"
+        return f"wrote {self.path}" + (f"\n           {self.measured}"
+                                       if self.measured else "")
 
 
 #: Records which build wrote the values below. They are written explicitly so
@@ -61,10 +69,16 @@ class Written:
 WRITTEN_BY = "_written_by"
 
 
-def _stamped() -> dict:
+def _stamped(limit: int | None = None) -> dict:
+    """The starter policy, with any measured limit written in rather than null."""
+    import copy
+
     from . import __version__
 
-    return {WRITTEN_BY: __version__, **STARTER_CONFIG}
+    config = copy.deepcopy(STARTER_CONFIG)
+    if limit:
+        config["structure"]["max_file_lines"] = limit
+    return {WRITTEN_BY: __version__, **config}
 
 
 def written_by(root: str | Path = ".") -> str:
@@ -94,11 +108,32 @@ def ensure(root: str | Path = ".") -> Written:
     path = Path(root) / FILENAME
     if path.is_file():
         return Written(path, created=False)
+    # Measured only when writing: a limit proposed from the repository is worth
+    # the walk once, and an existing policy is never second-guessed.
+    found = _calibrated(root)
     try:
-        path.write_text(json.dumps(_stamped(), indent=2) + "\n", encoding="utf-8")
+        path.write_text(json.dumps(_stamped(found[0]), indent=2) + "\n",
+                        encoding="utf-8")
     except OSError as exc:
         return Written(path, created=False, error=str(exc))
-    return Written(path, created=True)
+    return Written(path, created=True, measured=found[1])
+
+
+def _calibrated(root: str | Path) -> tuple[int | None, str]:
+    """A file-length limit measured from this repository, and what was seen.
+
+    Never fatal: a repository this cannot survey gets the starter's ``null``,
+    which is the same answer it got before this existed.
+    """
+    from .calibrate import describe, survey
+
+    try:
+        found = survey(root)
+    except OSError:
+        return None, ""
+    if not found.enough:
+        return None, describe(found)
+    return found.proposal, describe(found)
 
 
 def where(root: str | Path = ".") -> str:
