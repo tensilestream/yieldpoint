@@ -2,6 +2,7 @@
 
 import unittest
 
+from yieldpoint.core import typescript
 from yieldpoint.core.policy import Policy
 from yieldpoint.core.verdict import Status
 from yieldpoint.verify import ASSERTION_MONOTONICITY, verify_change
@@ -79,10 +80,11 @@ class TestNothingIsSilentlyPassed(unittest.TestCase):
     def test_unsupported_language_is_skipped_not_passed(self):
         verdict = verify_change(BEFORE, WEAKENED, "tests/a.test.ts", Policy())
         self.assertEqual(verdict.checked, ())
-        # The count grew from one to two when TypeScript gained structure
-        # rules: the file is now shape-checked and still assertion-blind, so
-        # it reports two distinct gaps rather than one.
-        self.assertEqual(len(verdict.skipped), 2)
+        # The file is not assertion-analysed. When tree-sitter is installed,
+        # it is shape-checked (2 gaps: assertion blind, and no lexical tests).
+        # Without tree-sitter, the missing parser is reported as an extra gap.
+        expected = 2 if typescript.available() else 3
+        self.assertEqual(len(verdict.skipped), expected)
         self.assertTrue(verdict.skipped)
         self.assertIsNot(verdict.status, Status.PASS)
         self.assertIn("assertions are not analysed",

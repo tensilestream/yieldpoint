@@ -13,6 +13,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from yieldpoint.core.policy import Policy
 from yieldpoint.policyfile import FILENAME, ensure, locate, where
@@ -52,11 +53,8 @@ class TestEnsure(unittest.TestCase):
 
     def test_an_unwritable_repository_is_reported_not_raised(self):
         """Refusing to install would trade a visible problem for a worse one."""
-        os.chmod(self.root, 0o555)
-        try:
+        with mock.patch.object(Path, "write_text", side_effect=OSError("Permission denied")):
             written = ensure(self.root)
-        finally:
-            os.chmod(self.root, 0o755)
         self.assertFalse(written.created)
         self.assertFalse(written.visible)
         self.assertIn("built-in defaults", written.describe())

@@ -150,7 +150,7 @@ def measure(source: str, *, filename: str = "<source>") -> ModuleMetrics:
     """Measure one module. Never raises; reports why when it cannot."""
     if not available():
         return ModuleMetrics(error=(
-            f"{filename}: TypeScript support needs the `tree-sitter` and "
+            "TypeScript support needs the `tree-sitter` and "
             "`tree-sitter-typescript` packages; install them or these files "
             "stay unevaluated"))
     try:

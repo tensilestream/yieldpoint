@@ -10,6 +10,15 @@ package version is not.
 
 ## [Unreleased]
 
+## [0.1.4] — unreleased
+
+### Added
+
+- **TypeScript and JavaScript structural analysis.** Evaluates file length, function
+  length, parameter count, nesting, cyclomatic complexity, and swallowed exceptions
+  via tree-sitter.
+- **Diagnostics over LSP.** Compared against the committed file.
+
 ## [0.1.3] — unreleased
 
 ### Added
@@ -346,6 +355,9 @@ First release. Verdict `schema_version` 1.
 - Subject aliasing (`inv` renamed to `invoice`) is a false positive, pinned as a test.
 - The repair-loop cost claim is not benchmarked against a real model.
 
-[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.3...HEAD
+[0.1.4]: https://github.com/tensilestream/yieldpoint/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/tensilestream/yieldpoint/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/tensilestream/yieldpoint/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/tensilestream/yieldpoint/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/tensilestream/yieldpoint/releases/tag/v0.1.0

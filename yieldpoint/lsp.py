@@ -44,7 +44,16 @@ def severity_for(finding, advisory: bool) -> int:
 
 def path_of(uri: str) -> str:
     """The file a `file://` URI names, with percent-escapes undone."""
-    return unquote(urlparse(uri).path)
+    normalized = uri.replace("\\", "/")
+    parsed = urlparse(normalized)
+    if parsed.netloc and len(parsed.netloc) == 2 and parsed.netloc[1] == ":":
+        path = f"{parsed.netloc}{parsed.path}"
+    else:
+        path = parsed.path
+    decoded = unquote(path)
+    if len(decoded) >= 3 and decoded[0] == "/" and decoded[1].isalpha() and decoded[2] == ":":
+        return decoded[1:]
+    return decoded
 
 
 def committed(path: str, root: Path) -> str | None:
@@ -54,7 +63,7 @@ def committed(path: str, root: Path) -> str | None:
     file and honest for a repository git cannot read.
     """
     try:
-        relative = str(Path(path).resolve().relative_to(root.resolve()))
+        relative = Path(path).resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return None
     try:
@@ -96,7 +105,7 @@ def analyse(uri: str, text: str | None, root: Path, policy) -> list[dict]:
         except (OSError, UnicodeDecodeError):
             return []
     try:
-        relative = str(Path(path).resolve().relative_to(root.resolve()))
+        relative = Path(path).resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         relative = path
     verdict = verify_change(committed(path, root), after, relative, policy,

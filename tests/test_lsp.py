@@ -59,6 +59,12 @@ class TestUri(unittest.TestCase):
     def test_percent_escapes_are_undone(self):
         self.assertEqual(path_of("file:///tmp/my%20file.py"), "/tmp/my file.py")
 
+    def test_windows_file_uri(self):
+        self.assertEqual(path_of("file:///C:/path/to/file.py"), "C:/path/to/file.py")
+
+    def test_windows_file_uri_with_backslashes(self):
+        self.assertEqual(path_of("file://C:\\path\\to\\file.py"), "C:/path/to/file.py")
+
 
 class TestProtocol(unittest.TestCase):
     def _serve(self, *messages, root="."):
@@ -97,7 +103,8 @@ class TestAgainstTheCommittedFile(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
         for args in (["init", "-q", "-b", "main", "."],
-                     ["config", "user.email", "t@t"], ["config", "user.name", "T"]):
+                     ["config", "user.email", "t@t"], ["config", "user.name", "T"],
+                     ["config", "core.autocrlf", "false"]):
             subprocess.run(["git", *args], cwd=self.root, capture_output=True)
         (self.root / "a.py").write_text(
             "def f():\n    try:\n        go()\n    except KeyError:\n        return 1\n")
@@ -107,7 +114,7 @@ class TestAgainstTheCommittedFile(unittest.TestCase):
 
     def _diagnostics(self, text=None):
         out = io.BytesIO()
-        uri = f"file://{self.root / 'a.py'}"
+        uri = (self.root / "a.py").as_uri()
         params = {"textDocument": {"uri": uri}}
         if text is not None:
             params["text"] = text
