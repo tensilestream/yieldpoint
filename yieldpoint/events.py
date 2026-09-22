@@ -4,6 +4,17 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 
+def _split(data: dict) -> int | None:
+    """How many findings were inherited, or ``None`` when the row predates it.
+
+    Absent and null both mean the turn was never classified. Zero means it was,
+    and nothing was inherited — a trend that read the first as the second would
+    invent a split for history that has none.
+    """
+    value = data.get("inherited")
+    return None if value is None else int(value)
+
+
 @dataclass(frozen=True)
 class Event:
     """One verification, reduced to what can be counted."""
@@ -17,6 +28,20 @@ class Event:
     files_checked: int = 0
     files_skipped: int = 0
     duration_ms: int = 0
+
+    inherited: int | None = None
+    """How many findings this change worsened rather than introduced.
+
+    Recorded from the day attribution shipped, deliberately ahead of anything
+    that reads it. A trend can only be shown over history that was kept, so the
+    cost of adding the field late is not the field — it is every turn recorded
+    before it, which can never be classified afterwards.
+
+    ``None`` for exactly those turns: written before this was recorded, so the
+    split is unknown. Distinct from ``0``, which means the turn was classified
+    and nothing was inherited. A trend that read the first as the second would
+    invent a split for history that has none.
+    """
 
     severities: tuple[str, ...] = ()
     """Status of each finding, so severity can be reported separately from count."""
@@ -63,6 +88,7 @@ class Event:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Event":
+        """Read one row. Absent fields take their default, not an error."""
         event = cls(
             surface=str(data.get("surface", "")),
             status=str(data.get("status", "")),
@@ -77,6 +103,9 @@ class Event:
             run=str(data.get("run", "")),
             agent=str(data.get("agent", "")),
             acknowledged=int(data.get("acknowledged", 0)),
+            # Absent in every row written before attribution shipped, and
+            # left as None there: unknown is not zero.
+            inherited=_split(data),
             severities=tuple(data.get("severities", ())),
             confidences=tuple(data.get("confidences", ())),
             languages=tuple(data.get("languages", ())),
