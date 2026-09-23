@@ -240,7 +240,10 @@ def _duplicates(was, now, path, config) -> list[Finding]:
     existing = _shape_pairs(was.functions)
     findings = []
     for shape, group in _shape_groups(now.functions).items():
-        if len(group) < 2 or shape in existing:
+        # TypeScript exposes structural metrics but deliberately has no AST
+        # shape encoding yet. An empty shape means "unknown", not "every
+        # function is the same implementation".
+        if not shape or len(group) < 2 or shape in existing:
             continue
         if all(_is_fixture(f) for f in group):
             continue

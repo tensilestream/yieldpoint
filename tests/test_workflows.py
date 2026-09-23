@@ -68,9 +68,16 @@ class TestExtraction(unittest.TestCase):
     def test_block_scalar_commands(self):
         source = (
             "jobs:\n  a:\n    steps:\n      - name: Two things\n        run: |\n"
-            "          echo one\n          echo two\n"
+            "          python one.py\n          python two.py\n"
         )
-        self.assertEqual(steps_of(source)[0].identity, "run:echo one echo two")
+        self.assertEqual(
+            [step.identity for step in steps_of(source)],
+            ["run:python one.py", "run:python two.py"],
+        )
+
+    def test_bookkeeping_is_not_a_check(self):
+        source = "jobs:\n  a:\n    steps:\n      - run: VERSION=1\n      - run: git add file\n"
+        self.assertEqual(steps_of(source), ())
 
     def test_empty_input(self):
         self.assertEqual(steps_of(""), ())

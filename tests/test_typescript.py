@@ -87,6 +87,11 @@ class TestThroughVerify(unittest.TestCase):
         verdict = verify_change("x = 1\n", "x = 2\n", "src/a.py")
         self.assertEqual(list(verdict.checked), ["src/a.py"])
 
+    def test_unknown_typescript_shapes_do_not_claim_duplication(self):
+        source = "function first() { return 1; }\nfunction second() { return 2; }\n"
+        verdict = verify_change(source, source, "src/adapters.js")
+        self.assertNotIn("duplicate_implementation", [f.rule for f in verdict.findings])
+
 
 @unittest.skipUnless(AVAILABLE, "tree-sitter not installed")
 class TestTheCacheKnowsTheLanguage(unittest.TestCase):

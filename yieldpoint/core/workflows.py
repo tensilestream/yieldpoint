@@ -59,10 +59,14 @@ def steps_of(source: str) -> tuple[Step, ...]:
 
     for start, end, indent in blocks:
         body = lines[start:end]
-        identity = _identity(body)
-        if not identity:
+        action = _action_identity(body)
+        if action:
+            steps.append(Step(action, start + 1, _disabled(body, indent, lines, start)))
             continue
-        steps.append(Step(identity, start + 1, _disabled(body, indent, lines, start)))
+        for line, command in _commands(body, start):
+            if _is_check(command):
+                steps.append(Step(f"run:{_normalise(command)}", line,
+                                  _disabled(body, indent, lines, start)))
     return tuple(steps)
 
 
@@ -138,8 +142,8 @@ def _blocks(lines: list[str]) -> list[tuple[int, int, int]]:
     return blocks
 
 
-def _identity(body: list[str]) -> str:
-    """What this step actually does: its action, or its command."""
+def _action_identity(body: list[str]) -> str:
+    """The stable identity of an action step, if this is one."""
     for line in body:
         match = _KEY.match(line.lstrip("- "))
         if match and match.group("key") in ("uses", "repo"):
@@ -147,8 +151,37 @@ def _identity(body: list[str]) -> str:
             if value:
                 return f"uses:{_action(value)}"
 
-    command = _command(body)
-    return f"run:{_normalise(command)}" if command else ""
+    return ""
+
+
+def _commands(body: list[str], start: int) -> tuple[tuple[int, str], ...]:
+    """Each shell command in a step, rather than one fragile joined script."""
+    for index, line in enumerate(body):
+        stripped = line.lstrip("- ")
+        match = _KEY.match(stripped)
+        if not match or match.group("key") != "run":
+            continue
+        value = match.group("value").strip()
+        if value not in ("|", ">", "|-", ">-", ""):
+            return ((start + index + 1, value),)
+        indent = len(line) - len(line.lstrip()) + 2
+        commands = []
+        for offset, following in enumerate(body[index + 1:], start=index + 1):
+            if following.strip() and not following.startswith(" " * indent):
+                break
+            command = following.strip()
+            if command and not command.startswith("#"):
+                commands.append((start + offset + 1, command))
+        return tuple(commands)
+    return ()
+
+
+def _is_check(command: str) -> bool:
+    """Ignore workflow bookkeeping; retain commands whose removal loses a check."""
+    stripped = command.strip()
+    if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", stripped):
+        return False
+    return not stripped.startswith(("cd ", "echo ", "git ", "mkdir ", "mv ", "cp "))
 
 
 def _action(value: str) -> str:
