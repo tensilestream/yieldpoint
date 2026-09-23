@@ -1,7 +1,5 @@
-name: Yieldpoint
-description: >-
-  Reports whether a change weakens what the tests verify, and which findings
-  the change introduced rather than inherited.
+name: Yieldpoint Review
+description: Verifies code changes and AI edits didn't pass by weakening test assertions or dropping coverage.
 author: tensilestream
 
 branding:
