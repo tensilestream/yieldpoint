@@ -26,11 +26,14 @@ DEFAULT_MAX_REPEATS = 3
 
 def signature(*parts: str) -> str:
     """A stable fingerprint of one attempt. No randomness, no clock."""
-    digest = hashlib.blake2b(digest_size=12)
+    # SHA-256 is available in Python, Node and the JDK without an extra
+    # dependency. Keeping this fingerprint portable lets every binding detect
+    # the same stalled proposal rather than implementing its own loop rule.
+    digest = hashlib.sha256()
     for part in parts:
         digest.update((part or "").encode("utf-8", "replace"))
         digest.update(b"\x00")
-    return digest.hexdigest()
+    return digest.hexdigest()[:24]
 
 
 def observe(

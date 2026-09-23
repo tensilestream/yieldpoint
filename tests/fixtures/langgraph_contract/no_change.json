@@ -1,0 +1,11 @@
+{
+  "name": "no_change_is_unverified",
+  "state": {},
+  "expected": {
+    "status": "unverified",
+    "route": "unverified",
+    "skipped": ["no change found in state"],
+    "attempts": 1,
+    "loop_tripped": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "clean_change_passes",
+  "state": {
+    "changes": [{
+      "path": "src/invoice.py",
+      "before": "def total():\n    return 41\n",
+      "after": "def total():\n    return 42\n"
+    }]
+  },
+  "expected": {
+    "status": "pass",
+    "route": "pass",
+    "attempts": 1,
+    "loop_tripped": false
+  }
+}

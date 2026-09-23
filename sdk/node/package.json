@@ -1,0 +1,44 @@
+{
+  "name": "@tensilestream/yieldpoint-langgraph",
+  "version": "0.1.4",
+  "description": "LangGraph.js adapter for the canonical Yieldpoint CLI verifier",
+  "license": "BUSL-1.1",
+  "type": "module",
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "@langchain/langgraph": ">=0.2"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/langgraph": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "pack:check": "npm pack --dry-run"
+  },
+  "keywords": [
+    "langgraph",
+    "verification",
+    "ai-agents",
+    "code-review"
+  ],
+  "devDependencies": {
+    "@langchain/langgraph": "^0.2.74"
+  }
+}
