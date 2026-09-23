@@ -9,8 +9,17 @@ from __future__ import annotations
 
 import json
 import os
+import sys
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+# Examples are executed directly from a source checkout in CI, where the bare
+# interpreter deliberately has no installed Yieldpoint package.  Resolve the
+# checkout root only for that direct-script form; installed users import the
+# package normally and do not need this branch.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from yieldpoint.harness import Change, admit, build_profile
 
