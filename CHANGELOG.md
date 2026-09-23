@@ -15,8 +15,8 @@ package version is not.
 ### Added
 
 - **GitHub Action and Marketplace integration.** Ready-to-use composite GitHub
-  Action (`action.yml`) with automated PR diff checking, SARIF code scanning annotations,
-  and Job Summary reporting.
+  Action (`action.yml`) named `Yieldpoint Review` with automated PR diff checking,
+  SARIF code scanning annotations, and Job Summary reporting.
 - **The per-edit gate can no longer deny the same thing forever.** After
   `loop_breaker.max_repeats_without_progress` identical denials — same session, same
   file, same rules — it stands down, says so, and leaves the finding to the stop gate.
