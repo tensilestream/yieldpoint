@@ -316,10 +316,10 @@ jobs:
         run: |
           if [ -n "${NODE_AUTH_TOKEN}" ]; then
             echo "Publishing to npm using token..."
-            npm publish dist/*.tgz --access public
+            npm publish ./dist/*.tgz --access public
           else
             echo "Publishing to npm using Trusted Publishing (OIDC)..."
-            npm publish dist/*.tgz --access public --provenance
+            npm publish ./dist/*.tgz --access public --provenance
           fi
 
   publish-maven:
@@ -342,17 +342,20 @@ jobs:
           server-username: MAVEN_CENTRAL_USERNAME
           server-password: MAVEN_CENTRAL_PASSWORD
       - name: Import release signing key
+        id: import_gpg
         run: |
           KEY="${MAVEN_GPG_PRIVATE_KEY:-$GPG_PRIVATE_KEY}"
           if [ -z "$KEY" ]; then
-            echo "::error ::No GPG private key found in MAVEN_GPG_PRIVATE_KEY or GPG_PRIVATE_KEY."
-            exit 1
+            echo "::warning ::No GPG private key found in MAVEN_GPG_PRIVATE_KEY or GPG_PRIVATE_KEY. Skipping Maven Central publication."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           echo "$KEY" | gpg --batch --import
         env:
           MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
           GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
       - name: Sign and publish the validated release version
+        if: steps.import_gpg.outputs.skip != 'true'
         run: mvn -B -Prelease -f sdk/java/pom.xml verify central-publishing:publish
         env:
           MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME || secrets.OSSRH_USERNAME }}
