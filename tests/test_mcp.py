@@ -227,12 +227,12 @@ class TestInstalling(unittest.TestCase):
     def setUp(self):
         self._previous = Path.cwd()
         self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
         self.root = Path(self._tmp.name)
         os.chdir(self.root)
+        self.addCleanup(os.chdir, self._previous)
         from yieldpoint.core import parsecache
         self.addCleanup(parsecache.close)
-        self.addCleanup(os.chdir, self._previous)
-        self.addCleanup(self._tmp.cleanup)
 
     def test_writing_a_project_config(self):
         path, backup = install(BY_KEY["claude-code"], self.root)

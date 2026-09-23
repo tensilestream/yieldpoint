@@ -44,8 +44,8 @@ class YieldpointRouterTest {
   }
 
   @Test void executes_the_canonical_cli_and_keeps_a_json_safe_verdict() {
-    Path repository = Path.of("").toAbsolutePath().normalize();
-    var client = new YieldpointVerifier(List.of("yieldpoint"), Duration.ofSeconds(15), repository);
+    Path repository = findRepositoryRoot();
+    var client = new YieldpointVerifier(resolveCliCommand(repository), Duration.ofSeconds(15), repository);
     var node = new YieldpointVerificationNode(client);
     Map<String, Object> update = node.apply(Map.of("changes", List.of(Map.of(
         "path", "src/invoice.py", "before", "def total():\n    return 41\n",
@@ -54,6 +54,36 @@ class YieldpointRouterTest {
     assertEquals(4, ((Number) verdict.get("schema_version")).intValue());
     assertEquals("pass", verdict.get("status"));
     assertEquals("", update.get("prescription"));
+  }
+
+  private static Path findRepositoryRoot() {
+    Path here = Path.of("").toAbsolutePath().normalize();
+    if (java.nio.file.Files.isDirectory(here.resolve("yieldpoint"))) return here;
+    Path parent = here.resolve("../..").normalize();
+    if (java.nio.file.Files.isDirectory(parent.resolve("yieldpoint"))) return parent;
+    return here;
+  }
+
+  private static List<String> resolveCliCommand(Path repository) {
+    String override = System.getenv("YIELDPOINT_BIN");
+    if (override != null && !override.isBlank()) return List.of(override);
+    if (canRun(List.of("yieldpoint", "--version"), repository)) return List.of("yieldpoint");
+    if (canRun(List.of("python3", "-m", "yieldpoint", "--version"), repository)) {
+      return List.of("python3", "-m", "yieldpoint");
+    }
+    if (canRun(List.of("python", "-m", "yieldpoint", "--version"), repository)) {
+      return List.of("python", "-m", "yieldpoint");
+    }
+    return List.of("yieldpoint");
+  }
+
+  private static boolean canRun(List<String> command, Path cwd) {
+    try {
+      Process process = new ProcessBuilder(command).directory(cwd.toFile()).start();
+      return process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS) && process.exitValue() == 0;
+    } catch (Exception e) {
+      return false;
+    }
   }
 
   @Test void accepts_the_shared_routing_profile_and_session_fixture() throws Exception {
