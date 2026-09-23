@@ -1,6 +1,6 @@
 {
   "name": "@tensilestream/yieldpoint-langgraph",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "LangGraph.js adapter for the canonical Yieldpoint CLI verifier",
   "license": "BUSL-1.1",
   "type": "module",
