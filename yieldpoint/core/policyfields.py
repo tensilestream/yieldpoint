@@ -24,6 +24,7 @@ from .policy import (
     Structure,
     Zone,
 )
+from .routingsession import CHECKS, EVENTS
 
 
 def _section(raw: dict[str, Any], key: str, warnings: list[str]) -> dict[str, Any]:
@@ -116,8 +117,7 @@ def _routing_session(raw: dict[str, Any], warnings: list[str]) -> RoutingSession
     capsule = _bounded_int(raw.get("capsule_max_chars"), defaults.capsule_max_chars, (1_000, 24_000), warnings, "routing_session.capsule_max_chars")
     overhead = _bounded_fraction(raw.get("router_overhead_fraction"), defaults.router_overhead_fraction, warnings)
     events = _str_tuple(raw.get("checkpoint_events"), warnings, "routing_session.checkpoint_events")
-    known = {"verification_failed", "repair_exhausted", "loop_tripped", "user_requested"}
-    unknown = sorted(set(events) - known)
+    unknown = sorted(set(events) - set(EVENTS))
     if unknown:
         warnings.append("routing_session.checkpoint_events: unknown event(s) " + ", ".join(unknown))
     return RoutingSession(
@@ -126,8 +126,35 @@ def _routing_session(raw: dict[str, Any], warnings: list[str]) -> RoutingSession
         capsule_max_chars=capsule,
         router_overhead_fraction=float(overhead),
         allow_unverified=bool(raw.get("allow_unverified", defaults.allow_unverified)),
-        checkpoint_events=tuple(event for event in (events or defaults.checkpoint_events) if event in known),
+        checkpoint_events=tuple(event for event in (events or defaults.checkpoint_events) if event in EVENTS),
+        required_checks=_required_checks(raw.get("required_checks"), defaults, warnings),
     )
+
+
+def _required_checks(value: object, defaults: RoutingSession,
+                     warnings: list[str]) -> dict[str, tuple[str, ...]]:
+    """Read named check sets, dropping only the entries that are unusable.
+
+    A typo in one situation must not silently discard the others, so each key is
+    validated on its own and a rejected key falls back to its default.
+    """
+    if value is None:
+        return dict(defaults.required_checks)
+    if not isinstance(value, dict):
+        warnings.append("routing_session.required_checks: expected an object; using defaults")
+        return dict(defaults.required_checks)
+    out = dict(defaults.required_checks)
+    for situation, checks in value.items():
+        named = _str_tuple(checks, warnings, f"routing_session.required_checks.{situation}")
+        unknown = sorted(set(named) - set(CHECKS))
+        if unknown:
+            warnings.append(
+                f"routing_session.required_checks.{situation}: unknown check(s) "
+                + ", ".join(unknown))
+        kept = tuple(check for check in named if check in CHECKS)
+        if kept:
+            out[str(situation)] = kept
+    return out
 
 
 def _bounded_int(value: object, default: int, bounds: tuple[int, int],
