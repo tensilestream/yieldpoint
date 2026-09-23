@@ -10,8 +10,13 @@ package version is not.
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-09-23
+
 ### Added
 
+- **GitHub Action and Marketplace integration.** Ready-to-use composite GitHub
+  Action (`action.yml`) with automated PR diff checking, SARIF code scanning annotations,
+  and Job Summary reporting.
 - **The per-edit gate can no longer deny the same thing forever.** After
   `loop_breaker.max_repeats_without_progress` identical denials — same session, same
   file, same rules — it stands down, says so, and leaves the finding to the stop gate.
@@ -39,7 +44,7 @@ package version is not.
   lookup that were previously private, rather than having callers duplicate them.
 
 
-## [0.1.5] — unreleased
+## [0.1.5] — 2026-09-23
 
 ### Added
 
@@ -444,7 +449,9 @@ First release. Verdict `schema_version` 1.
 - Subject aliasing (`inv` renamed to `invoice`) is a false positive, pinned as a test.
 - The repair-loop cost claim is not benchmarked against a real model.
 
-[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/tensilestream/yieldpoint/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/tensilestream/yieldpoint/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tensilestream/yieldpoint/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tensilestream/yieldpoint/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/tensilestream/yieldpoint/compare/v0.1.1...v0.1.2
