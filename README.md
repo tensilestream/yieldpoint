@@ -19,13 +19,13 @@
 </p>
 
 <p align="center">
-  <!-- Restore both of these the moment 0.1.0 is on PyPI; until the package
-       exists they render as red "package or version not found". -->
-  <img alt="Python versions" src="https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue.svg">
+  <a href="https://pypi.org/project/yieldpoint/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/yieldpoint.svg?color=blue"></a>
+  <a href="https://www.npmjs.com/package/@tensilestream/yieldpoint-langgraph"><img alt="npm version" src="https://img.shields.io/npm/v/@tensilestream/yieldpoint-langgraph.svg?color=blue"></a>
+  <a href="https://central.sonatype.com/artifact/io.github.tensilestream/yieldpoint-langgraph4j"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/io.github.tensilestream/yieldpoint-langgraph4j.svg?color=blue"></a>
+  <a href="https://github.com/tensilestream/homebrew-tap"><img alt="Homebrew" src="https://img.shields.io/badge/homebrew-tensilestream%2Ftap-orange.svg"></a>
   <a href="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/tensilestream/yieldpoint/actions/workflows/ci.yml/badge.svg"></a>
   <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-BUSL--1.1-blue.svg"></a>
-  <a href="./COMMERCIAL.md"><img alt="Free tier" src="https://img.shields.io/badge/free-teams%20under%2010-brightgreen.svg"></a>
-  <img alt="Dependencies" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
+  <img alt="Runtime Dependencies" src="https://img.shields.io/badge/runtime%20deps-0-brightgreen.svg">
 </p>
 
 ---
@@ -92,7 +92,8 @@ where the assertion is the negation of the guard &mdash; and testify.
 [rules reference](https://tensilestream.github.io/yieldpoint/rules.html) generated from the engine.
 
 
-- [Install](#install) · [Quick start](#quick-start) — two commands
+- [Why Yieldpoint?](#why-engineers-use-yieldpoint) · [Install & Packages](#install--packages)
+- [Quick start](#quick-start) — two commands
 - [`yieldpoint review`](#yieldpoint-review--the-whole-product-in-one-command) · [Editor setup (MCP)](#editor-setup-mcp)
 - [The vision](#the-vision) · [Where it goes in the loop](#where-it-goes-in-the-loop)
 - [LangGraph](#use-it-in-your-agents-graph) · [CI and pre-commit](#gate-ci-and-commits)
@@ -108,32 +109,87 @@ where the assertion is the negation of the guard &mdash; and testify.
 
 ---
 
-## Install
+## Why Engineers Use Yieldpoint
 
+| What AI Coding Agents Do | What Conventional CI Sees | What Yieldpoint Does |
+|---|---|---|
+| **Weakens assertions** (`assert total == 42.00` &rarr; `assert total is not None`) | Tests pass, coverage is 100%, linters stay silent | **Catches weakening immediately** and blocks commit/graph |
+| **Deletes or skips failing tests** to report completion | Passing build (lines were merely deleted) | **Identifies removed assertions** & dropped test coverage |
+| **Spins in infinite edit/repair loops** | Burns tokens, degrades prompt context | **Trips circuit-breaker**, provides bounded loop escalation |
+| **Guesses fixes with hallucinations** | Flaky, non-deterministic suggestions | **Prescribes exact code fix** deterministically in <10ms |
+
+### Key Developer Benefits
+* ⚡ **<10ms Deterministic Execution**: Zero runtime dependencies, runs 100% offline, consumes 0 LLM tokens, identical results on any machine.
+* 🛡️ **Transition Verification**: Grades what was *taken away* between `before` and `after`, not just static code syntax.
+* 🔧 **Actionable Prescriptions**: Emits clear, deterministic remediation instructions that humans or agents can apply directly.
+* 🌐 **Multi-Ecosystem SDKs**: Native packages for **Homebrew**, **Python (PyPI)**, **Node.js (npm)**, and **Java (Maven Central)**.
+
+---
+
+## Install & Packages
+
+Pick the package matching your language and stack:
+
+| Distribution | Environment / Framework | Installation | Package Details |
+|---|---|---|---|
+| **Homebrew** | macOS & Linux CLI / Terminal | `brew install tensilestream/tap/yieldpoint` | [Formula](https://github.com/tensilestream/homebrew-tap/blob/main/Formula/yieldpoint.rb) · Provides `yieldpoint` & `yp` |
+| **PyPI** | Python 3.10+ & LangGraph | `pip install yieldpoint` | [PyPI](https://pypi.org/project/yieldpoint/) · Engine, CLI, MCP server |
+| **npm** | Node.js 18+ & LangGraph.js | `npm install @tensilestream/yieldpoint-langgraph` | [npm](https://www.npmjs.com/package/@tensilestream/yieldpoint-langgraph) · [Node SDK Guide](docs/sdk/node.md) |
+| **Maven Central** | Java 17+ & LangGraph4j | `io.github.tensilestream:yieldpoint-langgraph4j` | [Central Portal](https://central.sonatype.com/artifact/io.github.tensilestream/yieldpoint-langgraph4j) · [Java SDK Guide](docs/sdk/java.md) |
+
+### 1. Homebrew (macOS & Linux)
+The fastest way to install the CLI standalone:
 ```sh
-pip install yieldpoint                 # the engine and CLI, zero dependencies
-pip install "yieldpoint[langgraph]"    # plus the LangGraph example's requirements
+brew tap tensilestream/tap
+brew install yieldpoint
+
+yieldpoint --version
+yp --version            # short alias
 ```
 
-For graph runtimes outside Python, see the [Node LangGraph adapter](docs/sdk/node.md)
-and [Java/LangGraph4j adapter](docs/sdk/java.md). Both call this same CLI and
-therefore share every rule and verdict contract.
-
-The machine-facing [CLI JSON contract](docs/cli.md) explains how Node, Java,
-CI, editor hooks, and pre-commit integrations must handle verdict exit codes.
-
-Requires Python 3.10 or newer. Nothing else — the verification core has no runtime
-dependencies, makes no network calls, and never invokes a model.
-
-<details>
-<summary>Other install methods</summary>
-
+### 2. Python / PyPI
 ```sh
-pipx install yieldpoint                            # isolated CLI
-uv tool install yieldpoint                         # same, via uv
-pip install git+https://github.com/tensilestream/yieldpoint    # from source
+pip install yieldpoint                 # engine, CLI, pre-commit, and MCP server
+pip install "yieldpoint[langgraph]"    # optional LangGraph agent binding
+
+# Or install as an isolated global tool:
+uv tool install yieldpoint
+pipx install yieldpoint
 ```
-</details>
+
+### 3. Node.js & TypeScript / npm
+Integrate deterministic verification and routing directly into your **LangGraph.js** graphs:
+```sh
+npm install @tensilestream/yieldpoint-langgraph
+```
+```ts
+import { verifyNode, makeRouter } from "@tensilestream/yieldpoint-langgraph";
+
+// Add to your StateGraph:
+graph.addNode("verify", verifyNode());
+graph.addConditionalEdges("verify", makeRouter());
+```
+*See [Node SDK Documentation](docs/sdk/node.md) for complete options and runnable examples.*
+
+### 4. Java / Maven Central
+Integrate verification into **LangGraph4j** graphs and JVM agent systems:
+
+**Maven (`pom.xml`):**
+```xml
+<dependency>
+  <groupId>io.github.tensilestream</groupId>
+  <artifactId>yieldpoint-langgraph4j</artifactId>
+  <version>0.1.5</version>
+</dependency>
+```
+
+**Gradle (`build.gradle`):**
+```groovy
+implementation 'io.github.tensilestream:yieldpoint-langgraph4j:0.1.5'
+```
+*See [Java SDK Documentation](docs/sdk/java.md) for complete options and runnable examples.*
+
+The machine-facing [CLI JSON contract](docs/cli.md) explains how Node, Java, CI, editor hooks, and pre-commit integrations handle verdict exit codes.
 
 ## Quick start
 
