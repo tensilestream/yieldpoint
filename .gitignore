@@ -24,3 +24,6 @@ extension/package-lock.json
 
 # Field review kept out of the public tree; lives in yieldpoint-internal/
 Reviews.MD
+
+# Local routing and metrics ledgers; operational, never source of truth
+.yieldpoint/

@@ -21,7 +21,9 @@ from urllib.request import Request, urlopen
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from yieldpoint.harness import Change, admit, build_profile
+from yieldpoint.harness import (
+    Change, HandoffRequest, ProfileContext, admit, build_profile, can_handoff,
+)
 
 CANDIDATES = (
     {"id": "small", "description": "low-cost local coding model", "capabilities": {"code_generation"}},
@@ -64,10 +66,32 @@ def _jev(profile: dict, eligible: list[dict]) -> str:
 
 
 def main() -> int:
-    profile = build_profile(Change("sdk/node/src/router.js", "export {}", "export const route = () => 'pass'\n")).to_dict()
+    """Select once, then prove the provider's answer still has to pass the gate.
+
+    The second half is the point. A router's confidence is an input, never an
+    authorization: the handoff below is checked against the profile's own
+    budget, checkpoint list and capability requirements, and is refused here
+    because the candidate offered lacks a capability the profile requires.
+    """
+    verdict = {"status": "repair", "findings": [{"rule": "boundary_violation"}]}
+    profile = build_profile(
+        Change("sdk/node/src/router.js", "export {}", "export const route = () => 'pass'\n"),
+        context=ProfileContext(verdict=verdict),
+    ).to_dict()
     model, source = choose(profile)
     session = admit(profile, task_id="example-release", selected_model=model, selection_source=source)
-    print(json.dumps({"model": model, "source": source, "session": session.to_dict()}, indent=2))
+
+    # A deliberately under-qualified candidate: Yieldpoint refuses it whatever
+    # confidence the router reported.
+    allowed, reason = can_handoff(session, profile, HandoffRequest(
+        event="verification_failed", selected_model=model,
+        candidate_capabilities=frozenset({"code_generation"}),
+        estimated_overhead_fraction=0.03,
+    ))
+    print(json.dumps({
+        "model": model, "source": source, "session": session.to_dict(),
+        "handoff": {"allowed": allowed, "reason": reason},
+    }, indent=2))
     return 0
 
 

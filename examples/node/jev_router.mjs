@@ -1,5 +1,15 @@
 // Optional Jev routing. Default mode is deterministic and makes no network call.
-import { canHandoff, validateRoutingProfile } from "../../sdk/node/src/index.js";
+//
+// The profile is read from the shared fixture rather than hand-built, because a
+// hand-built one drifts from the contract the CLI actually emits — and the whole
+// point of the fixture is that Python, Node and Java agree on it.
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { canHandoff, validateRoutingProfile, validateRoutingSession } from "../../sdk/node/src/index.js";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const fixture = (name) => JSON.parse(readFileSync(join(here, "..", "..", "fixtures", "routing-profile", name), "utf8"));
 
 const candidates = [
   { id: "small", capabilities: ["code_generation"] },
@@ -12,11 +22,17 @@ export function choose(profile) {
   return eligible[0]?.id || ""; // Host may replace this with a Jev call after explicit opt-in.
 }
 
-const profile = validateRoutingProfile({
-  schema_version: 1, profile_id: "sha256:example", coverage: {},
-  requirements: { capabilities: ["code_generation"] }, handoff: { max_model_switches: 1 },
+const profile = validateRoutingProfile(fixture("valid-profile.json"));
+const session = validateRoutingSession(fixture("valid-session.json"));
+const model = choose(profile);
+
+// A router's answer is an input, never an authorization. An under-qualified
+// candidate is refused here whatever confidence the router reported.
+const refused = canHandoff(session, profile, {
+  event: "verification_failed", candidateCapabilities: ["code_generation"], estimatedOverheadFraction: 0.03,
 });
-const session = { routing_session_version: 1, task_id: "example", profile_id: profile.profile_id, switch_count: 0 };
-console.log({ model: choose(profile), handoff: canHandoff(session, profile, {
-  event: "verification_failed", candidateCapabilities: ["code_generation"],
-}) });
+const allowed = canHandoff(session, profile, {
+  event: "verification_failed", candidateCapabilities: profile.requirements.capabilities, estimatedOverheadFraction: 0.03,
+});
+
+console.log(JSON.stringify({ model, refused, allowed }, null, 2));
