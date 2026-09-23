@@ -114,6 +114,13 @@ pip install yieldpoint                 # the engine and CLI, zero dependencies
 pip install "yieldpoint[langgraph]"    # plus the LangGraph example's requirements
 ```
 
+For graph runtimes outside Python, see the [Node LangGraph adapter](docs/sdk/node.md)
+and [Java/LangGraph4j adapter](docs/sdk/java.md). Both call this same CLI and
+therefore share every rule and verdict contract.
+
+The machine-facing [CLI JSON contract](docs/cli.md) explains how Node, Java,
+CI, editor hooks, and pre-commit integrations must handle verdict exit codes.
+
 Requires Python 3.10 or newer. Nothing else — the verification core has no runtime
 dependencies, makes no network calls, and never invokes a model.
 
@@ -1176,14 +1183,11 @@ repository. If Yieldpoint flags a refactor you know is sound, that is a bug —
 
 ## Status and limits
 
-**Alpha.** The engine, CLI, Claude Code hook, MCP server, LangGraph adapter, diff/CI path
-and repository audit all work and are covered by 520 tests. Read this before adopting:
-
-- **Python only.** TypeScript and Java are designed but not built. Other languages are
-  never silently passed — a change nothing could analyse returns status `unverified`, not
-  `pass`, and the CLI exits `3` rather than `0`. If your agent writes TypeScript, this
-  will tell you honestly that it checked nothing, which is useful but is not the product
-  you want yet.
+**Alpha.** The engine, CLI, Claude Code hook, MCP server, Python LangGraph adapter,
+Node LangGraph adapter, Java LangGraph4j adapter, diff/CI path and repository audit are
+covered by the test suite. The Node and Java bindings call the same Python CLI—they do
+not contain alternate rule engines. Other languages are never silently passed: a change
+nothing could analyse returns status `unverified`, not `pass`, and the CLI exits `3`.
 - **Snapshot, property-based and heavily table-driven suites** are poorly served — counting
   assertions is not meaningful there.
 - **Assertions in an imported helper are invisible.** Helpers in the same module are read

@@ -25,10 +25,12 @@ maintainability findings are advisory and listed for information.
 
 ## 2. Version and changelog
 
-Version lives in exactly two places and they must agree:
+Version markers must agree across the Python distribution and both SDKs:
 
 - `pyproject.toml` → `version`
 - `yieldpoint/__init__.py` → `__version__`
+- `sdk/node/package.json` and `sdk/node/package-lock.json`
+- `sdk/java/pom.xml`
 
 `scripts/release-check.sh` fails if they drift.
 
@@ -90,7 +92,41 @@ In `https://github.com/tensilestream/yieldpoint/settings/secrets/actions`:
 2. **PyPI API Token (Alternative)**:
    - If using token authentication instead of OIDC, add repository secret:
      - Name: `PYPI_API_TOKEN`
-     - Value: `pypi-...`
+    - Value: `pypi-...`
+
+### npm and Maven Central
+
+The release workflow also publishes the Node LangGraph adapter and Java
+LangGraph4j adapter from the same tag. Before the first non-dry release:
+
+- configure npm trusted publishing for
+  `@tensilestream/yieldpoint-langgraph`, repository `tensilestream/yieldpoint`,
+  workflow `release.yml`, and environment `npm`;
+- verify the `io.github.tensilestream` namespace in Maven Central Portal;
+- create the protected `maven-central` environment with
+  `MAVEN_CENTRAL_USERNAME`, `MAVEN_CENTRAL_PASSWORD`, `MAVEN_GPG_PRIVATE_KEY`,
+  and `MAVEN_GPG_PASSPHRASE`; and
+- perform a workflow-dispatch dry run before publishing a stable tag.
+
+The release workflow builds the Node tarball and Java binary/source/Javadoc
+artifacts before publishing. npm uses provenance; Maven Central uses signed
+artifacts. A failure in either prevents the automatic next-version bump.
+
+### Homebrew
+
+`Formula/yieldpoint.rb` is the source template for the
+`tensilestream/homebrew-tap` repository. Create that tap and add a fine-grained
+`HOMEBREW_TAP_TOKEN` secret with contents-write permission before the first
+release. After a non-draft GitHub release, CI downloads that exact tag archive,
+computes its SHA-256, and updates the tap formula with
+`scripts/update_homebrew_formula.py`. Verify it with:
+
+```sh
+brew tap tensilestream/tap
+brew install --build-from-source tensilestream/tap/yieldpoint
+yieldpoint --version
+yp --version
+```
 
 ---
 

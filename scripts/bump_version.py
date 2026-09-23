@@ -7,6 +7,7 @@ Updates:
 """
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -14,6 +15,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT_PATH = ROOT / "pyproject.toml"
 INIT_PATH = ROOT / "yieldpoint" / "__init__.py"
+NODE_PACKAGE_PATH = ROOT / "sdk" / "node" / "package.json"
+NODE_LOCK_PATH = ROOT / "sdk" / "node" / "package-lock.json"
+JAVA_POM_PATH = ROOT / "sdk" / "java" / "pom.xml"
 
 #: Every artifact that declares the version, and the assignment it declares it in.
 VERSION_SITES = (
@@ -75,6 +79,17 @@ def collect_versions() -> dict[str, str]:
     if INIT_PATH.exists():
         match = re.search(r'^__version__\s*=\s*"([^"]+)"', INIT_PATH.read_text(encoding="utf-8"), re.MULTILINE)
         found["yieldpoint/__init__.py"] = match.group(1) if match else "unknown"
+    if NODE_PACKAGE_PATH.exists():
+        found["sdk/node/package.json"] = json.loads(
+            NODE_PACKAGE_PATH.read_text(encoding="utf-8")).get("version", "unknown")
+    if NODE_LOCK_PATH.exists():
+        lock = json.loads(NODE_LOCK_PATH.read_text(encoding="utf-8"))
+        found["sdk/node/package-lock.json"] = lock.get("packages", {}).get("", {}).get(
+            "version", lock.get("version", "unknown"))
+    if JAVA_POM_PATH.exists():
+        match = re.search(r"<artifactId>yieldpoint-langgraph4j</artifactId>\s*<version>([^<]+)</version>",
+                          JAVA_POM_PATH.read_text(encoding="utf-8"))
+        found["sdk/java/pom.xml"] = match.group(1) if match else "unknown"
     return found
 
 
@@ -97,7 +112,7 @@ def check_versions() -> int:
     return 0
 
 
-def main() -> int:
+def arguments():
     parser = argparse.ArgumentParser(description="Synchronize YieldPoint project versions.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
@@ -110,28 +125,62 @@ def main() -> int:
     group.add_argument("--minor", action="store_true", help="Bump minor version (e.g. 0.1.0 -> 0.2.0)")
     group.add_argument("--major", action="store_true", help="Bump major version (e.g. 0.1.0 -> 1.0.0)")
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def requested_version(args, current: str) -> str:
+    if args.patch:
+        return calculate_bump(current, "patch")
+    if args.minor:
+        return calculate_bump(current, "minor")
+    if args.major:
+        return calculate_bump(current, "major")
+    version = args.version.lstrip("v")
+    parse_semver(version)
+    return version
+
+
+def update_json(path: Path, version: str, *, package_lock: bool = False) -> None:
+    content = json.loads(path.read_text(encoding="utf-8"))
+    content["version"] = version
+    if package_lock and "" in content.get("packages", {}):
+        content["packages"][""]["version"] = version
+    path.write_text(json.dumps(content, indent=2) + "\n", encoding="utf-8")
+    print(f"✓ Updated {path.relative_to(ROOT)} -> {version}")
+
+
+def update_java_pom(version: str) -> None:
+    content = JAVA_POM_PATH.read_text(encoding="utf-8")
+    updated, count = re.subn(
+        r"(<artifactId>yieldpoint-langgraph4j</artifactId>\s*<version>)[^<]+(</version>)",
+        rf"\g<1>{version}\g<2>", content, count=1)
+    if not count:
+        raise SystemExit(f"no artifact version in {JAVA_POM_PATH.relative_to(ROOT)}")
+    JAVA_POM_PATH.write_text(updated, encoding="utf-8")
+    print(f"✓ Updated {JAVA_POM_PATH.relative_to(ROOT)} -> {version}")
+
+
+def update_all(version: str) -> None:
+    for path, assignment in VERSION_SITES:
+        update_version(path, assignment, version)
+    if NODE_PACKAGE_PATH.exists():
+        update_json(NODE_PACKAGE_PATH, version)
+    if NODE_LOCK_PATH.exists():
+        update_json(NODE_LOCK_PATH, version, package_lock=True)
+    if JAVA_POM_PATH.exists():
+        update_java_pom(version)
+
+
+def main() -> int:
+    args = arguments()
     if args.check:
         return check_versions()
 
     current_version = read_current_version()
     print(f"Current version: {current_version}")
-
-    if args.patch:
-        new_version = calculate_bump(current_version, "patch")
-    elif args.minor:
-        new_version = calculate_bump(current_version, "minor")
-    elif args.major:
-        new_version = calculate_bump(current_version, "major")
-    else:
-        new_version = args.version.lstrip("v")
-        parse_semver(new_version)
-
+    new_version = requested_version(args, current_version)
     print(f"Bumping to:      {new_version}\n")
-
-    for path, assignment in VERSION_SITES:
-        update_version(path, assignment, new_version)
-
+    update_all(new_version)
     print(f"\nAll version markers successfully synchronized to {new_version}.")
     return 0
 

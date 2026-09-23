@@ -8,6 +8,8 @@ change to the build.
 
 from __future__ import annotations
 
+from sdk_docs import adapters_section
+
 REPO = "https://github.com/tensilestream/yieldpoint"
 
 
@@ -266,8 +268,7 @@ def integrations_page() -> str:
 moment in the loop.</p>
 
 <h2>Editor hook &mdash; the enforcing half</h2>
-<p>Runs before an agent's edit lands, and can refuse it. This is the only surface that
-prevents a weakening rather than reporting one afterwards.</p>
+<p>Runs before an agent's edit lands and can refuse it; this is the only surface that prevents a weakening rather than reporting one afterwards.</p>
 <pre><code>yieldpoint install-hook --advisory   <span class="c"># reports only</span>
 yieldpoint install-hook              <span class="c"># blocks (the default)</span></code></pre>
 
@@ -282,16 +283,12 @@ agent can call after finishing a set of edits.</p>
     rev: v0.1.1
     hooks:
       - id: yieldpoint</code></pre>
-<p>The hook runs <code>review --staged</code>, which asks git for the staged diff itself.
-Do not use <code>check --diff -</code> here: pre-commit gives a hook no stdin, so it reads
-an empty diff and reports <code>ok</code> on everything.</p>
+<p>The hook runs <code>review --staged</code>, which asks git for the staged diff itself. Do not use <code>check --diff -</code> here: pre-commit gives a hook no stdin, so it reads an empty diff and reports <code>ok</code> on everything.</p>
 
 <h2>CI</h2>
 <pre><code>- run: pip install yieldpoint
 - run: yieldpoint review --against origin/main --json</code></pre>
-<p>Exit <code>1</code> on findings, <code>3</code> when nothing could be analysed. Treat
-<code>3</code> as a failure in any pipeline that matters: it means the gate did not run,
-which is not the same as passing.</p>
+<p>Exit <code>1</code> on findings, <code>3</code> when nothing could be analysed. Treat <code>3</code> as a failure in any pipeline that matters: it means the gate did not run, which is not the same as passing.</p>
 
 <h2>Agent frameworks</h2>
 <p>A LangGraph adapter ships in the package, with a router that turns a verdict into an
@@ -303,6 +300,8 @@ graph.add_conditional_edges("verify", make_router(on_unverified="escalate"))</co
 <p>Runnable examples for plain loops, CrewAI, the OpenAI Agents SDK, fan-out and
 long-running sessions are in <a href="%s/tree/main/examples">examples/</a>.</p>
 
+%s
+
 <h2>Measuring it</h2>
 <pre><code>yieldpoint stats              <span class="c"># totals, plus a per-turn timeline</span>
 yieldpoint stats --html       <span class="c"># the same, as a page</span>
@@ -310,7 +309,7 @@ yieldpoint export             <span class="c"># the ledger as JSON Lines</span><
 <p>Recording is local only. To send it somewhere, name a command in
 <code>YIELDPOINT_SINK</code> and Yieldpoint pipes each turn's events to its stdin &mdash;
 it never opens a socket itself.</p>
-""" % REPO
+""" % (REPO, adapters_section(REPO))
 
 
 def limits_page() -> str:
@@ -320,11 +319,11 @@ and repository audit all work and are covered by the test suite. Read this befor
 adopting.</p>
 
 <div class="warn">
-<h3>Python only</h3>
-<p>TypeScript and Java are designed but not built. Other languages are never silently
-passed &mdash; a change nothing could analyse returns <code>unverified</code> and exits
-<code>3</code>. If your agent writes TypeScript, this will tell you honestly that it
-checked nothing, which is useful but is not the product you want yet.</p>
+<h3>One verifier across runtimes</h3>
+<p>The Python CLI is the rule engine. The Node LangGraph and Java LangGraph4j adapters
+call that same CLI and preserve its schema-versioned verdict JSON. Other languages are
+never silently passed &mdash; a change nothing could analyse returns <code>unverified</code>
+and exits <code>3</code>.</p>
 </div>
 
 <h2>Where it is weak</h2>

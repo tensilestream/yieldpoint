@@ -51,6 +51,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Check version markers agree across artifacts
         run: python3 scripts/bump_version.py --check
 
@@ -83,6 +94,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Resolve Release Tag & Version
         id: resolve_tag
         env:
@@ -90,6 +112,8 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           PROJECT_VERSION="$(python3 -c "import tomllib; f=open('pyproject.toml', 'rb'); print(tomllib.load(f)['project']['version'])")"
+          test "$(node -p "require('./sdk/node/package.json').version")" = "${PROJECT_VERSION}"
+          test "$(python3 -c "import xml.etree.ElementTree as e; print(e.parse('sdk/java/pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text)")" = "${PROJECT_VERSION}"
           if [ -n "${INPUT_TAG}" ]; then
             TAG="${INPUT_TAG}"
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
@@ -131,6 +155,19 @@ jobs:
           pip install build
           python3 -m build
 
+      - name: Pack Node SDK
+        run: |
+          cd sdk/node
+          npm ci
+          npm test
+          npm pack
+          mv *.tgz ../../dist/
+
+      - name: Build Java SDK artifacts
+        run: |
+          mvn -B -f sdk/java/pom.xml verify
+          cp sdk/java/target/*.jar dist/
+
       - name: Generate SHA256 Checksums
         run: |
           cd dist
@@ -154,6 +191,10 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/SHA256SUMS.txt
+            dist/*.tgz
+            dist/yieldpoint-langgraph4j-*.jar
+            dist/*-sources.jar
+            dist/*-javadoc.jar
           retention-days: 7
 
   github-release:
@@ -187,8 +228,24 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
             dist/SHA256SUMS.txt
+            dist/*.tgz
+            dist/yieldpoint-langgraph4j-*.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update verified Homebrew formula in the tap
+        if: ${{ github.event.inputs.draft != 'true' }}
+        run: |
+          TAG="${{ needs.build.outputs.release_tag }}"
+          VERSION="${{ needs.build.outputs.version }}"
+          curl --fail --location --retry 3 --output /tmp/yieldpoint.tar.gz "https://github.com/tensilestream/yieldpoint/archive/refs/tags/${TAG}.tar.gz"
+          SHA256=$(sha256sum /tmp/yieldpoint.tar.gz | awk '{print $1}')
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/tensilestream/homebrew-tap.git" /tmp/homebrew-tap
+          cp Formula/yieldpoint.rb /tmp/homebrew-tap/Formula/yieldpoint.rb
+          python3 scripts/update_homebrew_formula.py "${VERSION}" "${SHA256}" --formula /tmp/homebrew-tap/Formula/yieldpoint.rb
+          (cd /tmp/homebrew-tap && git config user.name "github-actions[bot]" && git config user.email "github-actions[bot]@users.noreply.github.com" && git add Formula/yieldpoint.rb && git diff --cached --quiet || (git commit -m "chore: update yieldpoint to ${TAG}" && git push origin main))
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
   publish-pypi:
     name: Publish to PyPI
@@ -227,9 +284,63 @@ jobs:
           # Cryptographically signed provenance attestations via PyPI OIDC
           attestations: true
 
+  publish-npm:
+    name: Publish Node SDK to npm
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.draft != 'true' }}
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/@tensilestream/yieldpoint-langgraph
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: yieldpoint-release-assets
+          path: dist/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+      - run: npm publish dist/*.tgz --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ''
+
+  publish-maven:
+    name: Publish Java SDK to Maven Central
+    needs: [build, github-release]
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.draft != 'true' }}
+    permissions:
+      contents: read
+    environment:
+      name: maven-central
+      url: https://central.sonatype.com/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
+      - name: Import release signing key
+        run: echo "$MAVEN_GPG_PRIVATE_KEY" | gpg --batch --import
+        env:
+          MAVEN_GPG_PRIVATE_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+      - name: Sign and publish the validated release version
+        run: mvn -B -Prelease -f sdk/java/pom.xml verify central-publishing:publish
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
   post-release:
     name: Auto-Bump Next Version
-    needs: [build, github-release, publish-pypi]
+    needs: [build, github-release, publish-pypi, publish-npm, publish-maven]
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.dry_run != 'true' && github.event.inputs.draft != 'true' }}
     permissions:
@@ -252,6 +363,6 @@ jobs:
           NEXT_VERSION="$(python3 -c "import tomllib; f=open('pyproject.toml', 'rb'); print(tomllib.load(f)['project']['version'])")"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pyproject.toml yieldpoint/__init__.py
+          git add pyproject.toml yieldpoint/__init__.py sdk/node/package.json sdk/node/package-lock.json sdk/java/pom.xml
           git commit -m "chore(release): prepare next version v${NEXT_VERSION} [skip ci]"
           git push origin main || echo "Version bump push skipped (branch up to date or protected)."

@@ -10,12 +10,8 @@ trap 'rm -rf "$WORK"' EXIT
 step() { printf "\n\033[1m==> %s\033[0m\n" "$1"; }
 
 step "Version agreement"
+python3 scripts/bump_version.py --check
 PYPROJECT_VERSION="$(python3 -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
-PACKAGE_VERSION="$(python3 -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('yieldpoint/__init__.py').read()).group(1))")"
-if [ "$PYPROJECT_VERSION" != "$PACKAGE_VERSION" ]; then
-  echo "version drift: pyproject=$PYPROJECT_VERSION package=$PACKAGE_VERSION" >&2
-  exit 1
-fi
 echo "  $PYPROJECT_VERSION"
 
 step "Changelog mentions this version"
@@ -38,13 +34,41 @@ OVER="$(find yieldpoint -name '*.py' -exec sh -c 'n=$(grep -cve "^\s*$" -e "^\s*
 echo "  ok"
 
 step "Build"
-rm -rf dist build
-python3 -m build >/dev/null
-ls -1 dist
+PACKAGE_DIST="$WORK/dist"
+python3 -m build --outdir "$PACKAGE_DIST" >/dev/null
+ls -1 "$PACKAGE_DIST"
+
+step "Node SDK"
+if [ -d sdk/node ]; then
+  npm --prefix sdk/node ci
+  npm --prefix sdk/node test
+  (cd sdk/node && npm pack --dry-run)
+fi
+
+step "Java SDK"
+if [ -d sdk/java ]; then
+  mvn -B -f sdk/java/pom.xml install
+  mkdir -p "$WORK/java-consumer/src/main/java/consumer"
+  cat > "$WORK/java-consumer/pom.xml" <<EOF
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>release.check</groupId><artifactId>java-consumer</artifactId><version>1</version>
+  <properties><maven.compiler.release>17</maven.compiler.release></properties>
+  <dependencies><dependency><groupId>io.github.tensilestream</groupId><artifactId>yieldpoint-langgraph4j</artifactId><version>$PYPROJECT_VERSION</version></dependency></dependencies>
+</project>
+EOF
+  cat > "$WORK/java-consumer/src/main/java/consumer/Consumer.java" <<'EOF'
+package consumer;
+import io.github.tensilestream.yieldpoint.langgraph4j.YieldpointRouter;
+public final class Consumer { public static void main(String[] args) { new YieldpointRouter(); } }
+EOF
+  mvn -B -f "$WORK/java-consumer/pom.xml" package
+  echo "  packaged Java SDK imports in a clean consumer"
+fi
 
 step "Clean-room install"
 python3 -m venv "$WORK/venv"
-"$WORK/venv/bin/pip" install -q dist/*.whl
+"$WORK/venv/bin/pip" install -q "$PACKAGE_DIST"/*.whl
 cd "$WORK"
 "$WORK/venv/bin/yieldpoint" --version
 

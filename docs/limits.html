@@ -32,11 +32,11 @@ and repository audit all work and are covered by the test suite. Read this befor
 adopting.</p>
 
 <div class="warn">
-<h3>Python only</h3>
-<p>TypeScript and Java are designed but not built. Other languages are never silently
-passed &mdash; a change nothing could analyse returns <code>unverified</code> and exits
-<code>3</code>. If your agent writes TypeScript, this will tell you honestly that it
-checked nothing, which is useful but is not the product you want yet.</p>
+<h3>One verifier across runtimes</h3>
+<p>The Python CLI is the rule engine. The Node LangGraph and Java LangGraph4j adapters
+call that same CLI and preserve its schema-versioned verdict JSON. Other languages are
+never silently passed &mdash; a change nothing could analyse returns <code>unverified</code>
+and exits <code>3</code>.</p>
 </div>
 
 <h2>Where it is weak</h2>
