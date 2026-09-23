@@ -1,0 +1,36 @@
+name: Publish Node Package to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish'
+        default: 'v0.1.5'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish Node Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release asset
+        run: |
+          mkdir -p dist
+          gh release download "${{ github.event.inputs.tag }}" -p "*.tgz" --dir ./dist --repo tensilestream/yieldpoint
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NODE_AUTH_TOKEN || secrets.NPM_TOKEN }}
+        run: |
+          npm publish ./dist/*.tgz --access public
