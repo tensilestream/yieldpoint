@@ -15,7 +15,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from ..core.policy import Policy
 from ..core.routingsession import CHECKS, EVENTS
@@ -93,45 +93,64 @@ class ProfileContext:
 
 @dataclass(frozen=True)
 class _Evidence:
-    """What the decision table reads. Grouped so the table takes one argument."""
+    """One file's measured facts. Grouped so the decision rows take one argument."""
 
     path: str
     signals: Signals
     risk: Score
     tier: Choice
-    status: str
-    checks: Mapping[str, tuple[str, ...]]
 
 
 def build_profile(
-    change: Change,
+    change: Change | Sequence[Change],
     policy: Policy | str | dict | None = None,
     *,
     context: ProfileContext = ProfileContext(),
 ) -> RoutingProfile:
-    """Build a profile without reading intent or contacting a provider."""
+    """Build a profile without reading intent or contacting a provider.
+
+    ``change`` is one :class:`Change` or the whole change set. A task usually
+    spans several files, and a profile describing only one of them understates
+    what the work needs: the riskiest file decides the tier, every file's
+    requirements accumulate, and the change-budget pace is only meaningful
+    against the real file count.
+    """
+    changes = (change,) if isinstance(change, Change) else tuple(change)
+    if not changes:
+        raise ValueError("a routing profile needs at least one change")
     resolved = Policy.load(policy)
-    found = context.signals or measure(change, resolved, context.graph)
-    evidence = _Evidence(
-        path=change.path, signals=found,
-        risk=risk(change, resolved, signals=found),
-        tier=tier(change, resolved, signals=found),
-        status=_status(context.verdict),
-        checks=resolved.routing_session.required_checks,
+    found = _measure_all(changes, resolved, context)
+    evidence = tuple(
+        _Evidence(item.path, signals,
+                  risk(item, resolved, signals=signals),
+                  tier(item, resolved, signals=signals))
+        for item, signals in zip(changes, found)
     )
-    required, capabilities, suggested = _requirements(evidence)
-    payload = {
+    payload = _payload(evidence, found, resolved, context)
+    return RoutingProfile({**payload, "profile_id": _profile_id(payload)})
+
+
+def _payload(evidence: tuple[_Evidence, ...], found: tuple[Signals, ...],
+             policy: Policy, context: ProfileContext) -> dict[str, Any]:
+    """Assemble the document, aggregating the per-file evidence into one task."""
+    status = _status(context.verdict)
+    required, capabilities, suggested = _requirements(
+        evidence, status, policy.routing_session.required_checks)
+    return {
         "schema_version": ROUTING_PROFILE_SCHEMA_VERSION,
-        "risk": evidence.risk.to_dict(),
-        "tier": evidence.tier.to_dict(),
-        "coverage": _coverage(change.path, found),
+        "risk": max(evidence, key=lambda item: item.risk.rank).risk.to_dict(),
+        "tier": max(evidence, key=lambda item: _tier_rank(item.tier)).tier.to_dict(),
+        "coverage": _coverage(evidence),
         "change": {
-            "files": 1, "added_lines": found.added_lines, "deleted_lines": found.removed_lines,
-            "structural": found.structural, "baseline_findings": max(0, context.baseline_findings),
+            "files": len(evidence),
+            "added_lines": sum(item.added_lines for item in found),
+            "deleted_lines": sum(item.removed_lines for item in found),
+            "structural": any(item.structural for item in found),
+            "baseline_findings": max(0, context.baseline_findings),
             "introduced_findings": max(0, _introduced_findings(context)),
         },
         "verification": {
-            "status": evidence.status, "required": sorted(required),
+            "status": status, "required": sorted(required),
             "findings": _finding_rules(context.verdict),
             "repair_attempt": max(0, context.repair_attempt),
             "loop_tripped": bool(context.loop_tripped),
@@ -139,12 +158,28 @@ def build_profile(
         "requirements": {
             "capabilities": sorted(capabilities),
             "minimum_context_window": "large" if "large_context" in capabilities else "standard",
-            "suggested_policy": suggested, "may_skip_model": evidence.tier.value == "none",
+            "suggested_policy": suggested,
+            "may_skip_model": all(item.tier.value == "none" for item in evidence),
         },
-        "handoff": _handoff(resolved),
-        "pace": _pace(resolved, found, context.verdict),
+        "handoff": _handoff(policy),
+        "pace": _pace(policy, found, len(evidence), context.verdict),
     }
-    return RoutingProfile({**payload, "profile_id": _profile_id(payload)})
+
+
+def _measure_all(changes: tuple[Change, ...], policy: Policy,
+                 context: ProfileContext) -> tuple[Signals, ...]:
+    """Measure each file, reusing signals a caller already computed for one."""
+    if len(changes) == 1 and context.signals is not None:
+        return (context.signals,)
+    return tuple(measure(item, policy, context.graph) for item in changes)
+
+
+def _tier_rank(choice: Choice) -> int:
+    """Where a tier sits on its own scale; -1 keeps an unknown tier lowest."""
+    try:
+        return choice.options.index(choice.value)
+    except ValueError:
+        return -1
 
 
 def _handoff(policy: Policy) -> dict[str, Any]:
@@ -161,12 +196,14 @@ def _handoff(policy: Policy) -> dict[str, Any]:
     }
 
 
-def _pace(policy: Policy, signals: Signals, verdict: Mapping[str, Any] | None) -> dict[str, Any]:
+def _pace(policy: Policy, signals: tuple[Signals, ...], files: int,
+          verdict: Mapping[str, Any] | None) -> dict[str, Any]:
     """Surface budget pressure in the profile, at admission rather than at stop
     time. Advisory only: nothing in the handoff gate reads it."""
     rules = _finding_rules(verdict)
     decision = pace(SimpleNamespace(findings=[SimpleNamespace(rule=rule) for rule in rules]),
-                    signals.added_lines, 1, policy.structure.max_change_lines)
+                    sum(item.added_lines for item in signals), files,
+                    policy.structure.max_change_lines)
     return {"value": decision.value, "reason": decision.reason,
             "signals": {"budget_used": decision.signals.get("budget_used", 0.0)}}
 
@@ -177,53 +214,73 @@ def _introduced_findings(context: ProfileContext) -> int:
     return len(context.verdict.get("findings", ())) if context.verdict else 0
 
 
-def _requirements(evidence: _Evidence) -> tuple[set[str], set[str], str]:
+def _requirements(evidence: tuple[_Evidence, ...], status: str,
+                  checks: Mapping[str, tuple[str, ...]]) -> tuple[set[str], set[str], str]:
     """The decision table, in the order the rows are written.
 
-    Rows accumulate capabilities rather than replacing them: an unanalysable
-    file inside an SDK needs both a large context and cross-language knowledge,
-    and returning only the second would report the weaker requirement of the
-    two. The *policy label* is still first-match, because a task has one shape.
+    Rows accumulate rather than replace, both within a file and across the
+    change set: an unanalysable file inside an SDK needs a large context *and*
+    cross-language knowledge, and a task containing one risky file is a risky
+    task. Reporting either weaker requirement would understate the work. The
+    *policy label* is still first-match, because a task has one shape.
     """
-    if evidence.signals.touches_protected_test or evidence.status == Status.BLOCK.value:
+    if status == Status.BLOCK.value or any(
+            item.signals.touches_protected_test for item in evidence):
         return {"human_review"}, {"human_review"}, "human_before_land"
-    required, capabilities, suggested = _rows(evidence)
+    required: set[str] = {"unit_tests"}
+    capabilities: set[str] = set()
+    suggested = ""
+    for item in evidence:
+        rows_required, rows_capabilities, label = _rows(item, status, checks)
+        required |= rows_required
+        capabilities |= rows_capabilities
+        suggested = suggested or label
     if suggested:
         return required, capabilities, suggested
-    if evidence.tier.value == "none":
+    if all(item.tier.value == "none" for item in evidence):
         return required, capabilities, "no_model_after_verify"
     return required, capabilities | {"code_generation"}, "sticky_standard"
 
 
-def _rows(evidence: _Evidence) -> tuple[set[str], set[str], str]:
-    """The capability rows. Each adds what it needs; the first sets the label."""
-    required: set[str] = {"unit_tests"}
+def _rows(evidence: _Evidence, status: str,
+          checks: Mapping[str, tuple[str, ...]]) -> tuple[set[str], set[str], str]:
+    """The capability rows for one file. Each adds what it needs."""
+    required: set[str] = set()
     capabilities: set[str] = set()
     suggested = ""
     if not evidence.signals.analysable:
         capabilities |= {"large_context", "strong_reasoning"}
         suggested = "sticky_capable"
     if _is_release_path(evidence.path):
-        required |= set(evidence.checks.get("cross_sdk_release", ()))
+        required |= set(checks.get("cross_sdk_release", ()))
         capabilities |= {"multilingual_sdk", "tool_use", "strong_reasoning"}
         suggested = suggested or "sticky_capable"
-    if _needs_reasoning(evidence):
+    if _needs_reasoning(evidence, status):
         capabilities |= {"tool_use", "strong_reasoning"}
         suggested = suggested or "sticky_capable"
     return required, capabilities, suggested
 
 
-def _needs_reasoning(evidence: _Evidence) -> bool:
+def _needs_reasoning(evidence: _Evidence, status: str) -> bool:
     """A failed repair or a structurally risky change earns the capable tier."""
-    return (evidence.status in (Status.REPAIR.value, Status.ESCALATE.value)
+    return (status in (Status.REPAIR.value, Status.ESCALATE.value)
             or evidence.risk.value in ("high", "critical"))
 
 
-def _coverage(path: str, signals: Signals) -> dict[str, Any]:
+def _coverage(evidence: tuple[_Evidence, ...]) -> dict[str, Any]:
+    """Which files were analysed exactly, and which the engine could not read.
+
+    ``exact_analysis`` is true only when every file was analysable: one file the
+    engine could not read makes the whole set partially unverified, and saying
+    otherwise is the clean-result-from-no-analysis failure this contract exists
+    to prevent.
+    """
+    analysed = sorted(item.path for item in evidence if item.signals.analysable)
+    unverified = sorted(item.path for item in evidence if not item.signals.analysable)
     return {
-        "analysed_paths": [path] if signals.analysable else [],
-        "unverified_paths": [] if signals.analysable else [path],
-        "languages": [_language(path)], "exact_analysis": signals.analysable,
+        "analysed_paths": analysed, "unverified_paths": unverified,
+        "languages": sorted({_language(item.path) for item in evidence}),
+        "exact_analysis": not unverified,
     }
 
 

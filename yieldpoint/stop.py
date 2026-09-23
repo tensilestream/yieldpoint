@@ -50,6 +50,11 @@ _ALLOWED = frozenset({Status.PASS, Status.UNVERIFIED})
 class Outcome:
     """What the gate found, and why it may have found nothing."""
 
+    policy: Policy | None = None
+    """What counts as blocking here. Set by :func:`evaluate` rather than passed,
+    so the constructor keeps the shape every existing caller already uses; a
+    caller that leaves it unset gets the stricter, pre-existing behaviour."""
+
     def __init__(self, verdict: Verdict | None = None, *, reason: str = "",
                  root: str = "", analysed: int = 0) -> None:
         self.verdict = verdict
@@ -63,10 +68,25 @@ class Outcome:
 
     @property
     def holds(self) -> bool:
-        """Whether the agent should be sent back to fix something."""
+        """Whether the agent should be sent back to fix something.
+
+        Shape findings are reported and never blocking here, for the reason
+        ``hook.blocks`` gives and ``structure.gates`` controls. This gate used
+        to ignore that, so a change could be waved through on every edit and
+        then refused at the door — and ``change_too_large``, whose only remedy
+        is a commit the agent is usually not allowed to make, could hold a
+        session open with nothing it could legally do to satisfy it.
+        """
         if self.verdict is None:
             return False
-        return self.verdict.status not in _ALLOWED and bool(self.verdict.findings)
+        if self.verdict.status in _ALLOWED or not self.verdict.findings:
+            return False
+        if self.policy is not None:
+            from .commands import only_maintainability
+
+            if only_maintainability(self.verdict, self.policy):
+                return False
+        return True
 
 
 def suppressed(payload: dict[str, Any]) -> bool:
@@ -94,7 +114,9 @@ def evaluate(root: str | Path = ".", policy: Policy | str | None = None) -> Outc
         if not diff.ok:
             return Outcome(reason=diff.reason, root=str(base))
         verdict = verify_diff(diff.text, root=diff.root, policy=resolved)
-        return Outcome(verdict, root=diff.root, analysed=len(diff.text))
+        outcome = Outcome(verdict, root=diff.root, analysed=len(diff.text))
+        outcome.policy = resolved
+        return outcome
     except Exception as exc:  # a verifier crash must never trap the agent
         return Outcome(reason=f"verifier error — {exc}", root=str(root))
 

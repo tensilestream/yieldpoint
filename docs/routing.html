@@ -55,13 +55,17 @@ profile back &mdash; so a profile edited to widen its own budget is refused by t
 and the MCP tools rather than honoured. Node and Java validate structure and pairing
 and apply the bounds; the digest stays the canonical engine&rsquo;s to check.</p>
 <h2>One admission, one bounded handoff</h2>
-<pre><code>yieldpoint assess-routing --path src/widget.py --before before.py --after after.py \
-  --verdict verdict.json --repair-attempt 1
+<pre><code>git diff &gt; change.diff
+yieldpoint assess-routing --diff change.diff --verdict verdict.json --repair-attempt 1
 yieldpoint build-capsule --profile profile.json --session session.json \
   --objective "Charge each line item at its own price" --acceptance "Unit tests pass"
 yieldpoint handoff-check --profile profile.json --session session.json \
   --event verification_failed --overhead 0.04 \
   --capability strong_reasoning --capability tool_use</code></pre>
+<p><code>--diff</code> profiles the whole change set, which is usually what a task is:
+the riskiest file decides the tier, every file&rsquo;s requirements accumulate, and one
+file the engine cannot read makes the whole set inexact. Use
+<code>--path</code>/<code>--after</code> for a single file.</p>
 <p>Keep the admitted model for normal work. A handoff is allowed only at a checkpoint
 your policy lists, only within the switch budget, only when the estimated router and
 capsule input fits <code>router_overhead_fraction</code>, and only when the candidate

@@ -33,7 +33,7 @@ Reader = Callable[[str], "str | None"]
 GENERATED_FILE_EDITED = "generated_file_edited"
 
 __all__ = [
-    "verify_change", "verify_diff",
+    "verify_change", "verify_diff", "states_in",
     "ASSERTION_MONOTONICITY", "GENERATED_FILE_EDITED", "EXACT_SUFFIXES",
 ]
 
@@ -200,6 +200,21 @@ def _change_size(states, policy: Policy) -> Verdict:
         ),
         confidence=Confidence.EXACT,
     )])
+
+
+def states_in(diff_text: str, root: str | Path = ".", *,
+              read: Reader | None = None) -> tuple[tuple[str, str | None, str | None], ...]:
+    """Resolve a unified diff to ``(path, before, after)`` for each usable file.
+
+    The same reconstruction :func:`verify_diff` performs, exposed because other
+    surfaces need the change set without needing a verdict. A file whose diff
+    does not line up is omitted rather than returned against a reconstruction
+    that may be wrong, exactly as it is omitted from verification.
+    """
+    base = Path(root)
+    fetch = read or (lambda rel: _read_file(base / rel))
+    states, _skipped = _collect(diffmod.parse(diff_text), fetch, Policy.load(None))
+    return tuple(states)
 
 
 def _collect(changes, fetch: Reader, policy: Policy):

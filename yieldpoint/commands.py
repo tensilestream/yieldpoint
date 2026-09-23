@@ -17,7 +17,10 @@ from . import console
 from .core.policy import Policy
 from .ledger import Run, record_run as _record
 from .core.verdict import Status, Verdict
-from .hook import blocks, decision_json, evaluate, read_payload, render
+from .hook import (
+    allow_notice, blocks, decision_json, evaluate, read_payload, render,
+)
+from .hookcmd import hook_command  # noqa: F401 - re-exported entry point
 from .verify import verify_change, verify_diff
 
 EXIT_OK, EXIT_FINDINGS, EXIT_ERROR = 0, 1, 2
@@ -252,57 +255,6 @@ def check_diff(args) -> int:
     return _exit_for(verdict, policy)
 
 
-def _handoff(args) -> int | None:
-    """Other hook events share this entry point; ``None`` means PreToolUse."""
-    if getattr(args, "stop", False):
-        return stop_command(args)
-    if getattr(args, "post", False):
-        from .posthook import post_command
-        return post_command(args)
-    return None
-
-
-def hook_command(args) -> int:
-    routed = _handoff(args)
-    if routed is not None:
-        return routed
-
-    from .ledger import Timer
-
-    payload = read_payload(sys.stdin.read())
-    with Timer() as timer:
-        verdict, change = evaluate(payload, args.policy)
-
-    # Loaded once, and never allowed to fail the hook: a broken config must not
-    # stand between a person and their editor. Defaults are the safe fallback.
-    try:
-        policy = Policy.load(args.policy, root=getattr(args, "root", "."))
-    except (OSError, ValueError):
-        policy = Policy()
-
-    if change.usable:
-        _record(
-            verdict,
-            Run("hook", len(change.before or "") + len(change.after or ""),
-                 timer.elapsed_ms),
-            policy,
-        )
-
-    if args.json_decision:
-        print(decision_json(verdict, change, policy))
-        return EXIT_OK
-
-    if args.advisory or not blocks(verdict, policy):
-        print(_allow_notice(verdict, change, args.advisory), file=sys.stderr, end="")
-        for note in verdict.skipped:
-            print(f"yieldpoint: not evaluated — {note}", file=sys.stderr)
-        return EXIT_OK
-
-    # Exit code 2 is the blocking signal; stderr is fed back to the agent.
-    print(render(verdict, change), file=sys.stderr)
-    return EXIT_ERROR
-
-
 def stop_command(args) -> int:
     """Verify the whole working tree when the agent stops.
 
@@ -335,21 +287,6 @@ def stop_command(args) -> int:
         # so it cannot be mistaken for the hook's JSON response.
         print(f"yieldpoint: {outcome.reason}", file=sys.stderr)
     return EXIT_OK
-
-
-def _allow_notice(verdict, change, advisory: bool) -> str:
-    """What to say on an edit that was permitted.
-
-    In advisory mode the full report is right — nothing is being enforced, so
-    the point is to show what would have been. Otherwise only the deferred
-    findings are worth mentioning, because the rest were genuinely fine.
-    """
-    from .hook import render_deferred
-
-    if advisory and verdict.findings:
-        return render(verdict, change) + "\n"
-    note = render_deferred(verdict)
-    return note + "\n" if note else ""
 
 
 def _print_spoken(verdict: Verdict, policy: Policy, deletions: tuple = ()) -> int:

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from yieldpoint import stop
 from yieldpoint.core.policy import Policy
+from yieldpoint.core.verdict import Status, Verdict
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -61,6 +62,54 @@ class _Repository:
     def weaken(self):
         """Edit the file directly — the shell's way, which no tool payload shows."""
         self.test.write_text(WEAKENED, encoding="utf-8")
+
+
+class TestShapeFindingsDoNotHoldTheDoor(unittest.TestCase):
+    """This gate must block on the same things the per-edit gate blocks on.
+
+    It did not: `hook.blocks` and `review`'s exit code both honour
+    `structure.gates`, and this one ignored it. A change could be waved through
+    on every single edit and then refused at the door — and `change_too_large`,
+    whose only remedy is a commit the agent is usually not permitted to make,
+    could hold a session open with nothing it could legally do to satisfy it.
+    """
+
+    def _shape(self, rule: str, policy=None):
+        from yieldpoint.core.verdict import Finding
+
+        outcome = stop.Outcome(
+            Verdict.of([Finding(rule=rule, status=Status.REPAIR, file="a.py", line=1,
+                                detail="d", prescription="p")]))
+        outcome.policy = Policy() if policy is None else policy
+        return outcome
+
+    def test_a_shape_finding_reports_without_blocking(self):
+        outcome = self._shape("change_too_large")
+        self.assertFalse(outcome.holds)
+        self.assertEqual(stop.decision(outcome, advisory=False), {})
+
+    def test_a_weakening_still_blocks(self):
+        outcome = self._shape("assertion_monotonicity")
+        self.assertTrue(outcome.holds)
+        self.assertEqual(stop.decision(outcome, advisory=False)["decision"], "block")
+
+    def test_structure_gates_makes_shape_binding_again(self):
+        from yieldpoint.core.verdict import Finding
+
+        outcome = stop.Outcome(
+            Verdict.of([Finding(rule="change_too_large", status=Status.REPAIR,
+                                file="a.py", line=1, detail="d", prescription="p")]),
+            )
+        outcome.policy = Policy.load({"structure": {"gates": True}})
+        self.assertIs(outcome.holds, True)
+        self.assertEqual(stop.decision(outcome, advisory=False)["decision"], "block")
+
+    def test_without_a_policy_it_still_holds(self):
+        """Older callers passed no policy; they must not silently stop blocking."""
+        outcome = self._shape("change_too_large")
+        outcome.policy = None
+        self.assertIs(outcome.holds, True)
+        self.assertEqual(stop.decision(outcome, advisory=False)["decision"], "block")
 
 
 class TestItSeesWhatThePerEditHookCannot(unittest.TestCase):

@@ -134,6 +134,27 @@ def _toplevel(base: Path) -> Path | None:
     return Path(found) if found else None
 
 
+def at_head(path: str | Path, root: str | Path = ".") -> str | None:
+    """The committed content of one file, or ``None`` if it has none.
+
+    ``None`` covers every way a file can be absent from ``HEAD`` — untracked,
+    newly added, outside a repository, git unavailable — because a caller
+    asking "was this already committed?" wants the same answer for all of them.
+    """
+    base = Path(root)
+    top = _toplevel(base)
+    if top is None:
+        return None
+    try:
+        relative = Path(path).resolve().relative_to(top.resolve()).as_posix()
+    except (ValueError, OSError):
+        relative = str(path)
+    completed = _git(["show", f"HEAD:{relative}"], top)
+    if completed is None or completed.returncode != 0:
+        return None
+    return completed.stdout
+
+
 def _git(args: list[str], cwd: Path):
     """Run git, returning ``None`` when it cannot be run at all."""
     try:
@@ -145,4 +166,4 @@ def _git(args: list[str], cwd: Path):
         return None
 
 
-__all__ = ["Diff", "uncommitted", "TIMEOUT_SECONDS"]
+__all__ = ["Diff", "uncommitted", "at_head", "TIMEOUT_SECONDS"]

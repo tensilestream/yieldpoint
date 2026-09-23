@@ -27,3 +27,6 @@ Reviews.MD
 
 # Local routing and metrics ledgers; operational, never source of truth
 .yieldpoint/
+
+# Planning and review documents; internal, not part of the published tree
+plan/

@@ -75,6 +75,32 @@ class TestRoutingCommands(unittest.TestCase):
                       "--session", str(session_path), "--root", directory,
                       "--event", "verification_failed"])
 
+    def test_assess_routing_profiles_a_whole_diff(self):
+        """A task usually spans files; --diff is how a host profiles the set."""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.py").write_text("x = 2\n")
+            (root / "b.py").write_text("y = 2\n")
+            diff = root / "change.diff"
+            diff.write_text(
+                "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n"
+                "@@ -1 +1 @@\n-x = 1\n+x = 2\n"
+                "diff --git a/b.py b/b.py\n--- a/b.py\n+++ b/b.py\n"
+                "@@ -1 +1 @@\n-y = 1\n+y = 2\n")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(["assess-routing", "--diff", str(diff), "--root", directory])
+        self.assertEqual(code, EXIT_OK)
+        profile = json.loads(output.getvalue())
+        self.assertEqual(profile["change"]["files"], 2)
+        self.assertEqual(profile["coverage"]["analysed_paths"], ["a.py", "b.py"])
+
+    def test_assess_routing_needs_either_a_diff_or_a_path(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            code = main(["assess-routing"])
+        self.assertEqual(code, 2)
+
     def test_routing_stats_reports_only_local_aggregate_counts(self):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()

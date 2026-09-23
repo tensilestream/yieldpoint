@@ -103,9 +103,54 @@ def evaluate(payload: dict[str, Any], policy: Policy | str | None = None) -> tup
         verdict = verify_change(
             change.before, change.after, _relative(change.path), resolved, hand_edit=True
         )
+        verdict = _without_drafts(verdict, change.path)
     except Exception as exc:  # a verifier crash must never block an edit
         return Verdict.of([], skipped=[f"{change.path}: verifier error — {exc}"]), change
     return verdict, change
+
+
+def _without_drafts(verdict: Verdict, path: str) -> Verdict:
+    """Drop weakening findings about assertions that were never committed.
+
+    This gate compares an edit against the file on disk, which is the state the
+    *previous* edit left. That is the right baseline for "did this edit weaken
+    the suite", and the wrong one for "was there anything here to weaken": an
+    assertion written and then reshaped minutes later, within one uncommitted
+    session, is a draft being worked out, not coverage being lost.
+
+    ``HEAD`` is the honest baseline for that question, so a weakening finding
+    whose original text is absent from the committed file is not reported.
+
+    Deliberately narrow. A file with **no** committed version is not exempt:
+    writing a strong test, watching it fail and then weakening it is the
+    tampering this exists to catch, and those tests are usually new. Exempting
+    every uncommitted file would put a hole straight through the middle of the
+    rule. Only an assertion in an already-committed file, which that file's
+    committed version does not contain, is treated as a draft — and a repeated
+    denial anywhere else is bounded by the edit-loop breaker instead.
+    """
+    weakenings = [f for f in verdict.findings if f.rule in _CONTRACT_RULES and f.before]
+    if not weakenings:
+        return verdict
+    from .worktree import at_head
+
+    # Located from the file's own directory: this gate is handed an absolute
+    # path and must not consult whichever repository the shell happens to be in.
+    committed = at_head(path, Path(path).parent)
+    if not committed:
+        return verdict
+    drafts = {id(f) for f in weakenings
+              if _normalise(f.before) not in _normalise(committed)}
+    if not drafts:
+        return verdict
+    kept = [f for f in verdict.findings if id(f) not in drafts]
+    return Verdict.of(kept, checked=verdict.checked, skipped=verdict.skipped,
+                      acknowledged=verdict.acknowledged)
+
+
+def _normalise(text: str) -> str:
+    """Compare assertions by their text, not by how they were laid out."""
+    return " ".join(text.split())
 
 
 def decision_json(verdict: Verdict, change: Change, policy=None) -> str:
@@ -133,6 +178,19 @@ def decision_json(verdict: Verdict, change: Change, policy=None) -> str:
             }
         }
     return json.dumps(payload)
+
+
+def allow_notice(verdict: Verdict, change: Change, advisory: bool) -> str:
+    """What to say on an edit that was permitted.
+
+    In advisory mode the full report is right — nothing is being enforced, so
+    the point is to show what would have been. Otherwise only the deferred
+    findings are worth mentioning, because the rest were genuinely fine.
+    """
+    if advisory and verdict.findings:
+        return render(verdict, change) + "\n"
+    note = render_deferred(verdict)
+    return note + "\n" if note else ""
 
 
 #: Rules that mean the test suite lost verification strength. Anything else is

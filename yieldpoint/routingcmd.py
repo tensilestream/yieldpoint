@@ -7,6 +7,7 @@ stay outside Yieldpoint.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from .core.policy import Policy
@@ -20,9 +21,11 @@ from .routingledger import RoutingFact, record, summarise
 def add_command(sub) -> None:
     """Register the three machine-readable routing lifecycle commands."""
     profile = sub.add_parser("assess-routing", help="build a provider-neutral routing profile")
-    profile.add_argument("--path", required=True)
+    profile.add_argument("--path", help="single changed file; omit when using --diff")
     profile.add_argument("--before", default="")
-    profile.add_argument("--after", required=True)
+    profile.add_argument("--after", default="")
+    profile.add_argument("--diff", default="",
+                         help="unified diff covering the whole change set")
     profile.add_argument("--policy")
     profile.add_argument("--root", default=".")
     profile.add_argument("--task", default="")
@@ -62,17 +65,23 @@ def add_command(sub) -> None:
 def assess_command(args) -> int:
     """Emit a profile from file transitions, without invoking a provider.
 
-    A verdict is optional but load-bearing: without one the profile reports
-    ``unverified``, which is the honest answer and also the one that refuses a
-    handoff. Pass ``--verdict`` to route on what verification actually found.
+    ``--diff`` profiles a whole change set, which is usually what a task is;
+    ``--path/--after`` profiles one file. A verdict is optional but
+    load-bearing: without one the profile reports ``unverified``, which is the
+    honest answer and also the one that refuses a handoff. Pass ``--verdict``
+    to route on what verification actually found.
     """
     policy = Policy.load(args.policy)
-    change = Change(args.path, _read(args.before), _read(args.after), args.task)
+    try:
+        changes = _changes(args)
+    except ValueError as exc:
+        print(f"yieldpoint: {exc}", file=sys.stderr)
+        return 2
     context = ProfileContext(
         verdict=json.loads(_read(args.verdict)) if args.verdict else None,
         repair_attempt=args.repair_attempt, loop_tripped=args.loop_tripped,
     )
-    profile = build_profile(change, policy, context=context).to_dict()
+    profile = build_profile(changes, policy, context=context).to_dict()
     record(RoutingFact("profile", profile), policy=policy, root=args.root)
     print(json.dumps(profile, indent=2, sort_keys=True))
     return 0
@@ -125,6 +134,21 @@ def _json(path: str) -> dict:
     if not isinstance(value, dict):
         raise ValueError(f"{path} must contain a JSON object")
     return value
+
+
+def _changes(args) -> tuple[Change, ...]:
+    """Read the change set from a diff, or from one explicit file transition."""
+    if args.diff:
+        from .verify import states_in
+
+        found = states_in(_read(args.diff) or "", args.root)
+        if not found:
+            raise ValueError(f"{args.diff} describes no file this engine can reconstruct")
+        return tuple(Change(path, before, after, args.task)
+                     for path, before, after in found)
+    if not args.path or not args.after:
+        raise ValueError("--path and --after are required unless --diff is given")
+    return (Change(args.path, _read(args.before), _read(args.after), args.task),)
 
 
 def _read(path: str) -> str | None:
