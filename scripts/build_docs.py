@@ -24,15 +24,17 @@ import re
 import sys
 
 # Same directory, which Python puts on the path for a script it is running.
-from docs_content import (
-    config_page, index_page, integrations_page, limits_page, start_page,
-)
+from docs_content import config_page, index_page, limits_page, start_page
+from docs_integrations import integrations_page
+from docs_routing import routing_page
 from docs_style import STYLE
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 OUT = ROOT / "docs"
 REPO = "https://github.com/tensilestream/yieldpoint"
 SITE = "https://tensilestream.github.io/yieldpoint"
+SITEMAP_URL = f"{SITE}/sitemap.xml"
+SITEMAP_NAMESPACE = "http://www.sitemaps.org/schemas/sitemap/0.9"
 
 #: A module-level ``UPPER_SNAKE = "lower_snake"`` in the package is a rule id.
 _RULE_VALUE = re.compile(r"^[a-z][a-z0-9]*(_[a-z0-9]+)+$")
@@ -123,12 +125,13 @@ def check_rules() -> list[str]:
 # Rendering
 # --------------------------------------------------------------------------
 
-PAGES = ("index", "start", "rules", "config", "integrations", "limits")
+PAGES = ("index", "start", "rules", "config", "routing", "integrations", "limits")
 TITLES = {
     "index": "Yieldpoint",
     "start": "Getting started",
     "rules": "Rules reference",
     "config": "Configuration",
+    "routing": "Safe model routing",
     "integrations": "Integrations",
     "limits": "Status and limits",
 }
@@ -138,6 +141,7 @@ DESCRIPTIONS = {
     "start": "Install Yieldpoint in a Python repository and block AI-authored changes that weaken tests or safeguards.",
     "rules": "Reference for Yieldpoint's deterministic rules for weakened assertions, skipped tests, CI bypasses, and risky refactors.",
     "config": "Configure Yieldpoint's repository policy for test contracts, refactors, CI safeguards, and code structure.",
+    "routing": "Use provider-neutral sticky model routing, bounded handoffs, and local redacted routing metrics with Yieldpoint.",
     "integrations": "Use Yieldpoint with Claude Code, Cursor, Codex, MCP, pre-commit, and CI to verify AI-authored code changes.",
     "limits": "Yieldpoint support status, current limitations, and the safeguards it can verify in Python repositories.",
 }
@@ -146,6 +150,24 @@ DESCRIPTIONS = {
 def page_url(page: str) -> str:
     """Return the canonical public URL for one generated page."""
     return f"{SITE}/" if page == "index" else f"{SITE}/{page}.html"
+
+
+def sitemap_document() -> str:
+    """Return Google-compatible XML with absolute canonical URLs only."""
+    urls = "\n".join(
+        f"  <url>\n    <loc>{page_url(page)}</loc>\n  </url>" for page in PAGES
+    )
+    return (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<urlset xmlns="{SITEMAP_NAMESPACE}">\n'
+        f"{urls}\n"
+        "</urlset>\n"
+    )
+
+
+def robots_document() -> str:
+    """Return the project-site robots policy and absolute sitemap location."""
+    return f"User-agent: *\nAllow: /\n\nSitemap: {SITEMAP_URL}\n"
 
 
 def shell(page: str, body: str) -> str:
@@ -251,24 +273,12 @@ def rules_page() -> str:
 def build() -> None:
     OUT.mkdir(exist_ok=True)
     (OUT / ".nojekyll").write_text("", encoding="utf-8")
-    (OUT / "robots.txt").write_text(
-        f"User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n",
-        encoding="utf-8",
-    )
-    urls = "\n".join(
-        f"  <url><loc>{page_url(page)}</loc></url>" for page in PAGES
-    )
-    (OUT / "sitemap.xml").write_text(
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        f"{urls}\n"
-        "</urlset>\n",
-        encoding="utf-8",
-    )
+    (OUT / "robots.txt").write_text(robots_document(), encoding="utf-8")
+    (OUT / "sitemap.xml").write_text(sitemap_document(), encoding="utf-8")
     (OUT / "style.css").write_text(STYLE, encoding="utf-8")
     bodies = {
         "index": index_page(), "start": start_page(), "rules": rules_page(),
-        "config": config_page(), "integrations": integrations_page(),
+        "config": config_page(), "routing": routing_page(), "integrations": integrations_page(),
         "limits": limits_page(),
     }
     for page, body in bodies.items():

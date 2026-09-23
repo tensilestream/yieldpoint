@@ -23,7 +23,7 @@
     <span class="mark" aria-hidden="true">&#9581;&#9679;&#9582;</span>
     <span>Yieldpoint</span>
   </a>
-  <nav><a class="" href="index.html">Yieldpoint</a><a class="" href="start.html">Getting started</a><a class="" href="rules.html">Rules reference</a><a class="" href="config.html">Configuration</a><a class="on" href="integrations.html">Integrations</a><a class="" href="limits.html">Status and limits</a><a class="out" href="https://github.com/tensilestream/yieldpoint">GitHub &#8599;</a></nav>
+  <nav><a class="" href="index.html">Yieldpoint</a><a class="" href="start.html">Getting started</a><a class="" href="rules.html">Rules reference</a><a class="" href="config.html">Configuration</a><a class="" href="routing.html">Safe model routing</a><a class="on" href="integrations.html">Integrations</a><a class="" href="limits.html">Status and limits</a><a class="out" href="https://github.com/tensilestream/yieldpoint">GitHub &#8599;</a></nav>
 </header>
 <main id="main">
 <h1>Integrations</h1>
@@ -36,9 +36,12 @@ moment in the loop.</p>
 yieldpoint install-hook              <span class="c"># blocks (the default)</span></code></pre>
 
 <h2>MCP server &mdash; so the agent can ask</h2>
-<p>Registers eight tools, including a zero-argument <code>yieldpoint_review</code> the
+<p>Registers eleven tools, including a zero-argument <code>yieldpoint_review</code> the
 agent can call after finishing a set of edits.</p>
 <pre><code>yieldpoint install-mcp --client cursor</code></pre>
+<p>The three routing tools are advisory contracts: they build evidence, a bounded
+handoff capsule and a handoff decision. They never choose a provider or send data.
+Read the <a href="routing.html">routing guide</a> before enabling host automation.</p>
 
 <h2>Pre-commit</h2>
 <pre><code>repos:

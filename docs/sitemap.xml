@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://tensilestream.github.io/yieldpoint/</loc></url>
-  <url><loc>https://tensilestream.github.io/yieldpoint/start.html</loc></url>
-  <url><loc>https://tensilestream.github.io/yieldpoint/rules.html</loc></url>
-  <url><loc>https://tensilestream.github.io/yieldpoint/config.html</loc></url>
-  <url><loc>https://tensilestream.github.io/yieldpoint/integrations.html</loc></url>
-  <url><loc>https://tensilestream.github.io/yieldpoint/limits.html</loc></url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/</loc>
+  </url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/start.html</loc>
+  </url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/rules.html</loc>
+  </url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/config.html</loc>
+  </url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/routing.html</loc>
+  </url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/integrations.html</loc>
+  </url>
+  <url>
+    <loc>https://tensilestream.github.io/yieldpoint/limits.html</loc>
+  </url>
 </urlset>

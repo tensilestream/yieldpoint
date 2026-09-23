@@ -14,6 +14,7 @@ from .harness import (
     CapsuleInput, Change, HandoffRequest, admit, build_profile,
     build_task_capsule, can_handoff, session_from,
 )
+from .routingledger import RoutingFact, record, summarise
 
 
 def add_command(sub) -> None:
@@ -23,6 +24,7 @@ def add_command(sub) -> None:
     profile.add_argument("--before", default="")
     profile.add_argument("--after", required=True)
     profile.add_argument("--policy")
+    profile.add_argument("--root", default=".")
     profile.add_argument("--task", default="")
     profile.set_defaults(handler=assess_command)
 
@@ -31,6 +33,8 @@ def add_command(sub) -> None:
     capsule.add_argument("--session", required=True)
     capsule.add_argument("--objective", required=True)
     capsule.add_argument("--acceptance", action="append", default=[])
+    capsule.add_argument("--policy")
+    capsule.add_argument("--root", default=".")
     capsule.set_defaults(handler=capsule_command)
 
     handoff = sub.add_parser("handoff-check", help="validate one model handoff")
@@ -38,14 +42,23 @@ def add_command(sub) -> None:
     handoff.add_argument("--session", required=True)
     handoff.add_argument("--event", required=True)
     handoff.add_argument("--capability", action="append", default=[])
+    handoff.add_argument("--policy")
+    handoff.add_argument("--root", default=".")
     handoff.set_defaults(handler=handoff_command)
+
+    stats = sub.add_parser("routing-stats", help="show redacted local routing activity")
+    stats.add_argument("--policy")
+    stats.add_argument("--root", default=".")
+    stats.set_defaults(handler=stats_command)
 
 
 def assess_command(args) -> int:
     """Emit a profile from file transitions, without invoking a provider."""
     policy = Policy.load(args.policy)
     change = Change(args.path, _read(args.before), _read(args.after), args.task)
-    print(json.dumps(build_profile(change, policy).to_dict(), indent=2, sort_keys=True))
+    profile = build_profile(change, policy).to_dict()
+    record(RoutingFact("profile", profile), policy=policy, root=args.root)
+    print(json.dumps(profile, indent=2, sort_keys=True))
     return 0
 
 
@@ -53,7 +66,12 @@ def capsule_command(args) -> int:
     """Emit a deterministic capsule for a matching profile/session pair."""
     profile, session = _documents(args)
     context = CapsuleInput(args.objective, tuple(args.acceptance))
-    print(json.dumps(build_task_capsule(session, profile, context=context), indent=2, sort_keys=True))
+    capsule = build_task_capsule(session, profile, context=context)
+    policy = Policy.load(args.policy)
+    record(RoutingFact("capsule", profile, session=session,
+                       capsule_chars=len(json.dumps(capsule, sort_keys=True, separators=(",", ":")))),
+           policy=policy, root=args.root)
+    print(json.dumps(capsule, indent=2, sort_keys=True))
     return 0
 
 
@@ -62,8 +80,17 @@ def handoff_command(args) -> int:
     profile, raw_session = _documents(args)
     request = HandoffRequest(args.event, candidate_capabilities=frozenset(args.capability))
     allowed, reason = can_handoff(session_from(raw_session), profile, request)
+    policy = Policy.load(args.policy)
+    record(RoutingFact("handoff", profile, session=raw_session, allowed=allowed,
+                       event=args.event), policy=policy, root=args.root)
     print(json.dumps({"allowed": allowed, "reason": reason}, indent=2, sort_keys=True))
     return 0 if allowed else 3
+
+
+def stats_command(args) -> int:
+    """Print only counted routing metadata; the underlying ledger stays local."""
+    print(json.dumps(summarise(Policy.load(args.policy), args.root), indent=2, sort_keys=True))
+    return 0
 
 
 def _documents(args) -> tuple[dict, dict]:

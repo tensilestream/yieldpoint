@@ -93,6 +93,36 @@ class TestTheSiteIsBuilt(unittest.TestCase):
             self.assertEqual(parser.stack, [], f"{page.name} has unclosed tags")
 
 
+class TestSearchArtifacts(unittest.TestCase):
+    """Google must receive valid XML, absolute canonicals, and a matching hint."""
+
+    def test_sitemap_is_a_utf8_protocol_document_of_canonical_page_urls(self):
+        import xml.etree.ElementTree as xml
+
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import build_docs
+        finally:
+            sys.path.pop(0)
+        root = xml.fromstring((DOCS / "sitemap.xml").read_text(encoding="utf-8"))
+        namespace = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+        self.assertEqual(root.tag, namespace + "urlset")
+        locations = [node.text for node in root.findall(namespace + "url/" + namespace + "loc")]
+        self.assertEqual(locations, [build_docs.page_url(page) for page in build_docs.PAGES])
+        self.assertTrue(all(url.startswith("https://tensilestream.github.io/yieldpoint/")
+                            for url in locations))
+
+    def test_robots_points_at_the_exact_absolute_sitemap_url(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        try:
+            import build_docs
+        finally:
+            sys.path.pop(0)
+        robots = (DOCS / "robots.txt").read_text(encoding="utf-8")
+        self.assertEqual(robots, build_docs.robots_document())
+        self.assertIn(f"Sitemap: {build_docs.SITEMAP_URL}", robots)
+
+
 if __name__ == "__main__":
     unittest.main()
 

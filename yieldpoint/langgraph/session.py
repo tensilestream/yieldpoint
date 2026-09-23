@@ -6,6 +6,7 @@ from typing import Any, Callable, Mapping
 
 from ..core.policy import Policy
 from ..harness import Change, HandoffRequest, admit, build_profile, can_handoff, session_from
+from ..routingledger import RoutingFact, record
 from .router import ESCALATE
 
 PROFILE_KEY = "yieldpoint_routing_profile"
@@ -26,6 +27,8 @@ def make_admission_node(*, task_id: str, selected_model: str = "",
             profile, task_id=task_id, selected_model=selected_model,
             selection_source=selection_source,
         )
+        record(RoutingFact("admission", profile, session=session.to_dict()), policy=resolved,
+               root=str(state.get("root", ".")))
         return {PROFILE_KEY: profile, SESSION_KEY: session.to_dict()}
 
     return admission

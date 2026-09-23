@@ -10,6 +10,26 @@ package version is not.
 
 ## [Unreleased]
 
+## [0.1.5] — unreleased
+
+### Added
+
+- **Provider-neutral routing contracts.** Versioned routing profiles, sticky task
+  sessions, explicit capability-checked handoffs, and bounded transfer capsules are
+  available through the Python API, CLI, MCP server, LangGraph adapter, Node package,
+  and Java package. Hosts retain model selection, credentials, and provider calls.
+- **Release-aware SDK routing.** Node and Maven release paths now require the shared
+  package-consumer and release-preflight checks in their routing profile; common JSON
+  fixtures keep Python, Node, and Java transport validation aligned.
+- **Optional Jev examples.** Python, Node, and Java examples show a safe, opt-in router
+  boundary with deterministic fallback; no provider request occurs by default.
+- **Local routing observability.** `yieldpoint routing-stats` summarizes a separate,
+  redacted local ledger. It records only counts, tier, selection source, switch count,
+  capsule size, and handoff outcome — never model names, prompts, diffs, provider
+  payloads, or credentials.
+- **Safe model routing guide.** The generated documentation site now covers observe-only
+  rollout, MCP/SDK hooks, bounded handoffs, examples, and the local telemetry contract.
+
 ## [0.1.4] — unreleased
 
 ### Added

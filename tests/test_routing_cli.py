@@ -28,6 +28,14 @@ class TestRoutingCommands(unittest.TestCase):
         self.assertEqual(code, EXIT_OK)
         self.assertEqual(json.loads(output.getvalue())["schema_version"], 1)
 
+    def test_routing_stats_reports_only_local_aggregate_counts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = io.StringIO()
+            with redirect_stdout(output):
+                code = main(["routing-stats", "--root", directory])
+        self.assertEqual(code, EXIT_OK)
+        self.assertEqual(json.loads(output.getvalue())["events"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
