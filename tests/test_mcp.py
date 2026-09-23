@@ -71,6 +71,7 @@ class TestToolListing(unittest.TestCase):
             "yieldpoint_verify_change", "yieldpoint_verify_diff", "yieldpoint_review",
             "yieldpoint_brief",
             "yieldpoint_scan", "yieldpoint_assess", "yieldpoint_routing_profile",
+            "yieldpoint_build_task_capsule", "yieldpoint_handoff_check",
             "yieldpoint_stats", "yieldpoint_policy"})
 
     def test_schemas_are_well_formed(self):
@@ -99,6 +100,23 @@ class TestToolCalls(unittest.TestCase):
         profile = result["structuredContent"]
         self.assertFalse(profile["coverage"]["exact_analysis"])
         self.assertIn("host-owned", result["content"][0]["text"])
+
+    def test_handoff_tools_preserve_the_profile_session_pair(self):
+        profile = self.call("yieldpoint_routing_profile", {
+            "path": "src/widget.py", "after": "x = 1\n",
+        })["structuredContent"]
+        from yieldpoint.harness import admit
+
+        session = admit(profile, task_id="mcp-test").to_dict()
+        checked = self.call("yieldpoint_handoff_check", {
+            "session": session, "profile": profile, "event": "verification_failed",
+            "candidate_capabilities": ["code_generation", "tool_use", "strong_reasoning"],
+        })["structuredContent"]
+        self.assertTrue(checked["allowed"])
+        capsule = self.call("yieldpoint_build_task_capsule", {
+            "session": session, "profile": profile, "objective": "Fix widget",
+        })["structuredContent"]
+        self.assertEqual(capsule["profile_id"], profile["profile_id"])
 
     def test_structured_content_is_the_versioned_verdict(self):
         result = self.call("yieldpoint_verify_change", WEAKENED)
@@ -211,12 +229,10 @@ class TestInstalling(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         os.chdir(self.root)
-
-    def tearDown(self):
-        os.chdir(self._previous)
         from yieldpoint.core import parsecache
-        parsecache.close()
-        self._tmp.cleanup()
+        self.addCleanup(parsecache.close)
+        self.addCleanup(os.chdir, self._previous)
+        self.addCleanup(self._tmp.cleanup)
 
     def test_writing_a_project_config(self):
         path, backup = install(BY_KEY["claude-code"], self.root)

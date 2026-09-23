@@ -297,6 +297,9 @@ def _parser() -> argparse.ArgumentParser:
     from .recall import add_command as add_recall
     add_recall(sub)
 
+    from .routingcmd import add_command as add_routing
+    add_routing(sub)
+
     _add_inspection_commands(sub)
     _add_reporting_commands(sub)
 

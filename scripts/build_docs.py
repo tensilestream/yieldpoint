@@ -45,6 +45,9 @@ NOT_RULES = {
     "yieldpoint_attempts": "a LangGraph state key",
     "yieldpoint_history": "a LangGraph state key",
     "yieldpoint_loop_tripped": "a LangGraph state key",
+    "yieldpoint_handoff_event": "a LangGraph state key",
+    "yieldpoint_routing_profile": "a LangGraph state key",
+    "yieldpoint_routing_session": "a LangGraph state key",
 }
 
 

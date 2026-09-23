@@ -120,6 +120,36 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "yieldpoint_build_task_capsule",
+        "title": "Build a bounded model-handoff capsule",
+        "description": "Create a deterministic, bounded context package for one approved model handoff.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session": {"type": "object", "description": "Routing session JSON."},
+                "profile": {"type": "object", "description": "Matching routing profile JSON."},
+                "objective": {"type": "string", "description": "Immutable task objective."},
+                "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["session", "profile", "objective"],
+        },
+    },
+    {
+        "name": "yieldpoint_handoff_check",
+        "title": "Check whether a model handoff is safe",
+        "description": "Validate sticky-session budget, checkpoint, and candidate capabilities; it never selects a model.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session": {"type": "object", "description": "Routing session JSON."},
+                "profile": {"type": "object", "description": "Matching routing profile JSON."},
+                "event": {"type": "string", "description": "Explicit checkpoint event."},
+                "candidate_capabilities": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["session", "profile", "event"],
+        },
+    },
+    {
         "name": "yieldpoint_stats",
         "title": "What Yieldpoint has caught and what it cost",
         "description": (

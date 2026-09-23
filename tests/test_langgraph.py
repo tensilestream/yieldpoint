@@ -17,6 +17,11 @@ from yieldpoint.langgraph import (
     PASS,
     REPAIR,
     TRIPPED_KEY,
+    HANDOFF_EVENT_KEY,
+    PROFILE_KEY,
+    SESSION_KEY,
+    make_admission_node,
+    make_handoff_router,
     make_router,
     observe,
     read_change,
@@ -184,6 +189,22 @@ class TestRepairContext(unittest.TestCase):
 
     def test_no_findings_means_no_feedback(self):
         self.assertEqual(repair_context({"verdict": _verdict(Status.PASS).to_dict()}), "")
+
+
+class TestRoutingSessionNodes(unittest.TestCase):
+    def test_admission_stores_json_safe_sticky_selection(self):
+        node = make_admission_node(task_id="graph-1", selected_model="small")
+        update = node(change_state(after=ORIGINAL, path="src/widget.py"))
+        self.assertEqual(update[SESSION_KEY]["selected_model"], "small")
+        self.assertEqual(update[SESSION_KEY]["profile_id"], update[PROFILE_KEY]["profile_id"])
+
+    def test_handoff_is_only_available_at_an_explicit_failure_checkpoint(self):
+        update = make_admission_node(task_id="graph-1")(change_state(path="src/widget.py"))
+        router = make_handoff_router(candidate_capabilities=frozenset({
+            "code_generation", "tool_use", "strong_reasoning",
+        }))
+        self.assertEqual(router(update), ESCALATE)
+        self.assertEqual(router({**update, HANDOFF_EVENT_KEY: "verification_failed"}), "handoff")
 
 
 class TestVerdictFrom(unittest.TestCase):

@@ -159,6 +159,32 @@ def _routing_profile(arguments: dict, policy: Policy):
     return text, profile, False
 
 
+def _build_task_capsule(arguments: dict, policy: Policy):
+    """Build local transfer state; policy is unused because profile binds limits."""
+    del policy
+    from ..harness import CapsuleInput, build_task_capsule
+
+    context = CapsuleInput(
+        objective=str(arguments["objective"]),
+        acceptance_criteria=tuple(arguments.get("acceptance_criteria") or ()),
+    )
+    capsule = build_task_capsule(arguments["session"], arguments["profile"], context=context)
+    return "bounded handoff capsule built", capsule, False
+
+
+def _handoff_check(arguments: dict, policy: Policy):
+    """Check a host's handoff request without choosing or contacting a model."""
+    del policy
+    from ..harness import HandoffRequest, can_handoff, session_from
+
+    request = HandoffRequest(
+        event=str(arguments["event"]),
+        candidate_capabilities=frozenset(arguments.get("candidate_capabilities") or ()),
+    )
+    allowed, reason = can_handoff(session_from(arguments["session"]), arguments["profile"], request)
+    return reason, {"allowed": allowed, "reason": reason}, False
+
+
 def _stats(arguments: dict, policy: Policy):
     from .. import ledger
     from ..report import render, to_dict
@@ -243,6 +269,8 @@ _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
     "yieldpoint_scan": _scan,
     "yieldpoint_assess": _assess,
     "yieldpoint_routing_profile": _routing_profile,
+    "yieldpoint_build_task_capsule": _build_task_capsule,
+    "yieldpoint_handoff_check": _handoff_check,
     "yieldpoint_stats": _stats,
     "yieldpoint_brief": _brief,
     "yieldpoint_policy": _policy,

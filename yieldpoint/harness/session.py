@@ -60,6 +60,26 @@ def admit(profile: Mapping[str, Any], *, task_id: str, selected_model: str = "",
                           selection_source, selection_reason)
 
 
+def session_from(source: Mapping[str, Any]) -> RoutingSession:
+    """Rehydrate portable session JSON; reject missing identity fields."""
+    if source.get("routing_session_version") != SESSION_SCHEMA_VERSION:
+        raise ValueError("unsupported routing session schema")
+    return RoutingSession(
+        task_id=_required(source, "task_id"), profile_id=_required(source, "profile_id"),
+        selected_model=str(source.get("selected_model", "")),
+        selection_source=str(source.get("selection_source", "deterministic")),
+        selection_reason=str(source.get("selection_reason", "")),
+        switch_count=int(source.get("switch_count", 0)),
+    )
+
+
+def _required(source: Mapping[str, Any], key: str) -> str:
+    value = str(source.get(key, ""))
+    if not value:
+        raise ValueError(f"routing session is missing {key}")
+    return value
+
+
 def can_handoff(session: RoutingSession, profile: Mapping[str, Any],
                 request: HandoffRequest) -> tuple[bool, str]:
     """Return whether a single explicit checkpoint can switch models."""
@@ -95,4 +115,4 @@ def handoff(session: RoutingSession, profile: Mapping[str, Any],
     )
 
 
-__all__ = ["RoutingSession", "HandoffRequest", "admit", "can_handoff", "handoff", "SESSION_SCHEMA_VERSION"]
+__all__ = ["RoutingSession", "HandoffRequest", "admit", "session_from", "can_handoff", "handoff", "SESSION_SCHEMA_VERSION"]

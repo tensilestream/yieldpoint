@@ -7,6 +7,7 @@ is why adding a framework is a short file rather than a fork.
 | File | Tech | Scenario |
 |---|---|---|
 | [`langgraph_repair_loop.py`](./langgraph_repair_loop.py) | LangGraph | Single agent: generate → verify → repair, with the prescription fed back |
+| [`langgraph_sticky_routing.py`](./langgraph_sticky_routing.py) | LangGraph state | Admit one model, then permit one capability-checked handoff only after a verification checkpoint |
 | [`node/langgraph_repair_loop.mjs`](./node/langgraph_repair_loop.mjs) | Node adapter | Calls the canonical CLI and maps its verdict to a graph route |
 | [`java`](./java/README.md) | Java / LangGraph4j | Uses the canonical CLI through the Java graph adapter |
 | [`langgraph_fanout.py`](./langgraph_fanout.py) | LangGraph `Send` | **Many workers on one repo** — per-worker verdicts, pooled subjects, shared ledger |
