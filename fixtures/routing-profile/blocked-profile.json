@@ -9,7 +9,7 @@
   },
   "coverage": {
     "analysed_paths": [
-      "src/widget.py"
+      "tests/test_widget.py"
     ],
     "exact_analysis": true,
     "languages": [
@@ -31,21 +31,20 @@
     "switch_allowed_now": false
   },
   "pace": {
-    "reason": "boundary_violation \u2014 worth fixing before the next turn builds on top of it, rather than at the next commit",
+    "reason": "assertion_monotonicity \u2014 worth fixing before the next turn builds on top of it, rather than at the next commit",
     "signals": {
       "budget_used": 0.001
     },
     "value": "fix-first"
   },
-  "profile_id": "sha256:6a43b667eaacf40527f3ce32d60e605471dcb59deebb75b933fa78e57013f28b",
+  "profile_id": "sha256:6040814ded0c78aeca37abf59c4c91ec79dbfad819f9a482bdcfc1576ae3f69a",
   "requirements": {
     "capabilities": [
-      "strong_reasoning",
-      "tool_use"
+      "human_review"
     ],
     "may_skip_model": false,
     "minimum_context_window": "standard",
-    "suggested_policy": "sticky_capable"
+    "suggested_policy": "human_before_land"
   },
   "risk": {
     "certain": true,
@@ -57,8 +56,8 @@
       "critical"
     ],
     "question": "risk",
-    "rank": 0,
-    "reason": "small, and changes nothing the module exposes",
+    "rank": 4,
+    "reason": "edits a protected test file, where a weakening hides itself",
     "schema_version": 1,
     "signals": {
       "added_lines": 1,
@@ -71,13 +70,13 @@
       "max_function_lines": 2,
       "new_dependencies": [],
       "parses": true,
-      "path": "src/widget.py",
+      "path": "tests/test_widget.py",
       "removed_lines": 1,
       "structural": false,
       "touches_generated": false,
-      "touches_protected_test": false
+      "touches_protected_test": true
     },
-    "value": "trivial"
+    "value": "critical"
   },
   "schema_version": 1,
   "tier": {
@@ -90,7 +89,7 @@
       "human"
     ],
     "question": "tier",
-    "reason": "cosmetic and local; the cheapest model is enough",
+    "reason": "a protected test changed; a person should look before this lands",
     "schema_version": 1,
     "signals": {
       "added_lines": 1,
@@ -103,25 +102,25 @@
       "max_function_lines": 2,
       "new_dependencies": [],
       "parses": true,
-      "path": "src/widget.py",
+      "path": "tests/test_widget.py",
       "removed_lines": 1,
-      "risk": "trivial",
+      "risk": "critical",
       "structural": false,
       "touches_generated": false,
-      "touches_protected_test": false,
+      "touches_protected_test": true,
       "verified": null
     },
-    "value": "small"
+    "value": "human"
   },
   "verification": {
     "findings": [
-      "boundary_violation"
+      "assertion_monotonicity"
     ],
     "loop_tripped": false,
-    "repair_attempt": 1,
+    "repair_attempt": 0,
     "required": [
-      "unit_tests"
+      "human_review"
     ],
-    "status": "repair"
+    "status": "block"
   }
 }

@@ -143,12 +143,17 @@ def _assess(arguments: dict, policy: Policy):
 
 def _routing_profile(arguments: dict, policy: Policy):
     """Expose provider-neutral routing evidence without selecting a model."""
-    from ..harness import Change, build_profile
+    from ..harness import Change, ProfileContext, build_profile
 
+    context = ProfileContext(
+        verdict=arguments.get("verdict"),
+        repair_attempt=int(arguments.get("repair_attempt") or 0),
+        loop_tripped=bool(arguments.get("loop_tripped")),
+    )
     profile = build_profile(Change(
         path=arguments.get("path", ""), before=arguments.get("before"),
         after=arguments.get("after"), task=arguments.get("task", ""),
-    ), policy).to_dict()
+    ), policy, context=context).to_dict()
     requirements = profile["requirements"]
     text = (
         f"risk: {profile['risk']['value']}\n"
@@ -162,26 +167,33 @@ def _routing_profile(arguments: dict, policy: Policy):
 def _build_task_capsule(arguments: dict, policy: Policy):
     """Build local transfer state; policy is unused because profile binds limits."""
     del policy
-    from ..harness import CapsuleInput, build_task_capsule
+    from ..harness import CapsuleInput, build_task_capsule, validate_profile
 
     context = CapsuleInput(
         objective=str(arguments["objective"]),
         acceptance_criteria=tuple(arguments.get("acceptance_criteria") or ()),
     )
-    capsule = build_task_capsule(arguments["session"], arguments["profile"], context=context)
+    profile = validate_profile(arguments["profile"]).to_dict()
+    capsule = build_task_capsule(arguments["session"], profile, context=context)
     return "bounded handoff capsule built", capsule, False
 
 
 def _handoff_check(arguments: dict, policy: Policy):
-    """Check a host's handoff request without choosing or contacting a model."""
+    """Check a host's handoff request without choosing or contacting a model.
+
+    The profile is validated, not trusted: its ``handoff`` block is what bounds
+    this decision, so an edited copy would otherwise set its own limits.
+    """
     del policy
-    from ..harness import HandoffRequest, can_handoff, session_from
+    from ..harness import HandoffRequest, can_handoff, session_from, validate_profile
 
     request = HandoffRequest(
         event=str(arguments["event"]),
         candidate_capabilities=frozenset(arguments.get("candidate_capabilities") or ()),
+        estimated_overhead_fraction=float(arguments.get("estimated_overhead_fraction") or 0.0),
     )
-    allowed, reason = can_handoff(session_from(arguments["session"]), arguments["profile"], request)
+    profile = validate_profile(arguments["profile"]).to_dict()
+    allowed, reason = can_handoff(session_from(arguments["session"]), profile, request)
     return reason, {"allowed": allowed, "reason": reason}, False
 
 

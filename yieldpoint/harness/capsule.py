@@ -56,15 +56,21 @@ def _verification(verdict: Mapping[str, Any] | None) -> dict[str, Any]:
             "prescription": verdict.get("prescription", "")}
 
 
+#: Characters ``"digest":"sha256:<64 hex>",`` adds to the encoded capsule. The
+#: digest is measured before it is inserted, so it is reserved rather than
+#: discovered: a capsule that fits its budget must still fit once it is signed.
+DIGEST_CHARS = len('"digest":"sha256:","') + 64
+
+
 def _bound(capsule: dict[str, Any], maximum: int) -> dict[str, Any]:
-    maximum = max(1_000, min(maximum, 24_000))
+    budget = max(1_000, min(maximum, 24_000)) - DIGEST_CHARS
     for key in ("diff_excerpt", "test_outcomes", "completed_actions"):
-        if len(_encoded(capsule)) <= maximum:
+        if len(_encoded(capsule)) <= budget:
             break
         value = capsule[key]
         capsule[key] = "" if isinstance(value, str) else []
         capsule["truncated"].append(key)
-    if len(_encoded(capsule)) > maximum:
+    if len(_encoded(capsule)) > budget:
         raise ValueError("objective, acceptance criteria, and findings exceed capsule limit")
     capsule["digest"] = "sha256:" + hashlib.sha256(_encoded(capsule).encode()).hexdigest()
     return capsule

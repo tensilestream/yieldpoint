@@ -17,6 +17,7 @@ from yieldpoint.langgraph import (
     PASS,
     REPAIR,
     TRIPPED_KEY,
+    UNVERIFIED,
     HANDOFF_EVENT_KEY,
     PROFILE_KEY,
     SESSION_KEY,
@@ -199,12 +200,33 @@ class TestRoutingSessionNodes(unittest.TestCase):
         self.assertEqual(update[SESSION_KEY]["profile_id"], update[PROFILE_KEY]["profile_id"])
 
     def test_handoff_is_only_available_at_an_explicit_failure_checkpoint(self):
-        update = make_admission_node(task_id="graph-1")(change_state(path="src/widget.py"))
+        state = {**change_state(path="src/widget.py"),
+                 "verdict": _verdict(Status.REPAIR).to_dict()}
+        update = {**state, **make_admission_node(task_id="graph-1")(state)}
         router = make_handoff_router(candidate_capabilities=frozenset({
             "code_generation", "tool_use", "strong_reasoning",
         }))
         self.assertEqual(router(update), ESCALATE)
         self.assertEqual(router({**update, HANDOFF_EVENT_KEY: "verification_failed"}), "handoff")
+
+    def test_admission_reads_the_repair_state_the_graph_already_holds(self):
+        state = {**change_state(path="src/widget.py"),
+                 "verdict": _verdict(Status.REPAIR).to_dict(),
+                 ATTEMPTS_KEY: 2, TRIPPED_KEY: True}
+        profile = make_admission_node(task_id="graph-2")(state)[PROFILE_KEY]
+        self.assertEqual(profile["verification"]["status"], REPAIR)
+        self.assertEqual(profile["verification"]["repair_attempt"], 2)
+        self.assertTrue(profile["verification"]["loop_tripped"])
+
+    def test_a_change_no_rule_verified_is_not_handed_to_another_model(self):
+        """Admission before verification reports `unverified`, and the gate
+        refuses: there is no evidence a stronger model would help."""
+        update = make_admission_node(task_id="graph-3")(change_state(path="src/widget.py"))
+        router = make_handoff_router(candidate_capabilities=frozenset({
+            "code_generation", "tool_use", "strong_reasoning",
+        }))
+        self.assertEqual(update[PROFILE_KEY]["verification"]["status"], UNVERIFIED)
+        self.assertEqual(router({**update, HANDOFF_EVENT_KEY: "verification_failed"}), ESCALATE)
 
 
 class TestVerdictFrom(unittest.TestCase):

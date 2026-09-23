@@ -115,6 +115,15 @@ TOOLS: list[dict[str, Any]] = [
                 "before": {"type": "string", "description": "Current content, omit if new."},
                 "after": {"type": "string", "description": "Proposed content."},
                 "task": {"type": "string", "description": "Host objective, retained only locally."},
+                "verdict": {
+                    "type": "object",
+                    "description": (
+                        "Verdict JSON for this change. Without it the profile "
+                        "reports 'unverified', which refuses a handoff."
+                    ),
+                },
+                "repair_attempt": {"type": "integer", "description": "Repairs tried so far."},
+                "loop_tripped": {"type": "boolean", "description": "Whether the loop detector fired."},
             },
             "required": ["path", "after"],
         },
@@ -145,6 +154,13 @@ TOOLS: list[dict[str, Any]] = [
                 "profile": {"type": "object", "description": "Matching routing profile JSON."},
                 "event": {"type": "string", "description": "Explicit checkpoint event."},
                 "candidate_capabilities": {"type": "array", "items": {"type": "string"}},
+                "estimated_overhead_fraction": {
+                    "type": "number",
+                    "description": (
+                        "Router plus capsule input as a fraction of the task's "
+                        "model input. Checked against the profile's budget."
+                    ),
+                },
             },
             "required": ["session", "profile", "event"],
         },

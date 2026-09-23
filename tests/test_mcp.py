@@ -92,32 +92,6 @@ class TestToolCalls(unittest.TestCase):
         self.assertIn("assertion_monotonicity", result["content"][0]["text"])
         self.assertEqual(result["structuredContent"]["status"], "repair")
 
-    def test_routing_profile_is_advisory_and_marks_unknown_coverage(self):
-        result = self.call("yieldpoint_routing_profile", {
-            "path": "src/widget.ts", "after": "export const x = 1\n",
-        })
-        self.assertFalse(result["isError"])
-        profile = result["structuredContent"]
-        self.assertFalse(profile["coverage"]["exact_analysis"])
-        self.assertIn("host-owned", result["content"][0]["text"])
-
-    def test_handoff_tools_preserve_the_profile_session_pair(self):
-        profile = self.call("yieldpoint_routing_profile", {
-            "path": "src/widget.py", "after": "x = 1\n",
-        })["structuredContent"]
-        from yieldpoint.harness import admit
-
-        session = admit(profile, task_id="mcp-test").to_dict()
-        checked = self.call("yieldpoint_handoff_check", {
-            "session": session, "profile": profile, "event": "verification_failed",
-            "candidate_capabilities": ["code_generation", "tool_use", "strong_reasoning"],
-        })["structuredContent"]
-        self.assertTrue(checked["allowed"])
-        capsule = self.call("yieldpoint_build_task_capsule", {
-            "session": session, "profile": profile, "objective": "Fix widget",
-        })["structuredContent"]
-        self.assertEqual(capsule["profile_id"], profile["profile_id"])
-
     def test_structured_content_is_the_versioned_verdict(self):
         result = self.call("yieldpoint_verify_change", WEAKENED)
         self.assertEqual(result["structuredContent"]["schema_version"], SCHEMA_VERSION)

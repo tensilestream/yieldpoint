@@ -50,6 +50,7 @@ NOT_RULES = {
     "yieldpoint_handoff_event": "a LangGraph state key",
     "yieldpoint_routing_profile": "a LangGraph state key",
     "yieldpoint_routing_session": "a LangGraph state key",
+    "yieldpoint_estimated_overhead": "a LangGraph state key",
 }
 
 

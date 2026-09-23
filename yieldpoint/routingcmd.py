@@ -11,8 +11,8 @@ from pathlib import Path
 
 from .core.policy import Policy
 from .harness import (
-    CapsuleInput, Change, HandoffRequest, admit, build_profile,
-    build_task_capsule, can_handoff, session_from,
+    CapsuleInput, Change, HandoffRequest, ProfileContext, admit, build_profile,
+    build_task_capsule, can_handoff, session_from, validate_profile,
 )
 from .routingledger import RoutingFact, record, summarise
 
@@ -26,6 +26,10 @@ def add_command(sub) -> None:
     profile.add_argument("--policy")
     profile.add_argument("--root", default=".")
     profile.add_argument("--task", default="")
+    profile.add_argument("--verdict", default="",
+                         help="verdict JSON from `yieldpoint verify-change --json`")
+    profile.add_argument("--repair-attempt", type=int, default=0)
+    profile.add_argument("--loop-tripped", action="store_true")
     profile.set_defaults(handler=assess_command)
 
     capsule = sub.add_parser("build-capsule", help="build a bounded handoff capsule")
@@ -42,6 +46,9 @@ def add_command(sub) -> None:
     handoff.add_argument("--session", required=True)
     handoff.add_argument("--event", required=True)
     handoff.add_argument("--capability", action="append", default=[])
+    handoff.add_argument("--overhead", type=float, default=0.0,
+                         help="estimated router and capsule input, as a fraction "
+                              "of the task's model input")
     handoff.add_argument("--policy")
     handoff.add_argument("--root", default=".")
     handoff.set_defaults(handler=handoff_command)
@@ -53,10 +60,19 @@ def add_command(sub) -> None:
 
 
 def assess_command(args) -> int:
-    """Emit a profile from file transitions, without invoking a provider."""
+    """Emit a profile from file transitions, without invoking a provider.
+
+    A verdict is optional but load-bearing: without one the profile reports
+    ``unverified``, which is the honest answer and also the one that refuses a
+    handoff. Pass ``--verdict`` to route on what verification actually found.
+    """
     policy = Policy.load(args.policy)
     change = Change(args.path, _read(args.before), _read(args.after), args.task)
-    profile = build_profile(change, policy).to_dict()
+    context = ProfileContext(
+        verdict=json.loads(_read(args.verdict)) if args.verdict else None,
+        repair_attempt=args.repair_attempt, loop_tripped=args.loop_tripped,
+    )
+    profile = build_profile(change, policy, context=context).to_dict()
     record(RoutingFact("profile", profile), policy=policy, root=args.root)
     print(json.dumps(profile, indent=2, sort_keys=True))
     return 0
@@ -78,7 +94,8 @@ def capsule_command(args) -> int:
 def handoff_command(args) -> int:
     """Report whether an explicit checkpoint may change the selected model."""
     profile, raw_session = _documents(args)
-    request = HandoffRequest(args.event, candidate_capabilities=frozenset(args.capability))
+    request = HandoffRequest(args.event, candidate_capabilities=frozenset(args.capability),
+                             estimated_overhead_fraction=args.overhead)
     allowed, reason = can_handoff(session_from(raw_session), profile, request)
     policy = Policy.load(args.policy)
     record(RoutingFact("handoff", profile, session=raw_session, allowed=allowed,
@@ -94,7 +111,13 @@ def stats_command(args) -> int:
 
 
 def _documents(args) -> tuple[dict, dict]:
-    return _json(args.profile), _json(args.session)
+    """Read a profile/session pair, checking the profile has not been edited.
+
+    Validating here rather than trusting the file is the point of the digest: a
+    profile whose bounds were widened by hand is the one case where a gate that
+    reads its limits from the document would otherwise be talked out of them.
+    """
+    return validate_profile(_json(args.profile)).to_dict(), _json(args.session)
 
 
 def _json(path: str) -> dict:

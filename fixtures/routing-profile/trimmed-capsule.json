@@ -1,0 +1,42 @@
+{
+  "acceptance_criteria": [
+    "boundary_violation is cleared",
+    "unit tests pass"
+  ],
+  "changed_paths": [
+    "src/widget.py"
+  ],
+  "completed_actions": [],
+  "diff_excerpt": "",
+  "digest": "sha256:18f95bb15d200daecebefaa7ea4154d5af83d2b19db9a76e9d3b5a17de374152",
+  "objective": "Charge each line item at its own price",
+  "profile_id": "sha256:6a43b667eaacf40527f3ce32d60e605471dcb59deebb75b933fa78e57013f28b",
+  "schema_version": 1,
+  "selection": {
+    "selected_model": "standard",
+    "selection_reason": "",
+    "selection_source": "deterministic",
+    "switch_count": 0
+  },
+  "task_id": "fixture-task",
+  "test_outcomes": [
+    "pytest tests/test_widget.py: 1 failed"
+  ],
+  "truncated": [
+    "diff_excerpt"
+  ],
+  "unknowns": [],
+  "verification": {
+    "findings": [
+      {
+        "detail": "reaches past its layer",
+        "file": "src/widget.py",
+        "line": 2,
+        "prescription": "call the accessor instead",
+        "rule": "boundary_violation"
+      }
+    ],
+    "prescription": "",
+    "status": "repair"
+  }
+}

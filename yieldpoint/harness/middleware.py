@@ -164,6 +164,11 @@ class Middleware:
         A harness usually wants several of these at once, and computing the
         signals once for all of them is the difference between this being free
         and merely cheap.
+
+        ``routing_profile`` is attached only when ``routing_session.enabled``.
+        Off — the default — this returns exactly what it returned before routing
+        existed, which is what makes the feature switchable rather than merely
+        configurable.
         """
         from .routing import risk
         from .profile import ProfileContext, build_profile
@@ -174,6 +179,8 @@ class Middleware:
             "risk": risk(change, self.policy, signals=found).to_dict(),
             "tier": tier(change, self.policy, signals=found).to_dict(),
         }
+        if not self.policy.routing_session.enabled:
+            return result
         return {**result, "routing_profile": build_profile(
             change, self.policy, context=ProfileContext(signals=found)).to_dict()}
 
