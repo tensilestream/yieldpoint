@@ -86,16 +86,74 @@ class YieldpointRouterTest {
     }
   }
 
+  /** Everything the decision table can ask for, so one condition is tested at a time. */
+  private static final List<String> ALL = List.of(
+      "tool_use", "strong_reasoning", "large_context", "code_generation", "multilingual_sdk");
+
   @Test void accepts_the_shared_routing_profile_and_session_fixture() throws Exception {
     RoutingProfile profile = RoutingProfile.fromMap(fixture("valid-profile.json"));
     RoutingSession session = RoutingSession.fromMap(fixture("valid-session.json"));
     assertEquals(profile.profileId(), session.profileId());
-    assertEquals(true, session.canHandoff(profile, "verification_failed", List.of("code_generation")).allowed());
+    assertEquals(true, session.canHandoff(profile, "verification_failed", ALL).allowed());
   }
 
   @Test void rejects_the_shared_invalid_routing_profile_fixture() throws Exception {
     org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
         () -> RoutingProfile.fromMap(fixture("invalid-profile.json")));
+  }
+
+  @Test void refuses_a_handoff_outside_a_configured_checkpoint() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("valid-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(fixture("valid-session.json"));
+    assertEquals(false, session.canHandoff(profile, "normal_work", ALL).allowed());
+  }
+
+  @Test void refuses_to_escalate_a_change_no_rule_verified() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("unverified-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(sessionFor(profile));
+    RoutingSession.Decision decision = session.canHandoff(profile, "verification_failed", ALL);
+    assertEquals(false, decision.allowed());
+    assertEquals(true, decision.reason().contains("unverified"));
+  }
+
+  @Test void never_routes_around_a_blocked_change() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("blocked-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(sessionFor(profile));
+    assertEquals(false, session.canHandoff(profile, "verification_failed", ALL).allowed());
+  }
+
+  @Test void refuses_a_second_handoff_once_the_budget_is_spent() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("valid-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(fixture("exhausted-session.json"));
+    RoutingSession.Decision decision = session.canHandoff(profile, "verification_failed", ALL);
+    assertEquals(false, decision.allowed());
+    assertEquals(true, decision.reason().contains("budget is exhausted"));
+  }
+
+  @Test void applies_the_overhead_budget_the_profile_publishes() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("valid-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(fixture("valid-session.json"));
+    assertEquals(false, session.canHandoff(profile, "verification_failed", ALL, 0.19).allowed());
+    assertEquals(true, session.canHandoff(profile, "verification_failed", ALL, 0.04).allowed());
+  }
+
+  @Test void refuses_a_candidate_missing_one_capability() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("valid-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(fixture("valid-session.json"));
+    assertEquals(false, session.canHandoff(profile, "verification_failed", List.of("tool_use")).allowed());
+  }
+
+  @Test void refuses_a_session_paired_with_another_profile() throws Exception {
+    RoutingProfile other = RoutingProfile.fromMap(fixture("unverified-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(fixture("valid-session.json"));
+    assertEquals(false, session.canHandoff(other, "verification_failed", ALL).allowed());
+  }
+
+  /** A session bound to the given profile, so identity is not the thing under test. */
+  private static Map<String, Object> sessionFor(RoutingProfile profile) throws Exception {
+    Map<String, Object> session = new java.util.HashMap<>(fixture("valid-session.json"));
+    session.put("profile_id", profile.profileId());
+    return session;
   }
 
   private static Map<String, Object> fixture(String name) throws Exception {
