@@ -133,7 +133,7 @@ Pick the package matching your language and stack:
 
 | Distribution | Environment / Framework | Installation | Package Details |
 |---|---|---|---|
-| **GitHub Action** | GitHub Actions CI/CD | `uses: tensilestream/yieldpoint@v0.1.5` | [Marketplace](https://github.com/marketplace/actions/yieldpoint) · Zero-setup PR gating & SARIF annotations |
+| **GitHub Action** | GitHub Actions CI/CD | `uses: tensilestream/yieldpoint@v0.1.7` | [Marketplace](https://github.com/marketplace/actions/yieldpoint) · Zero-setup PR gating & SARIF annotations |
 | **Homebrew** | macOS & Linux CLI / Terminal | `brew install tensilestream/tap/yieldpoint` | [Formula](https://github.com/tensilestream/homebrew-tap/blob/main/Formula/yieldpoint.rb) · Provides `yieldpoint` & `yp` |
 | **PyPI** | Python 3.10+ & LangGraph | `pip install yieldpoint` | [PyPI](https://pypi.org/project/yieldpoint/) · Engine, CLI, MCP server |
 | **npm** | Node.js 18+ & LangGraph.js | `npm install @tensilestream/yieldpoint-langgraph` | [npm](https://www.npmjs.com/package/@tensilestream/yieldpoint-langgraph) · [Node SDK Guide](docs/sdk/node.md) |
@@ -147,7 +147,7 @@ Add 1-click test regression and weakening gating to any GitHub repository:
     fetch-depth: 0
 
 - name: Gate PR with Yieldpoint
-  uses: tensilestream/yieldpoint@v0.1.5
+  uses: tensilestream/yieldpoint@v0.1.7
 ```
 
 ### 2. Homebrew (macOS & Linux)
@@ -192,13 +192,13 @@ Integrate verification into **LangGraph4j** graphs and JVM agent systems:
 <dependency>
   <groupId>io.github.tensilestream</groupId>
   <artifactId>yieldpoint-langgraph4j</artifactId>
-  <version>0.1.5</version>
+  <version>0.1.7</version>
 </dependency>
 ```
 
 **Gradle (`build.gradle`):**
 ```groovy
-implementation 'io.github.tensilestream:yieldpoint-langgraph4j:0.1.5'
+implementation 'io.github.tensilestream:yieldpoint-langgraph4j:0.1.7'
 ```
 *See [Java SDK Documentation](docs/sdk/java.md) for complete options and runnable examples.*
 
@@ -682,7 +682,7 @@ jobs:
           fetch-depth: 0      # Full git history so merge base can be resolved
 
       - name: Run Yieldpoint
-        uses: tensilestream/yieldpoint@v0.1.5
+        uses: tensilestream/yieldpoint@v0.1.7
 ```
 
 This automatically reviews the PR diff against the target base, publishes findings to `$GITHUB_STEP_SUMMARY`, attaches SARIF annotations directly to changed lines in the PR, and blocks merging if regressions or weakenings are found.

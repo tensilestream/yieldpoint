@@ -10,7 +10,7 @@ package version is not.
 
 ## [Unreleased]
 
-## [0.1.6] — 2026-09-23
+## [0.1.7] — 2026-09-23
 
 ### Added
 
@@ -449,8 +449,8 @@ First release. Verdict `schema_version` 1.
 - Subject aliasing (`inv` renamed to `invoice`) is a false positive, pinned as a test.
 - The repair-loop cost claim is not benchmarked against a real model.
 
-[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.6...HEAD
-[0.1.6]: https://github.com/tensilestream/yieldpoint/compare/v0.1.5...v0.1.6
+[Unreleased]: https://github.com/tensilestream/yieldpoint/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/tensilestream/yieldpoint/compare/v0.1.5...v0.1.7
 [0.1.5]: https://github.com/tensilestream/yieldpoint/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/tensilestream/yieldpoint/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/tensilestream/yieldpoint/compare/v0.1.2...v0.1.3

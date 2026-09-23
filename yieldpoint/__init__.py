@@ -2,5 +2,5 @@
 
 from .core.verdict import Confidence, Finding, SCHEMA_VERSION, Status, Verdict
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 __all__ = ["Verdict", "Finding", "Status", "Confidence", "SCHEMA_VERSION", "__version__"]
