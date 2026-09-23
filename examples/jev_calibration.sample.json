@@ -1,0 +1,5 @@
+{
+  "purpose": "Copy outside version control and calibrate against labelled task outcomes.",
+  "minimum_confidence": null,
+  "notes": "Set a threshold only after measuring errors, token cost, and human overrides for your workloads."
+}

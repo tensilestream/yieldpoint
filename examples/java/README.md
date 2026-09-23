@@ -10,3 +10,9 @@ shape. It keeps a plain JSON-compatible `verdict` map in state, so standard
 LangGraph4j checkpointers can persist it. The `prescription` field is derived
 from the canonical verdict findings and can be passed directly to a repair
 agent.
+
+[`JevRouter.java`](JevRouter.java) demonstrates the optional routing boundary:
+validate the canonical profile, filter candidates locally by required
+capabilities, and call `RoutingSession.canHandoff` at a real checkpoint. Keep
+Jev credentials and HTTP calls in the host application; Yieldpoint itself does
+not receive them or contact a provider.

@@ -8,6 +8,9 @@ is why adding a framework is a short file rather than a fork.
 |---|---|---|
 | [`langgraph_repair_loop.py`](./langgraph_repair_loop.py) | LangGraph | Single agent: generate → verify → repair, with the prescription fed back |
 | [`langgraph_sticky_routing.py`](./langgraph_sticky_routing.py) | LangGraph state | Admit one model, then permit one capability-checked handoff only after a verification checkpoint |
+| [`jev_router.py`](./jev_router.py) | Optional Jev | Filters candidates deterministically; a Jev request is explicit opt-in and falls back locally |
+| [`jev_calibration.sample.json`](./jev_calibration.sample.json) | Optional Jev | Team-owned calibration template; no default confidence threshold |
+| [`node/jev_router.mjs`](./node/jev_router.mjs) | Node | Provider-free candidate filtering and handoff validation |
 | [`node/langgraph_repair_loop.mjs`](./node/langgraph_repair_loop.mjs) | Node adapter | Calls the canonical CLI and maps its verdict to a graph route |
 | [`java`](./java/README.md) | Java / LangGraph4j | Uses the canonical CLI through the Java graph adapter |
 | [`langgraph_fanout.py`](./langgraph_fanout.py) | LangGraph `Send` | **Many workers on one repo** — per-worker verdicts, pooled subjects, shared ledger |
@@ -32,6 +35,16 @@ rejected" deterministically and for free. Put enforcement where the agent has no
 graph edge, a `PreToolUse` hook, pre-commit, or CI.
 
 Both matter. They are not substitutes.
+
+## Optional Jev routing
+
+[`jev_router.py`](./jev_router.py) defaults to a local deterministic selection.
+It calls Jev only when `YIELDPOINT_ENABLE_JEV=1`, `JEV_API_KEY`, and a locally
+calibrated `JEV_MIN_CONFIDENCE` are all set. The request contains only the task
+profile, approved candidate descriptions, and constraints—never source code,
+secrets, or chat history. If Jev is unavailable, returns malformed output, is
+below the team threshold, or chooses an incapable model, Yieldpoint's host
+falls back to its deterministic candidate map.
 
 ## Fan-out: the two things that actually bite
 
