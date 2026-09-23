@@ -101,6 +101,25 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "yieldpoint_routing_profile",
+        "title": "Build a provider-neutral routing profile",
+        "description": (
+            "Describe the measured risk, verification coverage, required checks, "
+            "and safe handoff limits for one proposed change. It never selects a "
+            "model or contacts a provider; the host owns both decisions."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": _FILE,
+                "before": {"type": "string", "description": "Current content, omit if new."},
+                "after": {"type": "string", "description": "Proposed content."},
+                "task": {"type": "string", "description": "Host objective, retained only locally."},
+            },
+            "required": ["path", "after"],
+        },
+    },
+    {
         "name": "yieldpoint_stats",
         "title": "What Yieldpoint has caught and what it cost",
         "description": (

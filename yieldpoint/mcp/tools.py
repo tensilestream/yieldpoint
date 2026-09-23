@@ -141,6 +141,24 @@ def _assess(arguments: dict, policy: Policy):
     return text, result, False
 
 
+def _routing_profile(arguments: dict, policy: Policy):
+    """Expose provider-neutral routing evidence without selecting a model."""
+    from ..harness import Change, build_profile
+
+    profile = build_profile(Change(
+        path=arguments.get("path", ""), before=arguments.get("before"),
+        after=arguments.get("after"), task=arguments.get("task", ""),
+    ), policy).to_dict()
+    requirements = profile["requirements"]
+    text = (
+        f"risk: {profile['risk']['value']}\n"
+        f"policy: {requirements['suggested_policy']}\n"
+        f"capabilities: {', '.join(requirements['capabilities']) or 'none'}\n"
+        "model selection remains host-owned"
+    )
+    return text, profile, False
+
+
 def _stats(arguments: dict, policy: Policy):
     from .. import ledger
     from ..report import render, to_dict
@@ -224,6 +242,7 @@ _HANDLERS: dict[str, Callable[[dict, Policy], tuple[str, dict, bool]]] = {
     "yieldpoint_review": _review,
     "yieldpoint_scan": _scan,
     "yieldpoint_assess": _assess,
+    "yieldpoint_routing_profile": _routing_profile,
     "yieldpoint_stats": _stats,
     "yieldpoint_brief": _brief,
     "yieldpoint_policy": _policy,

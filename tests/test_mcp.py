@@ -70,7 +70,8 @@ class TestToolListing(unittest.TestCase):
         self.assertEqual(names, {
             "yieldpoint_verify_change", "yieldpoint_verify_diff", "yieldpoint_review",
             "yieldpoint_brief",
-            "yieldpoint_scan", "yieldpoint_assess", "yieldpoint_stats", "yieldpoint_policy"})
+            "yieldpoint_scan", "yieldpoint_assess", "yieldpoint_routing_profile",
+            "yieldpoint_stats", "yieldpoint_policy"})
 
     def test_schemas_are_well_formed(self):
         for tool in TOOLS:
@@ -89,6 +90,15 @@ class TestToolCalls(unittest.TestCase):
         self.assertFalse(result["isError"])
         self.assertIn("assertion_monotonicity", result["content"][0]["text"])
         self.assertEqual(result["structuredContent"]["status"], "repair")
+
+    def test_routing_profile_is_advisory_and_marks_unknown_coverage(self):
+        result = self.call("yieldpoint_routing_profile", {
+            "path": "src/widget.ts", "after": "export const x = 1\n",
+        })
+        self.assertFalse(result["isError"])
+        profile = result["structuredContent"]
+        self.assertFalse(profile["coverage"]["exact_analysis"])
+        self.assertIn("host-owned", result["content"][0]["text"])
 
     def test_structured_content_is_the_versioned_verdict(self):
         result = self.call("yieldpoint_verify_change", WEAKENED)

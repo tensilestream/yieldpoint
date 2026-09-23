@@ -166,13 +166,16 @@ class Middleware:
         and merely cheap.
         """
         from .routing import risk
+        from .profile import ProfileContext, build_profile
 
         found = measure(change, self.policy, self._graph())
-        return {
+        result = {
             "signals": found.to_dict(),
             "risk": risk(change, self.policy, signals=found).to_dict(),
             "tier": tier(change, self.policy, signals=found).to_dict(),
         }
+        return {**result, "routing_profile": build_profile(
+            change, self.policy, context=ProfileContext(signals=found)).to_dict()}
 
     # ------------------------------------------------------------- internals
 

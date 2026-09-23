@@ -15,6 +15,7 @@ from typing import Any
 
 from .policyfields import (
     _custom_rules, _fraction, _int, _linters, _positive, _routing,
+    routing_sections,
     _section, _status, _str_tuple, _structure, _zones,
 )
 from .policy import (
@@ -47,7 +48,7 @@ from .verdict import Status
 KNOWN_SECTIONS = frozenset({
     "version", "project", "test_contract", "boundaries", "loop_breaker",
     "linters", "metrics", "routing", "voice", "generated", "subjects",
-    "refactor", "structure", "ci", "scan",
+    "refactor", "structure", "ci", "scan", "routing_session",
 })
 
 
@@ -137,7 +138,6 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
     breaker = _section(raw, "loop_breaker", warnings)
     linters = _section(raw, "linters", warnings)
     metrics = _section(raw, "metrics", warnings)
-    routing = _section(raw, "routing", warnings)
     voice = _section(raw, "voice", warnings)
     generated = _section(raw, "generated", warnings)
     subjects = _section(raw, "subjects", warnings)
@@ -199,7 +199,7 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
             on_trip=_status(breaker.get("on_trip"), Status.ESCALATE, warnings, "on_trip"),
         ),
         linters=_linters(linters, warnings),
-        routing=_routing(routing, warnings),
+        **routing_sections(raw, warnings),
         metrics=_metrics(metrics, warnings),
         voice=Voice(
             severity_floor=_status(
@@ -220,4 +220,3 @@ def read(raw: dict[str, Any], *, source_name: str = "<dict>") -> Policy:
         source=source_name,
         warnings=tuple(warnings),
     )
-

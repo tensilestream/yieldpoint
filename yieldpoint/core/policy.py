@@ -21,6 +21,7 @@ from .policysections import (  # noqa: F401
     Linters, LoopBreaker, Metrics, Refactor, Routing, Scan, Structure,
     Subjects, TestContract, Voice, Zone,
 )
+from .routingsession import RoutingSession
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class Policy:
     generated: GeneratedCode = field(default_factory=GeneratedCode)
     metrics: Metrics = field(default_factory=Metrics)
     routing: Routing = field(default_factory=Routing)
+    routing_session: RoutingSession = field(default_factory=RoutingSession)
     source: str = "defaults"
     warnings: tuple[str, ...] = ()
 

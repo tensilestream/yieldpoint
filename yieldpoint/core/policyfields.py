@@ -19,6 +19,7 @@ from .policy import (
     CustomRule,
     Linters,
     Routing,
+    RoutingSession,
     Status,
     Structure,
     Zone,
@@ -106,6 +107,53 @@ def _routing(raw: dict[str, Any], warnings: list[str]) -> Routing:
         tiers=dict(tiers) if isinstance(tiers, dict) else {},
         enabled=bool(raw.get("enabled", True)),
     )
+
+
+def _routing_session(raw: dict[str, Any], warnings: list[str]) -> RoutingSession:
+    """Read task-session bounds without allowing provider configuration."""
+    defaults = RoutingSession()
+    switches = _bounded_int(raw.get("max_model_switches"), defaults.max_model_switches, (0, 2), warnings, "routing_session.max_model_switches")
+    capsule = _bounded_int(raw.get("capsule_max_chars"), defaults.capsule_max_chars, (1_000, 24_000), warnings, "routing_session.capsule_max_chars")
+    overhead = _bounded_fraction(raw.get("router_overhead_fraction"), defaults.router_overhead_fraction, warnings)
+    events = _str_tuple(raw.get("checkpoint_events"), warnings, "routing_session.checkpoint_events")
+    known = {"verification_failed", "repair_exhausted", "loop_tripped", "user_requested"}
+    unknown = sorted(set(events) - known)
+    if unknown:
+        warnings.append("routing_session.checkpoint_events: unknown event(s) " + ", ".join(unknown))
+    return RoutingSession(
+        enabled=bool(raw.get("enabled", defaults.enabled)),
+        max_model_switches=switches,
+        capsule_max_chars=capsule,
+        router_overhead_fraction=float(overhead),
+        allow_unverified=bool(raw.get("allow_unverified", defaults.allow_unverified)),
+        checkpoint_events=tuple(event for event in (events or defaults.checkpoint_events) if event in known),
+    )
+
+
+def _bounded_int(value: object, default: int, bounds: tuple[int, int],
+                 warnings: list[str], label: str) -> int:
+    minimum, maximum = bounds
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        if value is not None:
+            warnings.append(f"{label}: expected {minimum}..{maximum}; using default")
+        return default
+    return value
+
+
+def _bounded_fraction(value: object, default: float, warnings: list[str]) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 0.20:
+        if value is not None:
+            warnings.append("routing_session.router_overhead_fraction: expected 0..0.20; using default")
+        return default
+    return float(value)
+
+
+def routing_sections(raw: dict[str, Any], warnings: list[str]) -> dict[str, object]:
+    """Read related routing sections without lengthening the main policy reader."""
+    return {
+        "routing": _routing(_section(raw, "routing", warnings), warnings),
+        "routing_session": _routing_session(_section(raw, "routing_session", warnings), warnings),
+    }
 
 
 def _fraction(value: Any, fallback: float, warnings: list[str], name: str) -> float:
