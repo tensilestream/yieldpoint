@@ -17,6 +17,8 @@ htmlcov/
 
 # VS Code extension build
 extension/node_modules/
+sdk/node/node_modules/
+sdk/java/target/
 extension/out/
 extension/package-lock.json
 

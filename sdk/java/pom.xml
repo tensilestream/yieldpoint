@@ -1,0 +1,54 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.github.tensilestream</groupId>
+  <artifactId>yieldpoint-langgraph4j</artifactId>
+  <version>0.1.4</version>
+  <name>Yieldpoint LangGraph4j adapter</name>
+  <description>Thin Java graph adapter for the canonical Yieldpoint CLI verifier.</description>
+  <url>https://github.com/tensilestream/yieldpoint</url>
+  <licenses><license><name>Business Source License 1.1</name><url>https://github.com/tensilestream/yieldpoint/blob/main/LICENSE</url></license></licenses>
+  <organization><name>Tensilestream</name><url>https://github.com/tensilestream</url></organization>
+  <developers><developer><id>tensilestream</id><name>Yieldpoint contributors</name></developer></developers>
+  <scm><url>https://github.com/tensilestream/yieldpoint</url><connection>scm:git:https://github.com/tensilestream/yieldpoint.git</connection></scm>
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <langgraph4j.version>1.9.0</langgraph4j.version>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId><version>2.18.2</version>
+    </dependency>
+    <dependency>
+      <groupId>org.bsc.langgraph4j</groupId>
+      <artifactId>langgraph4j-core</artifactId>
+      <version>${langgraph4j.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.11.4</version><scope>test</scope>
+    </dependency>
+  </dependencies>
+  <build><plugins>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-source-plugin</artifactId><version>3.3.1</version><executions><execution><id>sources</id><phase>verify</phase><goals><goal>jar-no-fork</goal></goals></execution></executions></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-javadoc-plugin</artifactId><version>3.11.2</version><executions><execution><id>javadocs</id><phase>verify</phase><goals><goal>jar</goal></goals></execution></executions></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.5.2</version></plugin>
+  </plugins></build>
+  <profiles>
+    <profile>
+      <id>release</id>
+      <build><plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId><artifactId>maven-gpg-plugin</artifactId><version>3.2.7</version>
+          <configuration><passphrase>${env.MAVEN_GPG_PASSPHRASE}</passphrase></configuration>
+          <executions><execution><id>sign-artifacts</id><phase>verify</phase><goals><goal>sign</goal></goals></execution></executions>
+        </plugin>
+        <plugin>
+          <groupId>org.sonatype.central</groupId><artifactId>central-publishing-maven-plugin</artifactId><version>0.7.0</version>
+          <configuration><publishingServerId>central</publishingServerId><autoPublish>true</autoPublish></configuration>
+        </plugin>
+      </plugins></build>
+    </profile>
+  </profiles>
+</project>
