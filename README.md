@@ -29,6 +29,7 @@
 </p>
 
 ---
+<img width="641" height="507" alt="Screenshot 2026-09-22 at 09 33 23" src="https://github.com/user-attachments/assets/f94618bc-86da-48e7-97e7-166acdf7152d" />
 
 ```diff
 - assert invoice.total == Decimal("42.00")
