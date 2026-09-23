@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.tensilestream</groupId>
   <artifactId>yieldpoint-langgraph4j</artifactId>
-  <version>0.1.7</version>
+  <version>0.1.8</version>
   <name>Yieldpoint LangGraph4j adapter</name>
   <description>Thin Java graph adapter for the canonical Yieldpoint CLI verifier.</description>
   <url>https://github.com/tensilestream/yieldpoint</url>
