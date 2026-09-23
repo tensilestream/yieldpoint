@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "profile_id": "sha256:fixture-valid",
+  "coverage": {"analysed_paths": ["src/widget.py"], "unverified_paths": [], "languages": ["python"], "exact_analysis": true},
+  "requirements": {"capabilities": ["code_generation"], "suggested_policy": "sticky_standard"},
+  "handoff": {"max_model_switches": 1, "capsule_max_chars": 12000}
+}

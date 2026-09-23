@@ -15,3 +15,10 @@ export declare function makeRouter(options?: { maxRepairs?: number; verdictKey?:
 export declare function routeOnVerdict(state: VerificationState): YieldpointRoute;
 export declare function repairContext(state: VerificationState, verdictKey?: string): string;
 export declare function verdictFrom(state: VerificationState, key?: string): Verdict;
+export interface RoutingProfile { schema_version: 1; profile_id: string; coverage: Record<string, unknown>; requirements: { capabilities: string[]; [key: string]: unknown }; handoff: { max_model_switches: number; [key: string]: unknown }; [key: string]: unknown }
+export interface RoutingSession { routing_session_version: 1; task_id: string; profile_id: string; switch_count: number; [key: string]: unknown }
+export declare const ROUTING_PROFILE_SCHEMA_VERSION: 1;
+export declare const ROUTING_SESSION_SCHEMA_VERSION: 1;
+export declare function validateRoutingProfile(profile: RoutingProfile): RoutingProfile;
+export declare function validateRoutingSession(session: RoutingSession): RoutingSession;
+export declare function canHandoff(session: RoutingSession, profile: RoutingProfile, request?: { event?: string; candidateCapabilities?: string[] }): { allowed: boolean; reason: string };

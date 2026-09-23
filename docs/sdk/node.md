@@ -22,3 +22,24 @@ graph.addConditionalEdges("verify", makeRouter({ onUnverified: ESCALATE }), rout
 The adapter rejects malformed or unsupported verdict JSON. A valid verdict
 whose CLI process exits `1` is a normal finding, not a transport exception.
 Set `executable`, `executableArgs`, and `cwd` when the CLI is not on `PATH`.
+
+## Sticky routing transport
+
+`validateRoutingProfile(profile)` and `validateRoutingSession(session)` accept
+only schema-1 JSON emitted by the canonical Python CLI. They validate and carry
+the data; they do not calculate Yieldpoint rules or contact a model provider.
+
+```js
+import { canHandoff, validateRoutingProfile, validateRoutingSession } from "@tensilestream/yieldpoint-langgraph";
+
+const profile = validateRoutingProfile(profileFromYieldpoint);
+const session = validateRoutingSession(sessionFromCheckpoint);
+const decision = canHandoff(session, profile, {
+  event: "verification_failed",
+  candidateCapabilities: ["code_generation", "tool_use", "strong_reasoning"],
+});
+```
+
+`decision.allowed` can only be true at an explicit checkpoint, within the
+profile's switch budget, and when the candidate meets every required capability.
+The host still selects the actual model and owns provider credentials.

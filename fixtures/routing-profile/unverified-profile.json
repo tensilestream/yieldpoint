@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "profile_id": "sha256:fixture-unverified",
+  "coverage": {"analysed_paths": [], "unverified_paths": ["src/widget.ts"], "languages": ["typescript"], "exact_analysis": false},
+  "requirements": {"capabilities": ["large_context", "strong_reasoning"], "suggested_policy": "sticky_capable"},
+  "handoff": {"max_model_switches": 1, "capsule_max_chars": 12000}
+}

@@ -1,0 +1,9 @@
+{
+  "routing_session_version": 1,
+  "task_id": "fixture-task",
+  "profile_id": "sha256:fixture-valid",
+  "selected_model": "small",
+  "selection_source": "deterministic",
+  "selection_reason": "fixture",
+  "switch_count": 0
+}

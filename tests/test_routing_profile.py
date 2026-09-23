@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import unittest
+import json
+from pathlib import Path
 
 from yieldpoint.core.policy import Policy
 from yieldpoint.harness import (
     CapsuleInput, Change, HandoffRequest, ProfileContext, admit, build_profile, build_task_capsule, can_handoff, handoff,
     middleware,
+    session_from, validate_profile,
 )
 
 
@@ -45,6 +48,14 @@ class TestRoutingProfile(unittest.TestCase):
         result = middleware().assess(Change("src/total.py", SOURCE, SOURCE))
         self.assertEqual(set(result) - {"routing_profile"}, {"signals", "risk", "tier"})
         self.assertEqual(result["routing_profile"]["schema_version"], 1)
+
+    def test_shared_fixtures_are_transport_compatible(self):
+        root = Path(__file__).resolve().parent.parent / "fixtures" / "routing-profile"
+        profile = validate_profile(json.loads((root / "valid-profile.json").read_text()))
+        session = session_from(json.loads((root / "valid-session.json").read_text()))
+        self.assertEqual(profile.profile_id, session.profile_id)
+        with self.assertRaises(ValueError):
+            validate_profile(json.loads((root / "invalid-profile.json").read_text()))
 
 
 class TestRoutingSessionPolicy(unittest.TestCase):

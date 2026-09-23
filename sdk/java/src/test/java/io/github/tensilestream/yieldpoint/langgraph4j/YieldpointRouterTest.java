@@ -5,6 +5,8 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.bsc.langgraph4j.state.AgentState;
 import org.bsc.langgraph4j.StateGraph;
@@ -12,6 +14,7 @@ import org.bsc.langgraph4j.GraphDefinition;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 
 class YieldpointRouterTest {
+  private static final ObjectMapper JSON = new ObjectMapper();
   private static YieldpointVerdict verdict(String status) {
     return YieldpointVerdict.parse("{\"schema_version\":4,\"status\":\"" + status
         + "\",\"findings\":[],\"checked\":[],\"skipped\":[],\"acknowledged\":[]}");
@@ -42,7 +45,7 @@ class YieldpointRouterTest {
 
   @Test void executes_the_canonical_cli_and_keeps_a_json_safe_verdict() {
     Path repository = Path.of("").toAbsolutePath().normalize();
-    var client = new YieldpointVerifier(List.of("python3", "-m", "yieldpoint"), Duration.ofSeconds(15), repository);
+    var client = new YieldpointVerifier(List.of("yieldpoint"), Duration.ofSeconds(15), repository);
     var node = new YieldpointVerificationNode(client);
     Map<String, Object> update = node.apply(Map.of("changes", List.of(Map.of(
         "path", "src/invoice.py", "before", "def total():\n    return 41\n",
@@ -51,5 +54,22 @@ class YieldpointRouterTest {
     assertEquals(4, ((Number) verdict.get("schema_version")).intValue());
     assertEquals("pass", verdict.get("status"));
     assertEquals("", update.get("prescription"));
+  }
+
+  @Test void accepts_the_shared_routing_profile_and_session_fixture() throws Exception {
+    RoutingProfile profile = RoutingProfile.fromMap(fixture("valid-profile.json"));
+    RoutingSession session = RoutingSession.fromMap(fixture("valid-session.json"));
+    assertEquals(profile.profileId(), session.profileId());
+    assertEquals(true, session.canHandoff(profile, "verification_failed", List.of("code_generation")).allowed());
+  }
+
+  @Test void rejects_the_shared_invalid_routing_profile_fixture() throws Exception {
+    org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+        () -> RoutingProfile.fromMap(fixture("invalid-profile.json")));
+  }
+
+  private static Map<String, Object> fixture(String name) throws Exception {
+    Path path = Path.of("..", "..", "fixtures", "routing-profile", name);
+    return JSON.readValue(path.toFile(), new TypeReference<>() { });
   }
 }

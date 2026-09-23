@@ -42,6 +42,20 @@ class RoutingProfile:
         return dict(self.data)
 
 
+def validate_profile(source: Mapping[str, Any]) -> RoutingProfile:
+    """Validate profile transport received from a Python, Node, or Java host."""
+    if source.get("schema_version") != ROUTING_PROFILE_SCHEMA_VERSION:
+        raise ValueError("unsupported routing profile schema")
+    if not isinstance(source.get("profile_id"), str) or not source["profile_id"]:
+        raise ValueError("routing profile is missing profile_id")
+    for key in ("coverage", "requirements", "handoff"):
+        if not isinstance(source.get(key), Mapping):
+            raise ValueError(f"routing profile is missing {key}")
+    if not isinstance(source["requirements"].get("capabilities"), list):
+        raise ValueError("routing profile capabilities must be a list")
+    return RoutingProfile(dict(source))
+
+
 @dataclass(frozen=True)
 class ProfileContext:
     """Optional measured inputs, grouped to keep the public API compact."""
@@ -152,4 +166,4 @@ def _profile_id(payload: Mapping[str, Any]) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
-__all__ = ["RoutingProfile", "ProfileContext", "build_profile", "ROUTING_PROFILE_SCHEMA_VERSION", "CAPABILITIES", "CHECKS"]
+__all__ = ["RoutingProfile", "ProfileContext", "build_profile", "validate_profile", "ROUTING_PROFILE_SCHEMA_VERSION", "CAPABILITIES", "CHECKS"]
