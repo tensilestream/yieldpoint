@@ -19,6 +19,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/marketplace/actions/yieldpoint"><img alt="GitHub Marketplace" src="https://img.shields.io/badge/marketplace-yieldpoint-blueviolet.svg?logo=github"></a>
   <a href="https://pypi.org/project/yieldpoint/"><img alt="PyPI version" src="https://img.shields.io/pypi/v/yieldpoint.svg?color=blue"></a>
   <a href="https://www.npmjs.com/package/@tensilestream/yieldpoint-langgraph"><img alt="npm version" src="https://img.shields.io/npm/v/@tensilestream/yieldpoint-langgraph.svg?color=blue"></a>
   <a href="https://central.sonatype.com/artifact/io.github.tensilestream/yieldpoint-langgraph4j"><img alt="Maven Central" src="https://img.shields.io/maven-central/v/io.github.tensilestream/yieldpoint-langgraph4j.svg?color=blue"></a>
@@ -132,12 +133,24 @@ Pick the package matching your language and stack:
 
 | Distribution | Environment / Framework | Installation | Package Details |
 |---|---|---|---|
+| **GitHub Action** | GitHub Actions CI/CD | `uses: tensilestream/yieldpoint@v0.1.5` | [Marketplace](https://github.com/marketplace/actions/yieldpoint) · Zero-setup PR gating & SARIF annotations |
 | **Homebrew** | macOS & Linux CLI / Terminal | `brew install tensilestream/tap/yieldpoint` | [Formula](https://github.com/tensilestream/homebrew-tap/blob/main/Formula/yieldpoint.rb) · Provides `yieldpoint` & `yp` |
 | **PyPI** | Python 3.10+ & LangGraph | `pip install yieldpoint` | [PyPI](https://pypi.org/project/yieldpoint/) · Engine, CLI, MCP server |
 | **npm** | Node.js 18+ & LangGraph.js | `npm install @tensilestream/yieldpoint-langgraph` | [npm](https://www.npmjs.com/package/@tensilestream/yieldpoint-langgraph) · [Node SDK Guide](docs/sdk/node.md) |
 | **Maven Central** | Java 17+ & LangGraph4j | `io.github.tensilestream:yieldpoint-langgraph4j` | [Central Portal](https://central.sonatype.com/artifact/io.github.tensilestream/yieldpoint-langgraph4j) · [Java SDK Guide](docs/sdk/java.md) |
 
-### 1. Homebrew (macOS & Linux)
+### 1. GitHub Action (CI/CD)
+Add 1-click test regression and weakening gating to any GitHub repository:
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+
+- name: Gate PR with Yieldpoint
+  uses: tensilestream/yieldpoint@v0.1.5
+```
+
+### 2. Homebrew (macOS & Linux)
 The fastest way to install the CLI standalone:
 ```sh
 brew tap tensilestream/tap
@@ -147,7 +160,7 @@ yieldpoint --version
 yp --version            # short alias
 ```
 
-### 2. Python / PyPI
+### 3. Python / PyPI
 ```sh
 pip install yieldpoint                 # engine, CLI, pre-commit, and MCP server
 pip install "yieldpoint[langgraph]"    # optional LangGraph agent binding
@@ -157,7 +170,7 @@ uv tool install yieldpoint
 pipx install yieldpoint
 ```
 
-### 3. Node.js & TypeScript / npm
+### 4. Node.js & TypeScript / npm
 Integrate deterministic verification and routing directly into your **LangGraph.js** graphs:
 ```sh
 npm install @tensilestream/yieldpoint-langgraph
@@ -171,7 +184,7 @@ graph.addConditionalEdges("verify", makeRouter());
 ```
 *See [Node SDK Documentation](docs/sdk/node.md) for complete options and runnable examples.*
 
-### 4. Java / Maven Central
+### 5. Java / Maven Central
 Integrate verification into **LangGraph4j** graphs and JVM agent systems:
 
 **Maven (`pom.xml`):**
@@ -647,6 +660,34 @@ graph library using the same convention. Runnable example:
 [`examples/langgraph_repair_loop.py`](./examples/langgraph_repair_loop.py).
 
 ## Gate CI and commits
+
+### GitHub Action (1-Click PR Gating)
+
+Add Yieldpoint to your repository in `.github/workflows/yieldpoint.yml`:
+
+```yaml
+name: Yieldpoint Review
+on: [pull_request]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write  # Enables SARIF PR annotations in Security / Code Scanning tab
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # Full git history so merge base can be resolved
+
+      - name: Run Yieldpoint
+        uses: tensilestream/yieldpoint@v0.1.5
+```
+
+This automatically reviews the PR diff against the target base, publishes findings to `$GITHUB_STEP_SUMMARY`, attaches SARIF annotations directly to changed lines in the PR, and blocks merging if regressions or weakenings are found.
+
+### Command Line / Generic CI
 
 ```sh
 git diff --cached       | yieldpoint check --diff -           # pre-commit
